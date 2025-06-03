@@ -51,7 +51,7 @@ match res with
       if forallb (fun c => (Z.leb (rhs_const1 c) 0) &&
         (rhs_terms1 c == [(1, v)])) (List.map (remove_solved_c values) cs_have_v) then
         let nv := PVM.add v (Z.to_nat (initialize_tbsolved' values cs)) values in
-        let ns := [:: v] ++ solved  in
+        let ns := solved ++ [::v] in
         (* 检查新解出来的v是否满足Phi2约束 
         let check_cs2 := filter (constraint2_in_set ns) cs2 in
         if (forallb (satisfies_constraint2 nv) check_cs2) then *)
@@ -66,7 +66,7 @@ match res with
     (*match solve_simple_cycle hd tbsolved_cs cs2 solved nv0 with*)
     match solve_simple_cycle hd tbsolved_cs' with
     | Some nv => match merge_solution hd values nv with
-      | Some new_values =>  solve_alg tl (hd ++ solved) new_values cs1 
+      | Some new_values =>  solve_alg tl (solved ++ hd) new_values cs1 
       | _ => None
       end
     | None => None
@@ -79,7 +79,7 @@ match res with
                   (*let cs2' := filter (constraint2_in_set hd) cs2 in*)
       match (*branch_and_bound_natural'*) bab_bin hd bs tbsolved_cs' [] with
       | Some nv => match merge_solution hd nv0 nv with
-        | Some new_values => solve_alg tl (hd ++ solved) new_values cs1 
+        | Some new_values => solve_alg tl (solved ++ hd) new_values cs1 
         | _ => None
         end
       | _ => None
