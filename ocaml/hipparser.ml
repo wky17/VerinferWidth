@@ -12,7 +12,7 @@ let anon file =
   (Gc.print_stat stdout);
   Printf.printf "%s\n" file;*)
   let f = (Parser.hiparse file) in 
-  let _ = Min_solver.find_segmentation_fault (*Ast.pp_file*) (*Transhiast.inline_transf*) (*print_iw_mlir*) (*Inline.inline_cir*) file f in
+  let _ = Min_solver.print_iw_mlir (*Ast.pp_file*) (*Transhiast.inline_transf*) (*find_segmentation_fault*) (*Inline.inline_cir*) file f in
   ()
 
 let _ = parse args anon usage

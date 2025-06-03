@@ -76,7 +76,7 @@ let print_iw_mlir in_file hif_ast =
   | Ast.Fcircuit (v, ml) ->
     let ((map0, flag), tmap_ast) = mapcir flatten_cir in 
     let fcir = trans_cir flatten_cir map0 flag tmap_ast in 
-
+    (* If you want to test the type equivalence against firtool, uncomment this *)
     (*let mfile = convert_path in_file in
     let mlirf = Mparser.mlirparse mfile in 
     let inlined = Mast.inline_cir mlirf in 
@@ -84,8 +84,8 @@ let print_iw_mlir in_file hif_ast =
 
     (match my_coq_InferWidths_fun fcir with
     | Some (newc, newtm) -> (*Printfir.pp_fcircuit_fir oc_fir v newc; close_out oc_fir;*) 
-      printf "%s\n" in_file;
-
+      printf "%s processed\n" in_file;
+    (* If you want to test the type equivalence against firtool, uncomment this *)
       (*StringMap.iter (fun key value -> 
         match HiFirrtl.VM.find (Obj.magic (Stdlib.List.hd (Stdlib.List.rev (StringMap.find key map0)))) newtm with
         | Some (ft, _) -> 
