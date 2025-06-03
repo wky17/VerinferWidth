@@ -1,0 +1,6 @@
+(env
+  (dev
+    (flags    (:standard -w -66))))
+    
+(library
+  (name extraction))
