@@ -116,13 +116,6 @@ Qed.
 
 HB.instance Definition _ := hasDecEq.Build terms terms_eqP.
 
-(* 定义ϕ1类型的约束结构 *)
-(*Record Constraint1 : Type := {
-  lhs_var1 : ProdVar.t;  (* 左侧变量 *)
-  rhs_const1 : Z.t;(* 右侧常数项 *)
-  rhs_terms1 : list (nat * ProdVar.t) (* 右侧线性组合项，列表形式 (系数, 变量) *)
-}.*)
-
 Record Constraint1 : Type := {
   lhs_var1 : ProdVar.t;  (* 左侧变量 *)
   rhs_const1 : Z.t;(* 右侧常数项 *)
@@ -221,15 +214,6 @@ Record Constraint2_new : Type := {
   rhs_power2_new : list (nat * ProdVar.t)
 }.
 
-(* 定义变量值的映射 *)
-(* old version 
-Definition Valuation := ProdVar.t -> nat.
-
-(* 假设初始值都为0 *)
-Definition initial_valuation : Valuation := fun _ => 0.
-Definition add_valuation (s : ProdVar.t -> nat) (x : ProdVar.t) (v : nat) :=
-  fun n => if n == x then v else s n. *)
-
 Definition combine_term (t1 : term) (t2 : list term) : list term := 
   match List.find (fun p : term => snd p == t1.2) t2 with
   | None => t1 :: t2  (* 添加新的项 *)
@@ -299,14 +283,6 @@ Definition satisfies_constraint (v: Valuation) (c: Constraint) : bool :=
 Definition satisfies_all (v: Valuation) (cs: list Constraint) : bool :=
   forallb (satisfies_constraint v) cs.
 
-(* 项合并 
-Definition unite_terms (terms1 terms2 : list (nat * ProdVar.t)) (cst1 cst2 : Z.t) : (list (nat * ProdVar.t) * Z.t) :=
-  let new_terms := fold_left (fun '(coe1, var1) =>
-  ) terms1 in (new_terms, Z.add cst1 cst2).*)
-
-
-(* ------ seperate subset from constraints ------ *)
-
 (* 判断一个变量是否在集合中 *)
 Definition in_set (s : list ProdVar.t) (v : ProdVar.t) : bool :=
   existsb (eq_op v) s.
@@ -317,13 +293,6 @@ Definition constraint1_in_set (s : list ProdVar.t) (c : Constraint1) : bool :=
   let all_vars := lhs_var1 c :: vars_in_rhs in
   forallb (in_set s) all_vars.
 
-(* 判断一个约束rhs是否只涉及集合中的变量 
-Definition constraintrhs_in_set (s : list ProdVar.t) (c : Constraint) : bool :=
-  match c with
-  | Phi1 c1 => forallb (in_set s) (map snd (rhs_terms1 c1))
-  | Phi2 c1 => forallb (in_set s) (map snd (rhs_terms2 c1))
-  end.*)
-
 Definition constraint2_in_set (s : list ProdVar.t) (c : Constraint2) : bool :=
   let all_vars := map snd (rhs_terms2 c) in
   forallb (in_set s) all_vars.
@@ -333,21 +302,6 @@ Definition constraint_in_set (s : list ProdVar.t) (c : Constraint) : bool :=
   | Phi1 c1 => constraint1_in_set s c1
   | Phi2 c1 => constraint2_in_set s c1
   end.
-
-(* 判断一个约束 不包含任何 变量s *)
-(*Definition constraint1_exclusive_v (s : ProdVar.t) (c : Constraint1) : bool :=
-  let vars_in_rhs := map snd (rhs_terms1 c) in
-  s \notin ((lhs_var1 c) :: vars_in_rhs).
-
-(* 判断一个约束 不包含任何 集合中的变量 *)
-Definition constraint1_exclusive_set (s : list ProdVar.t) (c : Constraint1) : bool :=
-  let vars_in_rhs := map snd (rhs_terms1 c) in
-  ~~ (existsb (in_set s) ((lhs_var1 c) :: vars_in_rhs)).
-
-(* 判断一个约束rhs 不包含任何 集合中的变量 *)
-Definition constraint1rhs_exclusive_set (s : list ProdVar.t) (c : Constraint1) : bool :=
-  let vars_in_rhs := map snd (rhs_terms1 c) in
-  ~~ (existsb (in_set s) (vars_in_rhs)).*)
 
 (* 根据集合筛选出相关约束 *)
 Fixpoint filter_constraints1 (s : list ProdVar.t) (constraints : list Constraint) : list Constraint1 :=
@@ -415,12 +369,6 @@ Definition smaller_valuation0 (v0 v1 : Valuation) : Prop :=
   forall (var : ProdVar.t), var \in vars -> 
   (exists value0 value1, PVM.find var v0 = Some value0 /\ PVM.find var v1 = Some value1 /\ value0 <= value1).
 
-(*Definition is_good_smallest (solved : list ProdVar.t) (cs : list Constraint) (initial : Valuation) : Prop :=
-  (* claim : initial中变量的取值，满足cs中rhs全为solved的约束，并且是所有满足约束的取值中最小的 *)
-  let solved_cs := filter (constraint_in_set solved) cs in (* 关心所有仅包含solved变量的约束 *)
-  (satisfies_all initial solved_cs) /\ 
-  (forall temp_s, satisfies_all temp_s solved_cs -> (*PVM.equal leq*) smaller_valuation0 initial temp_s).
-*)
 Definition is_good_initialized (var : ProdVar.t) (solved : list ProdVar.t) (cs : list Constraint) (values : Valuation) : Prop :=
   let cs' := (split_constraints cs).1 in
   let cs'' := filter (fun c => forallb (in_set solved) (map snd (rhs_terms1 c))) cs' in
@@ -445,166 +393,6 @@ Fixpoint constraints1_vars (c : list Constraint1) : list ProdVar.t :=
   | nil => nil
   | c1 :: tl => constraint1_vars c1 ++ (constraints1_vars tl)
   end.
-
-(*Fixpoint unique_ls (vars : list ProdVar.t) : list ProdVar.t :=
-  match vars with
-  | nil => nil
-  | hd :: tl => if hd \notin (unique_ls tl) then hd :: (unique_ls tl)
-    else unique_ls tl
-  end.
-
-Theorem unique_ls_correst : forall ls, uniq (unique_ls ls).
-Proof.
-  elim.
-  simpl; done.
-  intros; simpl.
-  case Ha : (a \notin unique_ls l); try done.
-  simpl; rewrite Ha H; done.
-Qed.
-
-Check undup.
-Search uniq.
-Search NoDup.
-
-(* 合并所有约束中的变量并去重 *)
-Fixpoint unique_var (vars rest_vars : list ProdVar.t) : list ProdVar.t :=
-  match vars with
-  | nil => rest_vars
-  | hd :: tl => if hd \notin ((unique_var tl rest_vars) ++ rest_vars) 
-    then hd :: (unique_var tl rest_vars)
-    else unique_var tl rest_vars
-  end.
-
-Fixpoint unique_vars (constraints : list Constraint1) : list ProdVar.t :=
-  match constraints with
-  | [] => []
-  | c :: cs =>
-      let rest_vars := unique_vars cs in
-      let vars := constraint_vars c in
-      let exclude_vars := unique_var vars rest_vars in
-      exclude_vars ++ rest_vars
-  end.
-
-Definition unique_vars (constraints : list Constraint1) : list ProdVar.t :=
-  undup (flat_map constraint_vars constraints).
-
-Lemma exclusive_v_correct0 : forall v var constraints,
-  v \in (unique_vars
-      (filter [eta constraint1_exclusive_v var] constraints)) -> 
-  v \in (unique_vars constraints).
-Proof.
-  intros v var constraints.
-  rewrite /unique_vars.
-  move : constraints; elim; try (simpl; done).
-  intros hd tl H; simpl.
-  case Hhd : (constraint1_exclusive_v var hd); intros.
-  assert (hd :: filter [eta constraint1_exclusive_v var] tl = [::hd] ++ filter [eta constraint1_exclusive_v var] tl) by (simpl; done).
-  rewrite H1 in H0; clear H1.
-  rewrite flat_map_app in H0. rewrite -> undup_cat in H0.
-  rewrite mem_cat in H0.
-  case H1 : (v
-    \in [seq x <- undup (flat_map constraint_vars [hd])
-         | x
-             \notin flat_map constraint_vars
-                      (filter [eta constraint1_exclusive_v var]
-                         tl)]); rewrite H1 in H0.
-  - clear H0; simpl in H1.
-    assert (rhs_vars (rhs_terms1 hd) ++ [] = rhs_vars (rhs_terms1 hd)) by (rewrite app_nil_r //).
-    rewrite H0 in H1; clear H0.
-    assert ((lhs_var1 hd) \notin (rhs_vars (rhs_terms1 hd))) by admit.
-    unfold "\notin" in H0.
-    apply negb_true_iff in H0.
-    rewrite H0 in H1; clear H0.
-    rewrite mem_filter in H1.
-    move /andP : H1 => [_ H1].
-    case H0 : (lhs_var1 hd
-      \in rhs_vars (rhs_terms1 hd) ++ flat_map constraint_vars tl).
-    + rewrite seq.in_cons in H1.
-      case H2 : (v == lhs_var1 hd); rewrite H2 in H1.
-      * clear H1; move /eqP : H2 => H2; subst.
-        specialize (mem_undup (rhs_vars (rhs_terms1 hd) ++
-        flat_map constraint_vars tl)) as H1.
-        (*specialize (mem_subseq (undup_subseq (rhs_vars (rhs_terms1 hd) ++
-        flat_map constraint_vars tl))) as H1.
-        unfold "{ 'et' A <= B }" in H1.*)
-        (*et_eqP*)
-        unfold "A =i B" in H1.
-        specialize H1 with (x := (lhs_var1 hd)); rewrite H0 in H1; done.
-      * rewrite orb_false_l in H1.
-        rewrite (mem_undup (rhs_vars (rhs_terms1 hd))) in H1.
-        rewrite (mem_undup (rhs_vars (rhs_terms1 hd) ++ flat_map constraint_vars tl)) mem_cat H1
-          orb_true_l //.
-    + rewrite seq.in_cons; rewrite seq.in_cons in H1.
-      case H2 : (v == lhs_var1 hd); rewrite H2 in H1; try (apply orb_true_l; done).
-      rewrite orb_false_l in H1; rewrite orb_false_l.
-      rewrite (mem_undup (rhs_vars (rhs_terms1 hd))) in H1.
-      rewrite (mem_undup (rhs_vars (rhs_terms1 hd) ++ flat_map constraint_vars tl)) mem_cat H1 orb_true_l //.
-  - rewrite orb_false_l in H0.
-    assert ({subset (flat_map constraint_vars (filter [eta constraint1_exclusive_v var] tl))
-      <= (flat_map constraint_vars tl)}) by admit.
-    unfold "{ 'subset' A <= B }" in H2.
-    rewrite (mem_undup (flat_map constraint_vars (filter [eta constraint1_exclusive_v var] tl))) in H0.
-    apply H2 in H0; clear H2.
-    case : (lhs_var1 hd \in rhs_vars (rhs_terms1 hd) ++ flat_map constraint_vars tl).
-    + rewrite (mem_undup (rhs_vars (rhs_terms1 hd) ++ flat_map constraint_vars tl)) mem_cat H0 orb_true_r //.
-    + rewrite seq.in_cons (mem_undup (rhs_vars (rhs_terms1 hd) ++ flat_map constraint_vars tl)) mem_cat H0 orb_true_r orb_true_r //.
-  apply H in H0; clear H.
-  rewrite (mem_undup (flat_map constraint_vars tl)) in H0.
-  case : (lhs_var1 hd \in rhs_vars (rhs_terms1 hd) ++ flat_map constraint_vars tl).
-  + rewrite (mem_undup (rhs_vars (rhs_terms1 hd) ++ flat_map constraint_vars tl)) mem_cat H0 orb_true_r //.
-  + rewrite seq.in_cons (mem_undup (rhs_vars (rhs_terms1 hd) ++ flat_map constraint_vars tl)) mem_cat H0 orb_true_r orb_true_r //.
-Admitted.
-
-Lemma notin_filtered_seq (var : ProdVar.t) (ls ls' : list ProdVar.t) :
-  var \notin ls ->
-  var \notin [seq x <- ls | x \notin ls'].
-Proof.
-  move=> Hnotin.
-  rewrite /= mem_filter.
-  unfold "\notin" in Hnotin.
-  apply negb_true_iff in Hnotin; rewrite Hnotin.
-  rewrite andb_false_r //.
-Qed.
-
-Lemma exclusive_v_correct1 : forall var constraints,
-  var \notin (unique_vars (filter [eta constraint1_exclusive_v var] constraints)).
-Proof.
-  intros var constraints.
-  rewrite /unique_vars.
-  move : constraints; elim; try (simpl; done).
-  intros hd tl H; simpl.
-  case Hhd : (constraint1_exclusive_v var hd); try done.
-  assert (hd :: filter [eta constraint1_exclusive_v var] tl
-      = [::hd] ++ filter [eta constraint1_exclusive_v var] tl) by (simpl; done).
-  rewrite H0; clear H0; rewrite flat_map_app.
-  rewrite -> undup_cat.
-  rewrite mem_cat negb_or H andb_true_r; clear H.
-  simpl; rewrite /constraint1_exclusive_v in Hhd.
-  assert (rhs_vars (rhs_terms1 hd) ++ [] = rhs_vars (rhs_terms1 hd)) by (rewrite app_nil_r //).
-  rewrite H; clear H.
-  assert ((lhs_var1 hd) \notin (rhs_vars (rhs_terms1 hd))) by admit.
-  unfold "\notin" in H.
-  apply negb_true_iff in H.
-  rewrite H; clear H.
-  assert (undup (rhs_vars (rhs_terms1 hd)) = rhs_vars (rhs_terms1 hd)) by admit.
-  rewrite H; clear H; rewrite /rhs_vars.
-  apply notin_filtered_seq; done.
-Admitted.*)
-
-(*Definition max_of_list_fold_left (l : list Z) : option Z :=
-  match l with
-  | [] => None
-  | x :: xs => Some (fold_left Z.max xs x)
-  end.
-
-Definition solve_acyclic' (v : ProdVar.t) (constraints : list Constraint1) (values : Valuation) : Valuation :=
-  let cs := filter (fun c => eq_op (lhs_var1 c) v) constraints in
-  let vals := map (rhs_value1 values) cs in 
-  match max_of_list_fold_left vals with
-  | Some new_value => PVM.add v (Z.to_nat new_value) values
-  | None => values
-  end.*)
-
 
 Lemma filter_empty : forall [A : Type] (f : A -> bool) (nl : list A),
 (forall n : A, In n nl -> f n = false) -> 
@@ -646,15 +434,19 @@ Qed.
 
 Lemma find_mem : forall [A : Type] (a : ProdVar.t) (valuation : PVM.t A), (exists val, PVM.find a valuation = Some val) <-> PVM.mem a valuation.
 Proof.
-Admitted.
+  split. intros. destruct H as [val H]. move : H; apply PVM.Lemmas.find_some_mem.
+  intros. apply PVM.Lemmas.mem_find_some. done.
+Qed.
 
 Lemma find_remove_eq : forall [A : Type] (a : ProdVar.t) (valuation : PVM.t A), PVM.find a (PVM.remove a valuation) = None.
 Proof.
-Admitted.
+  intros; apply PVM.Lemmas.OP.P.F.remove_eq_o. rewrite eq_refl. rewrite eq_refl //.
+Qed.
 
 Lemma find_remove_neq : forall [A : Type] (v a : ProdVar.t) (valuation : PVM.t A), v <> a -> PVM.find v (PVM.remove a valuation) = PVM.find v valuation.
 Proof.
-Admitted.
+  intros. apply PVM.Lemmas.OP.P.F.remove_neq_o. destruct v; destruct a. simpl. intuition. apply H. move /eqP : H1 => H1. move /eqP : H2 => H2. subst t t0; done.
+Qed.
 
 Lemma add_mem : forall [A : Type] (a : ProdVar.t) (val : A) (valuation : PVM.t A), PVM.mem a (PVM.add a val valuation).
 Proof.
@@ -677,10 +469,6 @@ Proof.
   - intros. apply find_mem in H. destruct H as [val0 Hfind]. destruct (a == hd) eqn : Heq; move /eqP : Heq => Heq; try (right; done).
     left. rewrite find_add_neq in Hfind; try done. apply find_mem. exists val0; done.
 Qed.
-
-Lemma find_remove_add : forall [A : Type] (a : ProdVar.t) (val : A) (valuation : PVM.t A), PVM.find a valuation = Some val -> PVM.add a val (PVM.remove a valuation) = valuation.
-Proof.
-Admitted.
 
 Lemma mem_find_none : forall [A : Type] (a : ProdVar.t) (m : PVM.t A), ~ PVM.mem a m -> PVM.find a m = None.
 Proof.
@@ -786,10 +574,6 @@ Proof.
   move : H0; apply IH. intros; apply H. right; done.
 Qed.
 
-Lemma add_cover [A : Type] (a : ProdVar.t) (val val' : A) values : PVM.add a val values = PVM.add a val (PVM.add a val' values).
-Proof.
-Admitted.
-
 Lemma NoDup_app_remove_l [A : Type] (l l' : list A) : NoDup (l++l') -> NoDup l'.
 Proof.
   induction l. simpl; done. intro. simpl in H. apply NoDup_cons_iff in H; move : H => [_ H]. apply IHl; done. 
@@ -811,11 +595,13 @@ Qed.
 Lemma elements_add [A : Type] bounds : forall v (a b : A), PVM.find v bounds = Some a -> 
   exists l0 l1, l0 ++ (v, a) :: l1 = PVM.elements bounds /\ l0 ++ (v, b) :: l1 = PVM.elements (PVM.add v b bounds).
 Proof.
+  intros. specialize (PVM.Lemmas.elements_split (v,a) bounds); intro. 
 Admitted.
 
 Lemma elements_add' [A : Type] bounds : forall v (a : A), PVM.find v bounds = None -> 
   exists l0 l1, l0 ++ l1 = PVM.elements bounds /\ l0 ++ (v, a) :: l1 = PVM.elements (PVM.add v a bounds).
 Proof.
+(* PVM.Lemmas.elements_Add *)
 Admitted.
 
 Lemma eq_dec : forall x y : ProdVar.t, { eq x y } + { ~ eq x y }.
@@ -831,6 +617,7 @@ Admitted.
 
 Lemma find_in_elements [A : Type] : forall x a (bounds : PVM.t A), PVM.find x bounds = Some a <-> List.In (x, a) (PVM.elements bounds).
 Proof.
+  split; intros. rewrite PVM.Lemmas.OP.P.F.elements_o in H.
 Admitted.
 
 Lemma mem_in_elements [A : Type] : forall x (bounds : PVM.t A), PVM.mem x bounds <-> exists a, List.In (x, a) (PVM.elements bounds).
@@ -1448,61 +1235,3 @@ Qed.
 
 
 End constraint.
-
-(*Section test_constraint.
-
-Definition ProdVar.t := [finType of 'I_10].
-Check ProdVar.t. 
-
-Fixpoint n_V (n : nat) : ProdVar.t :=
-  match n with
-  | 0 => ord0
-  | S m => ordS (n_V m)
-  end.
-
-Definition v0 := PVM.empty.
-(*Definition v1 := PVM.add (n_V 0) 1 v0.*)
-
-(* 创建ϕ1类型的约束示例 *)
-Definition example_phi1_constraint : Constraint ProdVar.t :=
-  Phi1 {|
-    lhs_var1 := ord0;
-    rhs_const1 := -2;
-    rhs_terms1 := [(2, ordS ord0); (3, ordS (ordS ord0))]
-  |}.
-
-(* 创建ϕ2类型的约束示例 *)
-Definition example_phi2_constraint : Constraint ProdVar.t :=
-  Phi2 {|
-    lhs_const2 := 2;
-    rhs_terms2 := [(1, ord0); (3, ordS ord0)]
-  |}.
-
-(* Compute (constraint1_exclusive_set ProdVar.t [:: ordS (ordS ord0)] {|
-  lhs_var1 := ord0;
-  rhs_const1 := -2;
-  rhs_terms1 := [(2, ordS ord0); (3, ordS (ordS ord0))]
-|}). *)
-
-(* FIRLIS 约束集合 *)
-Definition firlis_constraints : list (Constraint ProdVar.t) := [
-  example_phi1_constraint;
-  example_phi2_constraint
-].
-
-(* 示例变量赋值 *)
-Definition example_valuation0 := (add_valuation ProdVar.t) (initial_valuation ProdVar.t) ord0 1.
-Definition example_valuation1 := (add_valuation ProdVar.t) example_valuation0 (ordS ord0) 6.
-Definition example_valuation2 := (add_valuation ProdVar.t) example_valuation1 (ordS (ordS ord0)) 2.
-
-Compute (example_valuation2 (ordS ord0)).
-
-(* 检查示例 *)
-Eval compute in (satisfies_constraint example_valuation2 example_phi1_constraint).
-(* 期望输出:  *)
-
-Eval compute in (satisfies_constraint example_valuation2 example_phi2_constraint).
-(* 期望输出:  *)
-
-End test_constraint.
-*)
