@@ -695,15 +695,6 @@ HB.instance Definition _ := hasDecEq.Build hfport hfport_eqP.
   Inductive hfmodule : Type :=
   | FInmod : var -> seq hfport -> hfstmt_seq -> hfmodule
   | FExmod : var -> seq hfport -> hfstmt_seq -> hfmodule
-(* DNJ: External modules do not contain statements but only an interface.
-They may contain the following special statements:
-one “defname = ...” (to set the Verilog name)
-zero, one, or multiple “parameter <variable> = <constant> (to pass parameters to the Verilog design that implements this module)
-XM : TO BE DESIGNED , how to present the parameters
-Discussion result: Because we concentrate on correctness,
-and external modules are black boxes whose behaviour is unknown,
-it does not make sense to put effort in external modules.
-*)
   .
 
   Inductive hfcircuit : Type := Fcircuit : var -> seq hfmodule -> hfcircuit.
@@ -721,9 +712,6 @@ it does not make sense to put effort in external modules.
   Definition orient_of_comp c :=
     match c with
     | In_port | Instanceof | Memory | Node => Source
-    (* DNJ: Not sure whether a memory should be a source. It is written like that
-    in the specificiation, but actually the data type of a memory port is a bundle
-    defined as a sink (with some fields flipped). *)
     | Out_port => Sink
     | Register | Wire => Duplex
     | Fmodule => Other
@@ -936,71 +924,6 @@ Proof.
   move : H' H3; apply ftype_equiv_dlvr.
   move : H1 H2; apply IH.
 Qed.
-
-(* old 
-Module VarType <: DecidableType.
-  Definition t : Type := N.
-  Definition eq : t -> t -> Prop := fun x y => x == y.
-  Lemma eq_refl (x : t) : eq x x.
-  Proof. exact: eqxx. Qed.
-
-  Lemma eq_sym (x y : t) : eq x y -> eq y x.
-  Proof. by rewrite /eq eq_sym. Qed.
-
-  Lemma eq_trans (x y z : t) : eq x y -> eq y z -> eq x z.
-  Proof. move=> Hxy Hyz. rewrite (eqP Hxy). exact: Hyz. Qed.
-
-  Lemma eq_dec : forall x y : t, { eq x y } + { ~ eq x y }.
-  Proof.
-    move=> x y.
-    case Hxy: (x == y).
-    - left; exact: Hxy.
-    - right; move=> Heq.
-      apply/negPf: Hxy.
-      exact: Heq.
-  Qed.
-End VarType.
-
-Module MakeProdVar (O1 : DecidableType) <: DecidableType.
-  Definition t := (O1.t * O1.t)%type.
-  Definition eq (x y : t) : Prop := (O1.eq x.1 y.1) /\ (O1.eq x.2 y.2).
-  Lemma eq_refl (x : t) : eq x x.
-  Proof. by split; apply O1.eq_refl. Qed.
-
-  Lemma eq_sym (x y : t) : eq x y -> eq y x.
-  Proof. 
-    move=> [H1 H2]. 
-    by split; apply O1.eq_sym. 
-  Qed.
-
-  Lemma eq_trans (x y z : t) : eq x y -> eq y z -> eq x z.
-  Proof.
-    move=> [Hxy1 Hxy2] [Hyz1 Hyz2].
-    split; [apply O1.eq_trans with y.1 | apply O1.eq_trans with y.2]; auto.
-  Qed.
-
-  Lemma eq_dec : forall x y : t, { eq x y } + { ~ eq x y }.
-  Proof.
-    move=> [x1 x2] [y1 y2].
-    case Hx1y1: (O1.eq_dec x1 y1) => [H1|H1].
-    case Hx2y2: (O1.eq_dec x2 y2) => [H2|H2].
-    + left; split; assumption.
-    + right; move=> [H3 H4]. 
-      apply H2. apply H4. 
-    - right; move=> [H2 H3]. 
-      apply H1. apply H2. 
-  Qed.
-
-End MakeProdVar.
-
-Module ProdVar := MakeProdVar VarType.
-
-Module VarMap (X : DecidableType) <: FMapInterface.WS.
-  Include FMapWeakList.Make X.
-End VarMap.
-
-Module VM := VarMap VarType.
-Module PVM := VarMap ProdVar.*)
 
 Module Type VarType <: DecidableType.
   Definition t : Type := N.
@@ -1889,84 +1812,6 @@ with update_ftype_f (offset : nat) (new_width : nat) (ff : ffield) : option ffie
               end
   end.
 
-(*Fixpoint num_ref (ft : ftype) : nat :=
-   match ft with
-   | Gtyp _ => 1
-   | Atyp atyp n => (num_ref atyp) * n + 1
-   | Btyp ff => num_ff ff + 1
-   end
-with num_ff (ff : ffield) : nat :=
-   match ff with
-   | Fnil => 0
-   | Fflips _ _ ft ff' => (num_ref ft) + num_ff ff'
-end.
-
-Fixpoint ft_find_sub (checkt : ftype) (num : N) (ori : bool) : option (ftype * bool) :=
-  match checkt with
-  | Gtyp gt => if num == N0 then Some (checkt, ori) else None
-  | Atyp atyp n => if num == N0 then Some (checkt, ori)
-                   else if (((N.to_nat num) - 1) >= (num_ref atyp) * n) then None
-                   else if (((N.to_nat num) - 1) mod (num_ref atyp)) == 0 (* 对应标号是atyp，可能agg *)
-                   then Some (atyp, ori)
-                   else 
-                    ft_find_sub atyp (N.of_nat (((N.to_nat num) - 1) mod (num_ref atyp))) ori
-  | Btyp ff => if num == N0 then Some (checkt, ori)
-               else ft_find_sub_f ff num ori
-  end
-with ft_find_sub_f (ff : ffield) (num : N) (ori : bool) : option ((ftype) * bool) :=
-  match ff with
-  | Fflips _ Nflip ft ff' => if num == 1%num (* 找到被更新的标号, 所对应的field *)
-                              then Some (ft, ori)
-                              else if (N.to_nat num) > (num_ref ft) (* 不在该field中, 找下一个field *)
-                                  then ft_find_sub_f ff' (N.of_nat ((N.to_nat num) - (num_ref ft))) ori
-                              else (* 在field v0中 *)
-                                  ft_find_sub ft (N.sub num 1%num) ori
-   | Fflips _ Flipped ft ff' => if num == 1%num (* 找到被更新的标号, 所对应的field *)
-                              then Some (ft, (~~ori))
-                              else if (N.to_nat num) > (num_ref ft) (* 不在该field中, 找下一个field *)
-                                  then ft_find_sub_f ff' (N.of_nat ((N.to_nat num) - (num_ref ft))) ori
-                              else (* 在field v0中 *)
-                                  ft_find_sub ft (N.sub num 1%num) (~~ori)
-   | _ => None
-  end.
-
-Fixpoint ft_set_sub (checkt : ftype) (newt : fgtyp) (num : N) : option ftype :=
-  match checkt with
-  | Gtyp _ => if num == N0 then Some (Gtyp newt) else None
-  | Atyp atyp n => if num == N0 then None (* 不用agg type更新 *)
-                    else if (((N.to_nat num) - 1) >= (num_ref atyp) * n) then None
-                    else (* 继续找atyp中的结构 *)
-                      match ft_set_sub atyp newt (N.of_nat (((N.to_nat num) - 1) mod (num_ref atyp))) with
-                      | Some natyp => Some (Atyp natyp n)
-                      | None => None
-                      end
-  | Btyp ff => if num == N0 then None
-                else match ft_set_sub_f ff newt num with
-                | Some newf => Some (Btyp newf)
-                | None => None
-                end
-  end
-with ft_set_sub_f (ff : ffield) (newt : fgtyp) (num : N) : option ffield :=
-  match ff with
-  | Fflips v0 fl ft ff' => if (N.to_nat num) > (num_ref ft) (* 不在该field中, 找下一个field *)
-                                then match ft_set_sub_f ff' newt (N.of_nat ((N.to_nat num) - (num_ref ft))) with
-                                    | Some newf => Some (Fflips v0 fl ft newf)
-                                    | None => None
-                                    end
-                                else (* 在field v0中 *)
-                                   match ft_set_sub ft newt (N.sub num 1%num) with
-                                   | Some newt' => Some (Fflips v0 fl newt' ff')
-                                   | None => None
-                                   end
-  | _ => None
-  end.
-
-Definition type_of_ref (v : ProdVar.t) (tmap : PVM.t (ftype * forient)) : option (ftype * bool) :=
-  match VM.find (fst v, N0) tmap with
-  | Some (checkt, _) => ft_find_sub checkt (snd v) false
-  | None => None
-  end.*)
-
 Definition fgtyp_mux (x y : fgtyp_explicit) : option fgtyp_explicit :=
 (* Find the type of a multiplexer whose two inputs have types x and y, for ground types *)
     match x, y with
@@ -2262,29 +2107,6 @@ Definition test_cir0 := Fcircuit 5%num [test_mod0].
 Definition tmap0 := circuit_tmap test_cir0.
 
 
-(*Fixpoint list_gtypref (v : ProdVar.t) (ft : ftype) (ori : bool) : seq (ProdVar.t * fgtyp * bool) :=
-  match ft with
-  | Gtyp gt => [(v, gt, ori)]
-  | Atyp atyp n => list_gtypref (v.1, N.add v.2 1%num) atyp ori
-  | Btyp ff => list_gtypref_ff v ff ori
-  end
-with list_gtypref_ff (v : ProdVar.t) (ff : ffield) (ori : bool) : seq (ProdVar.t * fgtyp * bool) :=
-  match ff with
-  | Fnil => [::]
-  | Fflips _ fl ft ff' => match fl with
-                        | Nflip => list_gtypref (v.1, N.add v.2 1%num) ft ori ++ list_gtypref_ff (v.1, N.add v.2 (N.of_nat (num_ref ft))) ff' ori
-                        | Flipped => list_gtypref (v.1, N.add v.2 1%num) ft (~~ori) ++ list_gtypref_ff (v.1, N.add v.2 (N.of_nat (num_ref ft))) ff' ori
-                        end
-  end.
-
-*)
-HB.about finType.
-HB.howto finType.
-HB.howto eqType.
-HB.about isCountable.Build.
-HB.about hasDecEq.Build.
-HB.about isFinite.Build.
-
 Section finProdVar.
 
 Variable (c : hfcircuit).
@@ -2303,8 +2125,6 @@ Definition finProdVar : Type := {pv : ProdVar.t | pv_is_fintype pv c}.
 
 Lemma pv_is_fintypeP pv : pv_is_fintype pv c.
 Proof.
-  (* 在这里进行你需要的证明，可能涉及到对 circuit_tmap 和 type_of_ref 的分析 *)
-  (* 你需要提供 c 的具体信息，以及满足 pv_is_fintype 的条件 *)
   Admitted.
 
 Definition ProdVar2finProdVar (pv : ProdVar.t) : finProdVar :=
@@ -2337,50 +2157,6 @@ Definition list_finProdVar_circuit : list (finProdVar * nat) * nat :=
   ) (VM.elements tmap) (nil, 1)
   | _ => (nil, 0)
   end.
-
-(*Fixpoint list_finProdVar_pp (pp : seq hfport) (flag : nat) : list (finProdVar * nat) * nat :=
-  match pp with
-  | [::] => (nil, flag)
-  | Foutput v t :: pp' 
-  | Finput v t :: pp' => let '(ls, flag0, _) := list_finProdVar v 0 t 0 in
-                         let '(ls0, flag1) := list_finProdVar_pp pp' flag0 in (ls ++ ls0, flag1)
-  end.    
-
-Fixpoint list_finProdVar_s (s : hfstmt) (flag : nat) (tmap : VM.t (ftype * forient)) : list (finProdVar * nat) * nat :=
-  match s with
-  | Swire v t => list_finProdVar v 0 t flag
-  | Sreg v reg => list_finProdVar v 0 (type reg) flag
-  | Snode v e => match type_of_hfexpr e tmap with
-                | Some t => list_finProdVar v 0 t flag
-  | Swhen _ ss_true ss_false =>
-  | _ => (nil, flag)
-  end
-with list_finProdVar_ss (ss : hfstmt_seq) (flag : nat) (tmap : VM.t (ftype * forient)) : list (finProdVar * nat) * nat :=
-  match ss with
-  | Qnil => (nil, flag)
-  | Qcons s st => let '(ls, flag0) := list_finProdVar_s flag tmap in
-                  let '(ls0, flag1) := list_finProdVar_ss ss flag0 tmap in (ls ++ ls0, flag1)
-  end.
-
-Definition list_finProdVar_m (m : hfmodule) (flag : nat) : list (finProdVar * nat) * nat :=
-  match m with
-  | FInmod _ pp ss => let '(ls, flag0) := list_finProdVar_pp pp flag in
-                      let '(ls0, flag1) := list_finProdVar_ss ss flag0 in (ls ++ ls0, flag1)
-  | _ => (nil, flag)
-  end.
-
-Fixpoint list_finProdVar_ml (ml : seq hfmodule) (flag : nat) : list (finProdVar * nat) * nat :=
-  match ml with
-  | nil => (nil, flag)
-  | hd :: tl => let '(ls, flag0) := list_finProdVar_m hd flag in
-                let '(ls0, flag1) := list_finProdVar_ml tl flag0 in (ls ++ ls0, flag1)
-  end.
-
-Definition list_finProdVar_circuit (c : hfcircuit) : list (finProdVar * nat) * nat :=
-  (* number implicit ground types by nat *)
-  match c with 
-  | Fcircuit _ ml => list_finProdVar_ml ml 0
-  end.*)
 
 Definition finProdVar_pickle (v : finProdVar) : nat := 
   let '(fin_list, _) := list_finProdVar_circuit in
@@ -2425,60 +2201,46 @@ Section PVMLemmas.
     PVM.find x m = Some e ->
     PVM.find x (PVM.map f m) = Some (f e).
   Proof.
-  (*   move=> H. rewrite F.map_o. rewrite /option_map. rewrite H. reflexivity. *)
-  (* Qed. *)
-  Admitted.
+    intros; apply PVM.Lemmas.find_some_map. done.
+  Qed.
   
   Lemma find_none_map {elt elt' : Type} {f : elt -> elt'} {m : PVM.t elt} {x : PVM.key} :
     PVM.find x m = None ->
     PVM.find x (PVM.map f m) = None.
   Proof.
-  (*   move=> H. rewrite F.map_o. rewrite /option_map. rewrite H. reflexivity. *)
-  (* Qed. *)
-  Admitted.
+    intros. apply PVM.Lemmas.find_none_map; done.
+  Qed.
 
   Lemma find_map_some {elt elt' : Type} {f : elt -> elt'} {m : PVM.t elt} {x : PVM.key} {e : elt'} :
     PVM.find x (PVM.map f m) = Some e ->
     exists a, e = f a /\ PVM.find x m = Some a.
   Proof.
-  (*   move=> H. move: (PVM.find_2 H) => {H} H. case: (F.map_mapsto_iff m x e f) => Hf _. *)
-  (*   move: (Hf H) => {H Hf} [] => a [Hea Hxa]. exists a. split. *)
-  (*   - assumption. *)
-  (*   - apply: PVM.find_1. assumption. *)
-  (* Qed. *)
-  Admitted.
+    intros; apply PVM.Lemmas.find_map_some. done.
+  Qed.
 
   Lemma find_map_none {elt elt' : Type} {f : elt -> elt'} {m : PVM.t elt} {x : PVM.key} :
     PVM.find x (PVM.map f m) = None ->
     PVM.find x m = None.
   Proof.
-  (*   rewrite F.map_o. rewrite /option_map. case: (PVM.find x m). *)
-  (*   - discriminate. *)
-  (*   - reflexivity. *)
-  (* Qed. *)
-  Admitted.
+    intros. apply PVM.Lemmas.find_map_none in H; done.
+  Qed.
 
   Lemma find_add_eq {elt : Type} {m : PVM.t elt} {x : PVM.key} {e : elt} :
     PVM.find x (PVM.add x e m) = Some e.
-    (* PVM.E.eq x y -> PVM.find x (PVM.add y e m) = Some e. *)
   Proof.
-  (*   move=> Hxy. apply: F.add_eq_o. apply: PVM.E.eq_sym. exact: Hxy. *)
-  (* Qed. *)
-  Admitted.
+    apply PVM.Lemmas.F.add_eq_o. rewrite eq_refl. rewrite eq_refl //.
+  Qed.
 
   Lemma find_add_neq {elt : Type} {m : PVM.t elt} {x y : PVM.key} {e : elt} :
     x <> y -> PVM.find x (PVM.add y e m) = PVM.find x m.
-    (* ~(PVM.E.eq x y) -> PVM.find x (PVM.add y e m) = PVM.find x m. *)
   Proof.
-  (*   move=> Hne. apply: F.add_neq_o. move=> Heq; apply: Hne; apply: PVM.E.eq_sym. *)
-  (*   exact: Heq. *)
-  (* Qed. *)
-  Admitted.
+    intros; apply PVM.Lemmas.find_add_neq. destruct x; destruct y. intuition. apply H. move /eqP : H1 => H1; simpl in H1.
+    move /eqP : H2 => H2; simpl in H2. subst t1 t2; done.
+  Qed.
 
   Lemma find_some_in {elt : Type} {m : PVM.t elt} x e : PVM.find x m = Some e -> PVM.In x m.
   Proof.
-  (*   move=> H; exists e. exact: (find_some_mapsto H). *)
-  (* Qed. *)
-  Admitted.
+    intros; apply PVM.Lemmas.find_some_in in H. done.
+  Qed.
   
 End PVMLemmas.

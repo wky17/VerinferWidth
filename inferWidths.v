@@ -3640,4 +3640,3 @@ Definition InferWidths_fun : option hfcircuit :=
   end.
 
 End solve_fun.
-Search (List.split).

@@ -569,17 +569,6 @@ Fixpoint extract_constraints_tailrec (ss : hfstmt_seq) (tmap : VM.t (ftype * for
     end
   end.
 
-(*Fixpoint extract_constraints_tailrec (ss : hfstmt_seq) (tmap : VM.t (ftype * forient)) (c1map : PVM.t (list Constraint1)) : option (list (PVM.t (list Constraint1) * list Constraint2)) :=
-match ss with
-| Qnil => Some [(c1map, nil)]
-| Qcons s st => 
-  match extract_constraint_tailrec s tmap c1map with
-  | Some [(nmap, c2)] => extract_constraints_tailrec st tmap nmap
-  | Some (_ :: ((nmap, c2) :: _)) => extract_constraints_tailrec st tmap nmap
-  | _ => None
-  end
-end.*)
-
 Fixpoint expandwhen (s : hfstmt) (res : hfstmt_seq * (list hfexpr)) : hfstmt_seq * (list hfexpr) :=
   match s with
   | Swhen c s1 s2 => let res' := expandwhens s1 res in 
@@ -598,18 +587,6 @@ Definition extract_constraint_m (m : hfmodule) (tmap : VM.t (ftype * forient)) (
                      extract_constraints ss' tmap c1map
   | _ => None
   end.
-
-(*Fixpoint extract_constraint_ml (ml : seq hfmodule) (tmap : VM.t (ftype * forient)) (c1map : PVM.t (list Constraint1)) : option (list (PVM.t (list Constraint1) * list Constraint2)) :=
-  match ml with
-  | nil => Some [(c1map, nil)]
-  | hd :: tl => match extract_constraint_m hd tmap c1map with
-              | Some (nmap, c2) => match extract_constraint_ml tl tmap nmap with
-                  | Some (nmap', cs2) => Some (nmap', c2 ++ cs2)
-                  | _ => None
-                  end
-              | _ => None
-              end
-  end.*)
 
 Definition extract_constraints_c (c : hfcircuit) (tmap : (VM.t (ftype * forient))) : option (list (PVM.t (list Constraint1) * list Constraint2)) :=
   match c with
