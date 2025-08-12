@@ -662,12 +662,26 @@ match terms with
 end.
 
 Definition remove_solved_c (values : Valuation) (c : Constraint1) : Constraint1 :=
-  match remove_solved values (rhs_terms1 c) with
-  | (new_terms, new_cst) => 
+  let '(new_terms, new_cst) := remove_solved values (rhs_terms1 c) in
+  match rhs_power c with
+  | nil => (* 不含指数项 *)
+      {| lhs_var1 := lhs_var1 c;
+        rhs_const1 := Z.add (rhs_const1 c) new_cst;
+        rhs_power := nil;
+        rhs_terms1 := new_terms |}
+  | (_, var) :: _ => (* 含 *)
+    match PVM.find var values with
+    | Some val => 
+      {| lhs_var1 := lhs_var1 c;
+        rhs_const1 := Z.add (Z.add (rhs_const1 c) new_cst) (Z.pow 2 (Z.of_nat val));
+        rhs_power := nil;
+        rhs_terms1 := new_terms |}
+    | None => 
       {| lhs_var1 := lhs_var1 c;
         rhs_const1 := Z.add (rhs_const1 c) new_cst;
         rhs_power := rhs_power c;
         rhs_terms1 := new_terms |}
+    end
   end.
 
 Fixpoint remove_solveds (values : Valuation) (cs : list Constraint1) : list Constraint1 :=

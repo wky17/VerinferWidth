@@ -11,5 +11,5 @@ HiFirrtl.v
 TopoSort.v
 extract_cs.v
 extract_cswithmin.v
-solve_fun.v
+inferWidths.v
 Extract.v

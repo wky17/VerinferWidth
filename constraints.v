@@ -13,92 +13,6 @@ Import Prenex Implicits.
 
 Section constraint.
 
-(* 定义ϕ1类型的约束结构 *)
-(*Record Constraint1 : Type := {
-  lhs_var1 : ProdVar.t;  (* 左侧变量 *)
-  rhs_const1 : Z.t;(* 右侧常数项 *)
-  rhs_terms1 : list (nat * ProdVar.t) (* 右侧线性组合项，列表形式 (系数, 变量) *)
-}.*)
-
-Record Constraint1 : Type := {
-  lhs_var1 : ProdVar.t;  (* 左侧变量 *)
-  rhs_const1 : Z.t;(* 右侧常数项 *)
-  rhs_terms1 : list (nat * ProdVar.t); (* 右侧线性组合项，列表形式 (系数, 变量) *)
-  rhs_power : list (nat * ProdVar.t) (* 右侧2的幂项 *)
-}.
-
-Definition constraint1_eqn (x y : Constraint1) : bool :=
-  (lhs_var1 x == lhs_var1 y) &&
-  (Z.eqb (rhs_const1 x) (rhs_const1 y)) &&
-  (forallb (fun '(a,b,(c,d)) => (a == c) && (b == d)) (zip (rhs_terms1 x) (rhs_terms1 y))) &&
-  (forallb (fun '(a,b,(c,d)) => (a == c) && (b == d)) (zip (rhs_power x) (rhs_power y))).
-
-Lemma constraint1_eqP : Equality.axiom constraint1_eqn.
-Proof.
-  rewrite /Equality.axiom.
-  intros x y.
-  unfold constraint1_eqn.
-  destruct x as [x_lhs x_const x_terms x_power].
-  destruct y as [y_lhs y_const y_terms y_power].
-  (* 解构记录为各个字段 *)
-  (* 开始构造等价性证明 *)
-  apply (iffP idP).
-  - (* 正向：constraint1_eqn x y = true → x = y *)
-    intro H.
-    (* 分解连词（&&）为各个部分的等式 *)
-    move: H => /andP[/andP[/andP[H1 H2] H3] H4].
-Admitted.
-
-HB.instance Definition _ := hasDecEq.Build Constraint1 constraint1_eqP.
-
-(* 定义ϕ2类型的约束结构 *)
-Record Constraint2 : Type := {
-  lhs_const2 : nat; (* 左侧常数项 *)
-  rhs_terms2 : list (nat * ProdVar.t) (* 右侧线性组合项，列表形式 (系数, 变量) *)
-}.
-
-Definition constraint2_eqn (x y : Constraint2) : bool :=
-  ((lhs_const2 x) == (lhs_const2 y)) &&
-  (forallb (fun '(a,b,(c,d)) => (a == c) && (b == d)) (zip (rhs_terms2 x) (rhs_terms2 y))).
-
-Lemma constraint2_eqP : Equality.axiom constraint2_eqn.
-Admitted.
-
-HB.instance Definition _ := hasDecEq.Build Constraint2 constraint2_eqP.
-
-(* 定义统一的约束类型 *)
-Inductive Constraint : Type :=
-  | Phi1 : Constraint1 -> Constraint (* ϕ1类型的约束 *)
-  | Phi2 : Constraint2 -> Constraint (* ϕ2类型的约束 *)
-.
-
-Definition constraint_eqn (x y : Constraint) : bool :=
-  match x,y with
-  | Phi1 c1, Phi1 c2
-  | Phi2 c1, Phi2 c2 => c1 == c2
-  | _, _ => false
-  end.
-
-Lemma constraint_eqP : Equality.axiom constraint_eqn.
-Admitted.
-
-HB.instance Definition _ := hasDecEq.Build Constraint constraint_eqP.
-
-Record Constraint2_new : Type := {
-  lhs_const2_new : Z.t;
-  rhs_terms2_new : list (nat * ProdVar.t);
-  rhs_power2_new : list (nat * ProdVar.t)
-}.
-
-(* 定义变量值的映射 *)
-(* old version 
-Definition Valuation := ProdVar.t -> nat.
-
-(* 假设初始值都为0 *)
-Definition initial_valuation : Valuation := fun _ => 0.
-Definition add_valuation (s : ProdVar.t -> nat) (x : ProdVar.t) (v : nat) :=
-  fun n => if n == x then v else s n. *)
-
 Definition term : Type := nat * ProdVar.t.
 
 Lemma eq_from_prodvar_eq : forall p1 p2 : ProdVar.t, ProdVar.eq p1 p2 <-> p1 = p2.
@@ -143,8 +57,181 @@ Proof.
     done.
 Qed.
 
+Definition term_eqn (x y : term) : bool :=
+  (x.1 == y.1) && (x.2 == y.2).
+Lemma term_eqP : Equality.axiom term_eqn.
+Proof.
+  unfold Equality.axiom, term_eqn.
+  destruct x as [coe0 var0];
+  destruct y as [coe1 var1]; simpl.
+  destruct (coe0 == coe1) eqn: Hc ; move /eqP : Hc => Hc ;
+        last by (apply ReflectF ; contradict Hc ; injection Hc ; done).
+  rewrite Hc andTb.
+  destruct (var0 == var1) eqn: Hv ; move /eqP : Hv => Hv ;
+        last by (apply ReflectF ; contradict Hv ; injection Hv ; done).
+  rewrite Hv. apply ReflectT; done.
+Qed.
+
+HB.instance Definition _ := hasDecEq.Build term term_eqP.
+
+Definition terms := list term.
+Fixpoint terms_eqn (x y : terms) : bool :=
+  match x,y with
+  | nil, nil => true
+  | t0 :: tl0, t1 :: tl1 => (t0 == t1) && (terms_eqn tl0 tl1)
+  | _, _ => false
+  end.
+
+Lemma terms_eqP : Equality.axiom terms_eqn.
+Proof.
+  unfold Equality.axiom.
+  move=> x y.
+  elim: x y => [|x xs IHx] y /=.
+  - (* x = nil 的情况 *)
+    case: y => [|y ys] /=.
+    + (* y = nil *)
+      apply ReflectT; reflexivity.
+    + (* y = y::ys *)
+      apply ReflectF; discriminate.
+  
+  - (* x = x::xs 的情况 *)
+    case: y => [|y ys] /=.
+    + (* y = nil *)
+      apply ReflectF; discriminate.
+    + (* y = y::ys *)
+      (* 比较头部元素 *)
+      move: (term_eqP x y) => [Hxy_eq|Hxy_neq].
+      * (* x == y *)
+        rewrite Hxy_eq /=.
+        move: (IHx ys) => [Hxsys_eq|Hxsys_neq].
+        -- (* xs 和 ys 相等 *)
+          rewrite Hxsys_eq eq_refl. apply ReflectT. done.
+        -- (* xs 和 ys 不相等 *)
+          rewrite eq_refl. simpl. apply ReflectF.
+          contradict Hxsys_neq. inversion Hxsys_neq. done.
+      * (* x != y *)
+        assert ((x==y)=false). apply not_true_iff_false. intro. move /eqP : H => H; subst x; done. rewrite H. simpl. apply ReflectF.
+        contradict Hxy_neq. inversion Hxy_neq. done.
+Qed.
+
+HB.instance Definition _ := hasDecEq.Build terms terms_eqP.
+
+(* 定义ϕ1类型的约束结构 *)
+(*Record Constraint1 : Type := {
+  lhs_var1 : ProdVar.t;  (* 左侧变量 *)
+  rhs_const1 : Z.t;(* 右侧常数项 *)
+  rhs_terms1 : list (nat * ProdVar.t) (* 右侧线性组合项，列表形式 (系数, 变量) *)
+}.*)
+
+Record Constraint1 : Type := {
+  lhs_var1 : ProdVar.t;  (* 左侧变量 *)
+  rhs_const1 : Z.t;(* 右侧常数项 *)
+  rhs_terms1 : terms; (* 右侧线性组合项，列表形式 (系数, 变量) *)
+  rhs_power : terms (* 右侧2的幂项 *)
+}.
+
+Definition constraint1_eqn (x y : Constraint1) : bool :=
+  (lhs_var1 x == lhs_var1 y) &&
+  (Z.eqb (rhs_const1 x) (rhs_const1 y)) &&
+  (rhs_terms1 x == rhs_terms1 y) &&
+  (rhs_power x == rhs_power y).
+
+Lemma constraint1_eqP : Equality.axiom constraint1_eqn.
+Proof.
+  unfold Equality.axiom, constraint1_eqn.
+  destruct x as [x_lhs x_const x_terms x_power];
+  destruct y as [y_lhs y_const y_terms y_power]; simpl.
+  destruct (x_lhs == y_lhs) eqn: Hlhs ; move /eqP : Hlhs => Hlhs ;
+        last by (apply ReflectF ; contradict Hlhs ; injection Hlhs ; done).
+  rewrite Hlhs andTb.
+  (* 比较常数项 *)
+  case Hconst: (x_const =? y_const)%Z; [move/Z.eqb_eq in Hconst | move/Z.eqb_neq in Hconst]; simpl; 
+        last by (apply ReflectF ; contradict Hlhs ; injection Hlhs ; done).
+  rewrite Hconst.
+ (* 比较线性组合项 *)
+  destruct (x_terms == y_terms) eqn: Hterms ; move /eqP : Hterms => Hterms ;  
+        last by (apply ReflectF ; contradict Hterms ; injection Hterms ; done).
+  rewrite Hterms andTb.
+  (* 比较2的幂项 *)
+  destruct (x_power == y_power) eqn: Hp ; move /eqP : Hp => Hp ;  
+        last by (apply ReflectF ; contradict Hp ; injection Hp ; done).
+  rewrite Hp.
+  apply ReflectT. done. 
+Qed.
+
+HB.instance Definition _ := hasDecEq.Build Constraint1 constraint1_eqP.
+
+(* 定义ϕ2类型的约束结构 *)
+Record Constraint2 : Type := {
+  lhs_const2 : nat; (* 左侧常数项 *)
+  rhs_terms2 : terms (* 右侧线性组合项，列表形式 (系数, 变量) *)
+}.
+
+Definition constraint2_eqn (x y : Constraint2) : bool :=
+  ((lhs_const2 x) == (lhs_const2 y)) &&
+  (rhs_terms2 x == rhs_terms2 y).
+
+Lemma constraint2_eqP : Equality.axiom constraint2_eqn.
+Proof.
+  unfold Equality.axiom, constraint2_eqn.
+  destruct x as [x_lhs x_terms];
+  destruct y as [y_lhs y_terms]; simpl.
+  destruct (x_lhs == y_lhs) eqn: Hlhs ; move /eqP : Hlhs => Hlhs ;
+        last by (apply ReflectF ; contradict Hlhs ; injection Hlhs ; done).
+  rewrite Hlhs andTb.
+  (* 比较线性组合项 *)
+  destruct (x_terms == y_terms) eqn: Hterms ; move /eqP : Hterms => Hterms ;  
+        last by (apply ReflectF ; contradict Hterms ; injection Hterms ; done).
+  rewrite Hterms.
+  apply ReflectT. done. 
+Qed.
+
+HB.instance Definition _ := hasDecEq.Build Constraint2 constraint2_eqP.
+
+(* 定义统一的约束类型 *)
+Inductive Constraint : Type :=
+  | Phi1 : Constraint1 -> Constraint (* ϕ1类型的约束 *)
+  | Phi2 : Constraint2 -> Constraint (* ϕ2类型的约束 *)
+.
+
+Definition constraint_eqn (x y : Constraint) : bool :=
+  match x,y with
+  | Phi1 c1, Phi1 c2
+  | Phi2 c1, Phi2 c2 => c1 == c2
+  | _, _ => false
+  end.
+
+Lemma constraint_eqP : Equality.axiom constraint_eqn.
+Proof.
+  unfold Equality.axiom, constraint_eqn ; intros.
+  destruct x, y ; try (apply ReflectF ; discriminate) ; try (apply ReflectT ; reflexivity).
+  destruct (c == c0) eqn: Hlhs ; move /eqP : Hlhs => Hlhs ;
+        last by (apply ReflectF ; contradict Hlhs ; injection Hlhs ; done).
+  rewrite Hlhs. apply ReflectT. done. 
+  destruct (c == c0) eqn: Hlhs ; move /eqP : Hlhs => Hlhs ;
+        last by (apply ReflectF ; contradict Hlhs ; injection Hlhs ; done).
+  rewrite Hlhs. apply ReflectT. done.
+Qed.
+
+HB.instance Definition _ := hasDecEq.Build Constraint constraint_eqP.
+
+Record Constraint2_new : Type := {
+  lhs_const2_new : Z.t;
+  rhs_terms2_new : list (nat * ProdVar.t);
+  rhs_power2_new : list (nat * ProdVar.t)
+}.
+
+(* 定义变量值的映射 *)
+(* old version 
+Definition Valuation := ProdVar.t -> nat.
+
+(* 假设初始值都为0 *)
+Definition initial_valuation : Valuation := fun _ => 0.
+Definition add_valuation (s : ProdVar.t -> nat) (x : ProdVar.t) (v : nat) :=
+  fun n => if n == x then v else s n. *)
+
 Definition combine_term (t1 : term) (t2 : list term) : list term := 
-  match List.find (fun p => snd p == t1.2) t2 with
+  match List.find (fun p : term => snd p == t1.2) t2 with
   | None => t1 :: t2  (* 添加新的项 *)
   | Some t =>
       (* 合并项 *)
@@ -547,66 +634,157 @@ induction nl as [|n nl' IHnl].
   apply in_eq.
 Qed.
 
-Lemma find_add_neq : forall (v a : ProdVar.t) (val : nat) (valuation : Valuation), v <> a -> PVM.find v (PVM.add a val valuation) = PVM.find v valuation.
- (* find_add_None *)
+Lemma find_add_neq : forall [A : Type] (v a : ProdVar.t) (val : A) (valuation : PVM.t A), v <> a -> PVM.find v (PVM.add a val valuation) = PVM.find v valuation.
+Proof.
+  intros; apply HiFirrtl.find_add_neq; done.
+Qed.
+
+Lemma find_add_eq : forall [A : Type] (a : ProdVar.t) (val : A) (valuation : PVM.t A), PVM.find a (PVM.add a val valuation) = Some val.
+Proof.
+  intros; apply HiFirrtl.find_add_eq; done.
+Qed.
+
+Lemma find_mem : forall [A : Type] (a : ProdVar.t) (valuation : PVM.t A), (exists val, PVM.find a valuation = Some val) <-> PVM.mem a valuation.
 Proof.
 Admitted.
 
-Lemma find_add_eq : forall (a : ProdVar.t) (val : nat) (valuation : Valuation), PVM.find a (PVM.add a val valuation) = Some val.
+Lemma find_remove_eq : forall [A : Type] (a : ProdVar.t) (valuation : PVM.t A), PVM.find a (PVM.remove a valuation) = None.
 Proof.
 Admitted.
 
-Lemma find_mem : forall (a : ProdVar.t) (valuation : Valuation), (exists val, PVM.find a valuation = Some val) <-> PVM.mem a valuation.
+Lemma find_remove_neq : forall [A : Type] (v a : ProdVar.t) (valuation : PVM.t A), v <> a -> PVM.find v (PVM.remove a valuation) = PVM.find v valuation.
 Proof.
 Admitted.
 
-Lemma find_remove_eq : forall (a : ProdVar.t) (valuation : Valuation), PVM.find a (PVM.remove a valuation) = None.
+Lemma add_mem : forall [A : Type] (a : ProdVar.t) (val : A) (valuation : PVM.t A), PVM.mem a (PVM.add a val valuation).
+Proof.
+  intros; apply find_mem. exists val; apply find_add_eq.
+Qed.
+
+Lemma mem_add : forall [A : Type] (a hd : ProdVar.t) (val : A) (valuation : PVM.t A), PVM.mem a valuation -> PVM.mem a (PVM.add hd val valuation).
+Proof.
+  intros. apply find_mem in H. destruct H as [val0 Hfind]. apply find_mem.
+  destruct (a == hd) eqn : Heq; move /eqP : Heq => Heq.
+  - subst a. exists val; apply find_add_eq.
+  - exists val0; rewrite -Hfind; apply find_add_neq; done.
+Qed.
+
+Lemma mem_add_or : forall [A : Type] (a hd : ProdVar.t) (val : A) (valuation : PVM.t A), PVM.mem a valuation \/ a == hd <-> PVM.mem a (PVM.add hd val valuation).
+Proof.
+  split.
+  - intros. destruct H. move : H; apply mem_add.
+    move /eqP : H => H; subst a. apply find_mem. exists val; apply find_add_eq.
+  - intros. apply find_mem in H. destruct H as [val0 Hfind]. destruct (a == hd) eqn : Heq; move /eqP : Heq => Heq; try (right; done).
+    left. rewrite find_add_neq in Hfind; try done. apply find_mem. exists val0; done.
+Qed.
+
+Lemma find_remove_add : forall [A : Type] (a : ProdVar.t) (val : A) (valuation : PVM.t A), PVM.find a valuation = Some val -> PVM.add a val (PVM.remove a valuation) = valuation.
 Proof.
 Admitted.
 
-Lemma find_remove_neq : forall (v a : ProdVar.t) (valuation : Valuation), v <> a -> PVM.find v (PVM.remove a valuation) = PVM.find v valuation.
+Lemma mem_find_none : forall [A : Type] (a : ProdVar.t) (m : PVM.t A), ~ PVM.mem a m -> PVM.find a m = None.
 Proof.
-Admitted.
-
-Lemma add_mem : forall (a : ProdVar.t) (val : nat) (valuation : Valuation), PVM.mem a (PVM.add a val valuation).
-Proof.
-Admitted.
-
-Lemma mem_add : forall (a hd : ProdVar.t) (val : nat) (valuation : Valuation), PVM.mem a valuation -> PVM.mem a (PVM.add hd val valuation).
-Proof.
-Admitted.
-
-Lemma mem_add_or : forall (a hd : ProdVar.t) (val : nat) (valuation : Valuation), PVM.mem a valuation \/ a == hd <-> PVM.mem a (PVM.add hd val valuation).
-Proof.
-Admitted.
-
-Lemma find_remove_add : forall (a : ProdVar.t) (val : nat) (valuation : Valuation), PVM.find a valuation = Some val -> PVM.add a val (PVM.remove a valuation) = valuation.
-Proof.
-Admitted.
-
-Lemma mem_find_none : forall (a : ProdVar.t) (m : Valuation), ~ PVM.mem a m -> PVM.find a m = None.
-Proof.
-Admitted.
+  intros. destruct (PVM.find a m) as [val|] eqn : Hfind; try done.
+  assert (exists val, PVM.find a m = Some val) by (exists val; done). apply find_mem in H0. done.
+Qed.
 
 Lemma partition_as_filter [A : Type] (f : A -> bool) (l : list A) : List.partition f l = (filter f l, filter (fun x => negb (f x)) l).
 Proof.
-Admitted. (* coq 官方应该有？ TBD *)
+  induction l as [|x xs IH].
+  - (* 基础情况: 空列表 *)
+    simpl. reflexivity.
+  - (* 归纳步骤: x::xs *)
+    simpl. (* 展开 partition 和 filter 定义 *)
+    destruct (List.partition f xs) as [trues falses] eqn:Hpart.
+    (* 根据 f x 的值分情况证明 *)
+    case (f x) eqn:Hfx.
+    + (* f x = true 的情况 *)
+      simpl. inversion IH. done.
+    + (* f x = false 的情况 *)
+      simpl. inversion IH. done.
+Qed.
+
+Lemma in_split_r_exists_in [A B : Type] (b : B) (l : list (A * B)) : List.In b (List.split l).2 -> exists a, List.In (a, b) l.
+Proof.
+  intros HIn.
+  (* 对列表 l 进行归纳 *)
+  induction l as [| (a', b') l IH]; simpl in *.
+  - (* 基本情况：空列表 *)
+    contradiction.  (* 空列表的 split 返回空列表 *)
+  - (* 归纳步骤：非空列表 *)
+    destruct (List.split l) as [xs ys] eqn:HSplit.
+    simpl in HIn.
+    destruct HIn as [Heq | HIn'].
+    + (* 情况1: b 等于当前元素的第二个分量 *)
+      exists a'.
+      left.
+      congruence.  (* 自动处理等式 *)
+    + (* 情况2: b 在尾部分量列表中 *)
+      apply IH in HIn'.
+      destruct HIn' as [a'' HIn''].
+      exists a''.
+      right; assumption.
+Qed.
+
+Lemma split2_eq_mapsnd : forall [A B : Type] (l : list (A * B)), (List.split l).2 = List.map snd l.
+Proof.
+  intros A B. elim. simpl; done. simpl; intros [a b] tl H.
+  destruct (List.split tl) as [left right]. simpl. rewrite -H; done.
+Qed.
 
 Lemma in_split_remove : forall a coes vars coes' vars' var, List.split (remove term_dec a (combine coes vars)) = (coes', vars') -> ~ In var vars -> ~ In var vars'.
 Proof.
-Admitted.
+  intros a coes vars coes' vars' var Hsplit Hnin Hcont.
+  assert (vars' = (split (remove term_dec a (combine coes vars))).2) by (rewrite Hsplit; simpl; done). rewrite H in Hcont.
+  apply in_split_r_exists_in in Hcont. destruct Hcont as [a0 Hcont]. apply in_remove in Hcont; move : Hcont => [Hin _].
+  apply in_split_r in Hin. simpl in Hin. 
+  assert (In var vars). move : Hin; clear. move : coes vars. elim. simpl; intros; done. intros coe_hd coe_tl IH. elim. simpl; intros; done.
+    intros var_hd var_tl; intros. simpl in Hin. destruct (split (combine coe_tl var_tl)) as [left right] eqn : Hsplit. simpl in Hin. destruct Hin. 
+    simpl; left; done. clear H. specialize (IH var_tl). simpl; right. apply IH. rewrite Hsplit; simpl; done.
+  done.
+Qed.
 
-Lemma NoDup_remove_notin : forall coe var coes vars coes' vars', List.split (remove term_dec (coe, var) (combine coes vars)) = (coes', vars') -> ~ In var vars'.
+Lemma term_dec_refl a : term_dec a a.
 Proof.
-Admitted.
+  destruct a as [coe var].
+  case Hdec : (term_dec (coe, var) (coe, var)) => [left|right]; done.
+Qed.
 
-Lemma remove_NoDup : forall a coes vars coes' vars', List.split (remove term_dec a (combine coes vars)) = (coes', vars') -> NoDup vars -> NoDup vars'.
+Lemma NoDup_remove_notin coe var : forall l1 l2 coes' vars', NoDup l2 -> List.In (coe, var) (combine l1 l2) -> List.split (remove term_dec (coe, var) (combine l1 l2)) = (coes', vars') -> ~ In var vars'.
 Proof.
-Admitted.
+  elim. simpl; intros. inversion H0; done. intros coe_hd coe_tl IH. elim. simpl; intros. inversion H0; done.
+  intros var_hd var_tl. intros. clear H. simpl in H1. destruct H1.
+  - clear IH. inversion H; subst coe_hd var_hd; clear H. simpl in H2. 
+    destruct (term_dec (coe, var) (coe, var)) eqn : Heq; try done. clear e Heq. apply NoDup_cons_iff in H0.
+    move : H2 H0.1. apply in_split_remove.
+  - simpl in H2. 
+    destruct (term_dec (coe, var) (coe_hd, var_hd)) eqn : Heq; try done.
+    * inversion e; subst coe_hd var_hd. clear Heq e. 
+      apply in_combine_r in H. apply NoDup_cons_iff in H0. move : H0 => [H0 _]. done.
+    * simpl in H2. destruct (split (remove term_dec (coe, var) (combine coe_tl var_tl))) as [left right] eqn : Hsplit.
+      inversion H2; subst coes' vars'; clear H2. apply IH in Hsplit as H'; try done. 
+      intro. simpl in H1. destruct H1; try done.
+      subst var_hd. apply in_combine_r in H. apply NoDup_cons_iff in H0. move : H0 => [H0 _]. done.
+      apply NoDup_cons_iff in H0. exact H0.2.
+Qed.
 
-Lemma combine_notin : forall var coes vars, (forall x : term, In x (combine coes vars) -> (x.2 == var) = false) -> ~ In var vars.
+Lemma remove_NoDup a : forall coes vars coes' vars', List.split (remove term_dec a (combine coes vars)) = (coes', vars') -> NoDup vars -> NoDup vars'.
 Proof.
-Admitted.
+  elim. simpl; intros. inversion H; subst vars'; apply NoDup_nil. intros coe_hd coe_tl IH. elim. simpl; intros. inversion H; subst vars'; apply NoDup_nil.
+  intros var_hd var_tl _. intros. simpl in H. destruct (term_dec a (coe_hd, var_hd)).
+  - apply IH in H; try done. apply NoDup_cons_iff in H0. exact H0.2.
+  - simpl in H. destruct (split (remove term_dec a (combine coe_tl var_tl))) as [left right] eqn : Hsplit.
+    inversion H; subst coes' vars'; clear H. apply NoDup_cons_iff. split.
+    apply (in_split_remove _ _ _ _ Hsplit). apply NoDup_cons_iff in H0. exact H0.1.
+    apply IH in Hsplit; try done. apply NoDup_cons_iff in H0. exact H0.2.
+Qed.
+
+Lemma combine_notin (v : ProdVar.t) : forall l, (forall x : term, In x l -> (x.2 == v) = false) -> ~ In v (split l).2.
+Proof.
+  elim. simpl; intros; done. intros [coe var] tl IH. simpl; intros. destruct (split tl) as [left right] eqn : Hsplit. simpl; intro.
+  destruct H0. subst v. assert ((coe, var) = (coe, var) \/ In (coe, var) tl) by (left; done). apply H in H0. rewrite eq_refl in H0. discriminate.
+  move : H0; apply IH. intros; apply H. right; done.
+Qed.
 
 Lemma add_cover [A : Type] (a : ProdVar.t) (val val' : A) values : PVM.add a val values = PVM.add a val (PVM.add a val' values).
 Proof.
@@ -614,32 +792,53 @@ Admitted.
 
 Lemma NoDup_app_remove_l [A : Type] (l l' : list A) : NoDup (l++l') -> NoDup l'.
 Proof.
-Admitted. (* Coq官方有？ *)
+  induction l. simpl; done. intro. simpl in H. apply NoDup_cons_iff in H; move : H => [_ H]. apply IHl; done. 
+Qed.
 
 Lemma NoDup_app_remove_r [A : Type] (l l' : list A) : NoDup (l++l') -> NoDup l.
 Proof.
-Admitted.
+  move : l. elim. intro; apply NoDup_nil. intros. apply NoDup_cons_iff. simpl in H0. apply NoDup_cons_iff in H0; move : H0 => [H0 H1].
+  split. intro. apply (contra_not (in_or_app l l' a)) in H0. intuition.
+  move : H1; apply H.
+Qed.
 
 Lemma NoDup_app_notin_r [A : Type] : forall (l0 l1 : list A), NoDup (l0 ++ l1) -> forall var, List.In var l0 -> ~List.In var l1.
 Proof.
-  
-Admitted.
+  elim. simpl; intros; done. simpl; intros. destruct H1. subst a. apply NoDup_cons_iff in H0; move : H0 => [H0 _]. apply (contra_not (in_or_app l l1 var)) in H0. intuition. 
+  move : H1; apply H. apply NoDup_cons_iff in H0. exact H0.2.
+Qed.
 
 Lemma elements_add [A : Type] bounds : forall v (a b : A), PVM.find v bounds = Some a -> 
   exists l0 l1, l0 ++ (v, a) :: l1 = PVM.elements bounds /\ l0 ++ (v, b) :: l1 = PVM.elements (PVM.add v b bounds).
 Proof.
 Admitted.
 
-Lemma eq_dec : forall x y : ProdVar.t, { eq x y } + { ~ eq x y }.
+Lemma elements_add' [A : Type] bounds : forall v (a : A), PVM.find v bounds = None -> 
+  exists l0 l1, l0 ++ l1 = PVM.elements bounds /\ l0 ++ (v, a) :: l1 = PVM.elements (PVM.add v a bounds).
+Proof.
 Admitted.
+
+Lemma eq_dec : forall x y : ProdVar.t, { eq x y } + { ~ eq x y }.
+Proof.
+  intros [x1 x2] [y1 y2].
+  specialize (ProdVar.eq_dec (x1,x2) (y1,y2)); intro. destruct H. apply eq_from_prodvar_eq in e. left; done.
+  right; intro. apply eq_from_prodvar_eq in H. done.
+Qed.
 
 Lemma elements_map [A : Type] : forall (f : A -> A) (bounds : PVM.t A), PVM.elements (PVM.map f bounds) = List.map (fun '(key, value) => (key, f value)) (PVM.elements bounds).
 Proof.
 Admitted.
 
-Lemma find_in_elements [A : Type] : forall x a (bounds : PVM.t A), PVM.find x bounds = Some a -> List.In (x, a) (PVM.elements bounds).
+Lemma find_in_elements [A : Type] : forall x a (bounds : PVM.t A), PVM.find x bounds = Some a <-> List.In (x, a) (PVM.elements bounds).
 Proof.
 Admitted.
+
+Lemma mem_in_elements [A : Type] : forall x (bounds : PVM.t A), PVM.mem x bounds <-> exists a, List.In (x, a) (PVM.elements bounds).
+Proof.
+  split; intros.
+  - apply find_mem in H. destruct H as [val H]. apply find_in_elements in H. exists val; done.
+  - apply find_mem. destruct H as [val H]. apply find_in_elements in H. exists val; done.
+Qed.
 
 Fixpoint in_bool (a : ProdVar.t) (l : list ProdVar.t) : bool :=
   match l with
@@ -686,7 +885,7 @@ Lemma terms_value_eq :
     (forall var, In var (map snd terms) -> PVM.find var v0 = PVM.find var v1) ->
     terms_value v0 terms init = terms_value v1 terms init.
 Proof.
-  induction terms as [|(n, var) terms IH]; intros init v0 v1 Hvars; simpl.
+  intro terms. induction terms as [|(n, var) terms IH]; intros init v0 v1 Hvars; simpl.
   - reflexivity.
   - rewrite Hvars.
     apply IH.
@@ -890,14 +1089,19 @@ Proof.
     rewrite forallb_forall.
     intro H; apply H in Hin.
     congruence.
-  - intro H.
-    rewrite forallb_forall in H.
-    (*apply not_forall_in_neg in H. TBD
-    destruct H as [y [Hin Hf]].
-    exists y; split; auto.
-    destruct (f y) eqn:E; auto.
-    congruence.*)
-Admitted.
+  - (* 右推左：非全真 → 存在反例 *)
+    intros Hnot. induction x as [|a x' IH].
+    + (* 空列表情况 *)
+      exfalso. apply Hnot. reflexivity.             (* forallb [] = true *)
+    + (* 非空列表情况 *)
+      simpl in *. apply not_true_iff_false in Hnot. apply andb_false_iff in Hnot.          (* 分解合取式 *)
+      destruct Hnot as [Hf|Hforall].
+      * (* 头部元素为假 *)
+        exists a. split; auto.
+      * (* 尾部存在假元素 *)
+        apply not_true_iff_false in Hforall. destruct (IH Hforall) as [y [Hin Hfalse]].
+        exists y. split; auto.
+Qed.
 
 Lemma terms_value_app cst valuation : forall terms0 terms1, (terms_value valuation (terms0 ++ terms1) cst 
   = terms_value valuation terms0 0 + terms_value valuation terms1 cst)%Z.

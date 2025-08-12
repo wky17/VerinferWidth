@@ -829,7 +829,8 @@ Proof.
         rewrite /good_terms in Hgoodtl. move : Hgoodtl => [_ Htl].
         destruct (List.split tl) as [coes' vars'] eqn : Hsplit'; simpl in Htl. apply split_combine in Hsplit'. rewrite -Hsplit' in Hsplit.
         apply NoDup_cons.
-        - apply (NoDup_remove_notin _ _ _ _ Hsplit).
+        - move :  Hsplit; apply (NoDup_remove_notin _ _ _ Htl). apply find_some in Hfind; move : Hfind => [Hin Heq].
+          move /eqP : Heq => Heq. simpl in Heq; subst var'. rewrite -Hsplit' in Hin; done. 
         - apply (remove_NoDup _ _ Hsplit); done.
 
     * rewrite /good_terms. split.
@@ -842,8 +843,8 @@ Proof.
         rewrite /good_terms in H4. apply H4.1 in H3; done.
 
         simpl. destruct (List.split tl) as [coes vars] eqn : Hsplit. 
-        apply NoDup_cons. specialize (find_none _ _ Hfind); intro. apply split_combine in Hsplit. rewrite -Hsplit in H3.
-        apply (combine_notin _ _ _ H3).
+        apply NoDup_cons. specialize (find_none _ _ Hfind); intro. 
+        apply combine_notin in H3. rewrite Hsplit in H3; done.
 
         rewrite /good_terms in Hgoodtl. rewrite Hsplit in Hgoodtl; simpl in Hgoodtl; exact Hgoodtl.2.
 Qed.
@@ -1797,7 +1798,7 @@ Proof.
       apply IH in H0. done.
 Qed.
 
-Lemma substitute_vs_is_hd (hd : ProdVar.t) : forall (vl : list ProdVar.t) cs1, 
+(*Lemma substitute_vs_is_hd (hd : ProdVar.t) : forall (vl : list ProdVar.t) cs1, 
   vl <> [] ->
   (forall c : Constraint1, List.In c cs1 -> List.In (lhs_var1 c) vl) ->
   forallb (fun c : Constraint1 => lhs_var1 c == hd) (substitute_vs (List.filter (fun p : ProdVar.t => p != hd) vl) cs1).
@@ -1809,7 +1810,7 @@ Proof.
   apply H1.
   apply filter_In.
   split; auto. 
-Admitted.
+Admitted.*)
 
 Lemma substitute_vs_good_terms (hd : ProdVar.t) : forall (vl : list ProdVar.t) (c : Constraint1) cs1,
   (forall c : Constraint1, List.In c cs1 -> good_terms (rhs_terms1 c)) ->
@@ -1910,7 +1911,7 @@ Proof.
     done.
 Qed.
 
-Lemma is_goodubs cs1 : forall tbsolved ubs, NoDup tbsolved -> tbsolved <> [] -> 
+(*Lemma is_goodubs cs1 : forall tbsolved ubs, NoDup tbsolved -> tbsolved <> [] -> 
   (forall var : ProdVar.t, List.In var (constraints1_vars cs1) -> List.In var tbsolved) ->
   (forall c : Constraint1, List.In c cs1 -> rhs_power c = []) -> 
   (forall c : Constraint1, List.In c cs1 -> good_terms (rhs_terms1 c)) -> 
@@ -1951,7 +1952,7 @@ Proof.
 
   rewrite -(Z2Nat.id n); try done. apply inj_lt. apply (elimT ltP); done.
 
-Qed.
+Qed.*)
 
 Definition isGoodbound (solved tbsolved : list ProdVar.t) (cs : list Constraint)
   (initial ubs : Valuation) : Prop :=
@@ -1961,5 +1962,164 @@ Definition isGoodbound (solved tbsolved : list ProdVar.t) (cs : list Constraint)
   let tbsolved := map fst (PVM.elements ubs) in
   let ub_cs := filter (constraint1_in_set tbsolved) (split_constraints cs).1 in
   forall temp_ub, smaller_valuation ubs temp_ub -> ~~ forallb (satisfies_constraint1 temp_ub) ub_cs.
+
+
+Definition G := PVM.t (list ProdVar.t).
+Definition Adj := PVM.t (PVM.t (list Constraint1)).
+
+Definition find_adj_matrix (from to : ProdVar.t) (m : Adj) : option (list Constraint1) :=
+  match PVM.find from m with
+  | Some m' => PVM.find to m'
+  | None => None
+  end.
+
+Definition add_edge graph adj_matrix (from to : ProdVar.t) (c : Constraint1) : G * Adj :=
+  let new_graph := match PVM.find from graph with
+    | Some children => PVM.add from (to :: children) graph
+    | _ => PVM.add from [::to] graph
+  end in
+  let new_adj := match PVM.find from adj_matrix with
+    | Some adj' => match PVM.find to adj' with
+                  | Some cs1 => PVM.add from (PVM.add to (c :: cs1) adj') adj_matrix
+                  | None => PVM.add from (PVM.add to [::c] adj') adj_matrix
+                  end
+    | _ => PVM.add from (PVM.add to [::c] (PVM.empty (list Constraint1))) adj_matrix
+  end in (new_graph, new_adj).
+
+Fixpoint build_graph (constraints : list Constraint1) : G * Adj :=
+  match constraints with
+  | [] => (PVM.empty (list ProdVar.t), PVM.empty (PVM.t (list Constraint1)))
+  | c0 :: cs =>
+      fold_left (fun '(graph, adj_matrix) (xi : ProdVar.t) =>
+                   add_edge graph adj_matrix xi (lhs_var1 c0) c0)
+                (List.split (rhs_terms1 c0)).2 (build_graph cs)
+  end. (* from 为rhs, to lhs *)
+
+Fixpoint find_path (g : G) (y : ProdVar.t) n (v : list ProdVar.t) (x : ProdVar.t) res : option (list ProdVar.t) :=
+  match res with
+  | Some p => res
+  | None =>
+  if x == y then Some (y :: v) else
+  if n is n'.+1 then match PVM.find x g with
+    | Some children =>
+    foldl (fun r child => match r with
+      | Some p => res 
+      | None => find_path g y n' (x :: v) child None
+      end) res children
+    | None => None
+    end else None
+  end. (* from x to y, res 为 y, ..., x *)
+
+Fixpoint find_constraints_of_path (adj : Adj) (p_hd : ProdVar.t) (p_tl : list ProdVar.t) : option (list Constraint1) :=
+  match p_tl with
+  | [] => Some nil
+  | hd :: tl => match find_adj_matrix hd p_hd adj, find_constraints_of_path adj hd tl with
+              | Some (c :: _), Some cs => Some (c :: cs)
+              | _, _ => None
+              end
+  end.
+
+Definition substitute_c (c1 c2 : Constraint1) : Constraint1 :=
+  substitute_constraint c1 (lhs_var1 c2) (rhs_terms1 c2) (rhs_const1 c2).
+
+Fixpoint substitute_cs (cs : list Constraint1) : option Constraint1 :=
+  match cs with
+  | [] => None
+  | hd :: tl => match substitute_cs tl with
+                | Some c => Some (substitute_c hd c)
+                | None => Some hd
+                end
+  end.
+
+Definition compute_ub (c : Constraint1) : option nat :=
+  match find (fun (p : term) => snd p == (lhs_var1 c)) (rhs_terms1 c) with
+  | None => None
+  | Some (coe, _) => if coe > 1 then Some (Z.to_nat (Z.div (Z.abs (rhs_const1 c)) (Z.of_nat (coe - 1)))) else None
+  end.
+
+Definition solve_ub_case1 (x : ProdVar.t) (c : Constraint1) (var : ProdVar.t) (g : G) (adj : Adj) (n : nat) : option nat :=
+  (* c : lhs >= coe * var + ... + cst c *) 
+  (* 找 x >= ? * lhs + ... 和 var >= ? * x + ... *)
+  match find_path g x n nil (lhs_var1 c) None, find_path g var n nil x None with
+  | Some (p0_hd :: p0_tl), Some (p1_hd :: p1_tl) => 
+          match find_constraints_of_path adj p0_hd p0_tl, find_constraints_of_path adj p1_hd p1_tl with
+          | Some cs0, Some cs1 => let new_c := match substitute_cs cs0, substitute_cs cs1 with
+                                | Some c0, Some c1 => substitute_c c0 (substitute_c c c1)
+                                | None, Some c1 => substitute_c c c1
+                                | Some c0, None => substitute_c c0 c
+                                | None, None => c end in
+                                  compute_ub new_c 
+          | _, _ => None
+          end
+  | _, _ => None
+  end.
+
+Fixpoint solve_ubs_case1 (tbsolved : list ProdVar.t) (c : Constraint1) (var : ProdVar.t) (g : G) (adj : Adj) (n : nat) (v : Valuation) : option Valuation :=
+  match tbsolved with
+  | [] => Some v
+  | hd :: tl => match solve_ub_case1 hd c var g adj n with
+              | Some ub => solve_ubs_case1 tl c var g adj n (PVM.add hd ub v)
+              | _ => None
+              end
+  end.
+
+Definition solve_ub_case2 (x : ProdVar.t) (c : Constraint1) (var0 var1 : ProdVar.t) (g : G) (adj : Adj) (n : nat) : option nat :=
+  (* c : lhs >= coe0 * var0 + coe1 * var1 + ... + cst c *) 
+  (* 找 x >= ? * lhs + ... 和 var0 >= ? * x + ... 和 var1 >= ? * x + ... *)
+  match find_path g x n nil (lhs_var1 c) None, find_path g var0 n nil x None, find_path g var1 n nil x None with
+  | Some (p0_hd :: p0_tl), Some (p1_hd :: p1_tl), Some (p2_hd :: p2_tl) => 
+        match find_constraints_of_path adj p0_hd p0_tl, find_constraints_of_path adj p1_hd p1_tl, find_constraints_of_path adj p2_hd p2_tl with
+        | Some cs0, Some cs1, Some cs2 => let new_c := match substitute_cs cs0, substitute_cs cs1, substitute_cs cs2 with
+                                | Some c0, Some c1, Some c2 => substitute_c c0 (substitute_c (substitute_c c c1) c2)
+                                | None, Some c1, Some c2 => substitute_c (substitute_c c c1) c2
+                                | Some c0, None, Some c2 => substitute_c c0 (substitute_c c c2)
+                                | None, None, Some c2 => substitute_c c c2
+                                | Some c0, Some c1, None => substitute_c c0 (substitute_c c c1)
+                                | None, Some c1, None => substitute_c c c1
+                                | Some c0, None, None => substitute_c c0 c
+                                | None, None, None => c end in
+                                  compute_ub new_c 
+        | _, _, _ => None
+        end
+| _, _, _ => None
+end.
+
+Fixpoint solve_ubs_case2 (tbsolved : list ProdVar.t) (c : Constraint1) (var0 var1 : ProdVar.t) (g : G) (adj : Adj) (n : nat) (v : Valuation) : option Valuation :=
+  match tbsolved with
+  | [] => Some v
+  | hd :: tl => match solve_ub_case2 hd c var0 var1 g adj n with
+              | Some ub => solve_ubs_case2 tl c var0 var1 g adj n (PVM.add hd ub v)
+              | _ => None
+              end
+  end.
+
+Definition solve_ubs_aux (tbsolved : list ProdVar.t) (cs1 : list Constraint1) : option Valuation :=
+  let (g, adj) := build_graph cs1 in
+  let n := List.length tbsolved in
+  match List.find (fun c => existsb (fun t => t.1 > 1) (rhs_terms1 c)) cs1 with
+  | Some c => (* lhs >= coe * var + ... + cst c *) 
+              match List.find (fun t => t.1 > 1) (rhs_terms1 c) with
+              | Some (_, var) => solve_ubs_case1 tbsolved c var g adj n initial_valuation
+              | _ => None
+              end
+  | None => match List.find (fun c => List.length (rhs_terms1 c) > 1) cs1 with
+            | Some c => (* lhs >= coe0 * var0 + coe1 * var1 + ... + cst c *)
+                        match rhs_terms1 c with
+                        | (_, var0) :: (_, var1) :: _ => solve_ubs_case2 tbsolved c var0 var1 g adj n initial_valuation
+                        | _ => None
+                        end
+            | None => None
+            end
+  end.
+
+Fixpoint add_bs (ls : list (ProdVar.t * nat)) (bs : PVM.t (nat * nat)) : PVM.t (nat * nat) :=
+  match ls with
+  | nil => bs
+  | (hd, ub) :: tl => add_bs tl (PVM.add hd (0, ub) bs)
+  end.
+
+Definition mergeBounds (v2 : Valuation) : PVM.t (nat * nat) :=
+  let eles := PVM.elements v2 in
+  add_bs eles (PVM.empty (nat * nat)).
 
 End SccCorrectness.

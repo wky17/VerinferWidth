@@ -198,8 +198,30 @@ Record mem_port : Type :=
         mask : var
       }.
 
-Parameter mem_port_eqn : forall (x y : mem_port), bool.
-Axiom mem_port_eqP : Equality.axiom mem_port_eqn.
+Definition mem_port_eqn (x y : mem_port) : bool :=
+  (id x == id y) && (addr x == addr y) && (en x == en y) && (clk x == clk y) && (mask x == mask y).
+  
+Lemma mem_port_eqP : Equality.axiom mem_port_eqn.
+Proof.
+  unfold Equality.axiom, mem_port_eqn.
+  destruct x, y ; simpl.
+  destruct (id0 == id1) eqn: Ht ; move /eqP : Ht => Ht ;
+        last by (apply ReflectF ; contradict Ht ; injection Ht ; done).
+  rewrite Ht andTb.
+  destruct (addr0 == addr1) eqn: Hc ; move /eqP : Hc => Hc ;
+        last by (apply ReflectF ; contradict Hc ; injection Hc ; done).
+  rewrite Hc andTb.
+  destruct (en0 == en1) eqn: Hr ; move /eqP : Hr => Hr ;
+        last by (apply ReflectF ; contradict Hr ; injection Hr ; done).
+  rewrite Hr andTb.
+  destruct (clk0 == clk1) eqn: Ha ; move /eqP : Ha => Ha ;
+        last by (apply ReflectF ; contradict Ha ; injection Ha ; done).
+  rewrite Ha andTb.
+  destruct (mask0 == mask1) eqn: Hm ; move /eqP : Hm => Hm ;
+        last by (apply ReflectF ; contradict Hm ; injection Hm ; done).
+  rewrite Hm.
+  apply ReflectT. reflexivity.
+Qed.
 
 HB.instance Definition _ := hasDecEq.Build mem_port mem_port_eqP.
 
@@ -363,7 +385,7 @@ HB.instance Definition _ := hasDecEq.Build hfreg hfreg_eqP.
   | _, _ => false
   end.
 
-  Lemma hfstmt_eqP : (*Equality.axiom hfstmt_eqn*)
+Lemma hfstmt_eqP : (*Equality.axiom hfstmt_eqn*)
               forall x y : hfstmt, reflect (x = y) (hfstmt_eqn x y)
   with hfstmt_seq_eqP : (*Equality.axiom hfstmt_seq_eqn*)
               forall x y : hfstmt_seq, reflect (x = y) (hfstmt_seq_eqn x y).
@@ -1723,15 +1745,15 @@ Module FMapLemmas (M : FMapInterface.S).
 
 End FMapLemmas.
 
-Module VarMap (X : OrderedType) <: FMapInterface.S.
+Module VarMap' (X : OrderedType) <: FMapInterface.S.
   Include FMapAVL.Make X. (* FMapAVL *)
-End VarMap.
+End VarMap'.
 
-(*Module VarMap (X : OrderedType) <: FMapInterface.S.
+Module VarMap (X : OrderedType) <: FMapInterface.S.
   Module M := VarMap' X.
   Module Lemmas := FMapLemmas M.
   Include M.
-End VarMap.*)
+End VarMap.
 
 Print Module VarMap.
 
@@ -1740,7 +1762,7 @@ Module PVM := VarMap ProdVar.
 Print VM.key.
 Print PVM.key.
 Print PVM.find.
-
+Search (PVM.find).
   (* type of ref expressions *)
   Fixpoint type_of_ref (r : href) (tmap : VM.t (ftype * forient)) : option ftype :=
     match r with

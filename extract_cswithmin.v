@@ -598,4 +598,38 @@ Definition collect_power1_vars (c : Constraint1) : list ProdVar.t :=
 Definition collect_power2_vars (c : Constraint2_new) : list ProdVar.t :=
   if (rhs_power2_new c) == nil then nil else (List.split (rhs_power2_new c)).2.
   
+Definition remove_power_regular (value : Valuation) (r : regular_rhs) : regular_rhs :=
+  {|
+    regular_terms := regular_terms r;
+    regular_power := nil;
+    regular_const := Z.add (regular_const r) (power_value value (regular_power r))
+  |}.
+
+Definition remove_power1 (value : Valuation) (c : Constraint1) : Constraint1 :=
+  {|
+    lhs_var1 := lhs_var1 c;
+    rhs_terms1 := rhs_terms1 c;
+    rhs_power := nil;
+    rhs_const1 := Z.add (rhs_const1 c) (power_value value (rhs_power c))
+  |}.
+
+Definition remove_power2 (value : Valuation) (c : Constraint2_new) : Constraint2_new :=
+  {|
+    lhs_const2_new := Z.sub (lhs_const2_new c) (power_value value (rhs_power2_new c));
+    rhs_terms2_new := rhs_terms2_new c;
+    rhs_power2_new := nil
+  |}.
+
+Fixpoint remove_power_min_rhs (value : Valuation) (rhs : min_rhs) : min_rhs :=
+  match rhs with
+  | Expr r => Expr (remove_power_regular value r)
+  | Min min1 min2 => Min (remove_power_min_rhs value min1) (remove_power_min_rhs value min2)
+  end.
+
+Definition remove_power_min (value : Valuation) (c : Constraint_Min) : Constraint_Min :=
+  {|
+    lhs_var_min := lhs_var_min c;
+    rhs_expr_min := remove_power_min_rhs value (rhs_expr_min c)
+  |}.
+
 End Extract_Constraints_with_min.

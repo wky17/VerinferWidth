@@ -5,6 +5,50 @@ Import ListNotations.
 From Solver Require Import Env LoFirrtl HiEnv HiFirrtl constraints.
 From mathcomp.tarjan Require Import kosaraju.
 
+Definition Constraint1_non_power : Type :=
+  { x : Constraint1 | rhs_power x = nil }.
+
+Definition build_non_power_constraint1 (lhs : ProdVar.t) (rhs_const : Z.t) (rhs_terms : list (nat * ProdVar.t)) : Constraint1_non_power.
+Proof.
+  refine (exist _ 
+    {| 
+      lhs_var1 := lhs; 
+      rhs_const1 := rhs_const; 
+      rhs_terms1 := rhs_terms; 
+      rhs_power := nil 
+    |} 
+    _).
+  reflexivity.
+Defined. 
+
+Definition T := ProdVar.t.
+Definition G := T -> list T.
+Definition Adj := T -> T -> list Constraint1.
+
+Definition add_edge graph adj_matrix (from to : T) (c : Constraint1) : G * Adj :=
+  (fun v => if (v == from) then to :: graph v else graph v, 
+  fun x y => if ((x == from) && (y == to)) then c :: adj_matrix x y else adj_matrix x y).
+
+Fixpoint build_graph (constraints : list Constraint1) : G * Adj :=
+  match constraints with
+  | [] => (fun _ => nil, fun _ _ => nil)
+  | c0 :: cs =>
+      fold_left (fun '(graph, adj_matrix) (coef_var : nat * ProdVar.t) =>
+                   let (_, xi) := coef_var in add_edge graph adj_matrix xi (lhs_var1 c0) c0)
+                (rhs_terms1 c0) (build_graph cs)
+  end.
+
+Fixpoint find_path (g : G) (y : T) n (v : list T) (x : T) res : option (list T) :=
+  match res with
+  | Some p => res
+  | None =>
+  if x == y then Some (y :: v) else
+  if n is n'.+1 then foldl (fun r child => match r with
+    | Some p => res 
+    | None => find_path g y n' (x :: v) child None
+    end) res (g x) else None
+  end.
+
 Set Implicit Arguments.
 (*Unset Strict Implicit.*) 
 Import Prenex Implicits.
@@ -110,22 +154,6 @@ Fixpoint find_paths_amount (x : V) (yl visited : list V) : nat :=
   end.*)
 
 End dpdcgraph.
-
-Section try_kosaraju.
-
-Definition V := [finType of 'I_10].
-Fixpoint n_V (n : nat) : V :=
-  match n with
-  | 0 => ord0
-  | S m => ordS (n_V m)
-  end.
-
-Definition myg (from to : V) := false || ((from == (n_V 1)) && (to == (n_V 0))).
-
-Definition res := kosaraju myg.
-
-End try_kosaraju.
-
 
 (* -------------------- Method 1 -------------------- 
 

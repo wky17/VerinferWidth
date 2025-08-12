@@ -886,6 +886,22 @@ Proof.
   apply (elimT leP). rewrite leq_add2l. intuition.
 Qed.
 
+Lemma product_bounds_ifold_zero l init :
+  forallb (fun '(v, (lb, ub)) => ub - lb == 0) l ->
+  product_bounds_ifold l init = init.
+Proof.
+  elim: l init => [| [v [lb ub]] l IH] init H_all //=.
+  - (* 非空列表 *)
+    assert (forall x, List.In x ((v, (lb, ub)) :: l) -> (fun '(_, y) => let '(lb, ub) := y in ub - lb == 0) x = true) by (apply forallb_forall; done).
+    specialize (H (v, (lb, ub))); simpl in H.
+    assert ((ub - lb == 0) = true) by (apply H; left; done). move /eqP : H0 => H0.
+    rewrite H0 addn0.
+    apply: IH.
+    apply forallb_forall. intros; simpl.
+    assert (forall x, List.In x ((v, (lb, ub)) :: l) -> (fun '(_, y) => let '(lb, ub) := y in ub - lb == 0) x = true) by (apply forallb_forall; done).
+    apply H2; simpl; right; done.
+Qed.
+
 Lemma bab_bin_g6 :
   seq.seq ProdVar.t ->
   forall (bounds : Bounds) (cs1 : seq.seq Constraint1) (cs2 : seq.seq Constraint2),
@@ -895,7 +911,12 @@ Lemma bab_bin_g6 :
 Proof.
   intros.
   rewrite /product_bounds /halve elements_map. 
-  assert (exists x, length x bounds != 0). move : H1. admit.
+  assert (exists x, length x bounds != 0). move : H1; clear; intro. 
+  { move/eqP: H1 => H_sum_nonzero. 
+    assert (~ (product_bounds_ifold (PVM.elements bounds) 0 = 0)). rewrite -product_bounds_equation //.
+    apply (contra_not (product_bounds_ifold_zero (PVM.elements bounds) 0)) in H. apply forallb_neg_neg in H. 
+    destruct H as [[x [lb ub]] [Hin Hlength]]. unfold length. apply find_in_elements in Hin. exists x; rewrite Hin. 
+    unfold "!=". rewrite Hlength //. }
   destruct H2 as [x Hlength]. rewrite /length in Hlength. case Hfind : (PVM.find x bounds) => [[lb ub]|]; rewrite Hfind in Hlength; try done.
   assert (lb < ub). move /eqP : Hlength => Hlength.
     specialize (leqVgt ub lb); intro. destruct (ub <= lb) eqn : Hle. rewrite -subn_eq0 in Hle. move /eqP : Hle => Hle. done.
@@ -968,7 +989,7 @@ Proof.
     rewrite -(ltn_add2r 1) addn1 subn1 addn1 prednK. rewrite ltnS. rewrite leq_add2r //.
     rewrite addn_gt0. rewrite -subn_gt0 in H2. rewrite H2 orb_true_r //. 
   move : H H0; apply leq_ltn_trans.
-Admitted.
+Qed.
 
 Lemma bab_bin_g7 :
   seq.seq ProdVar.t ->
@@ -1706,6 +1727,15 @@ Proof.
   exact: bab_bin_smallest_aux.
 Qed.
 
+Lemma bab_bin_mem_in cs1 cs2 : forall ls bs sol, bab_bin ls bs cs1 cs2 = Some sol -> forall var, PVM.mem var sol -> PVM.mem var bs.
+Proof.
+(* Added by KY *)
+Admitted.
+
+Lemma bab_bin_none_unsat cs1 cs2 : forall ls bs, bab_bin ls bs cs1 cs2 = None -> forall v : Valuation, In v bs -> forallb (satisfies_constraint1 v) cs1 = false.
+Proof.
+(* Added by KY *)
+Admitted.
 
 End bnb.
 

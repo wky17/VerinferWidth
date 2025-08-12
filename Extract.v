@@ -3,7 +3,7 @@ From Coq Require Import ExtrOcamlIntConv ExtrOcamlNatInt ExtrOcamlZInt.
 From Coq Require Import Arith List.
 From mathcomp Require Import all_ssreflect.
 Require Import Solver.HiFirrtl Solver.constraints (*Solver.seperate*) Solver.floyd_sc Solver.scc Solver.branch_and_bound
-Solver.TopoSort Solver.extract_cs Solver.solve_fun.
+Solver.TopoSort Solver.extract_cs Solver.inferWidths.
 From mathcomp.tarjan Require Import kosaraju.
 
 Extraction Language OCaml.
@@ -18,13 +18,14 @@ Separate Extraction
          branch_and_bound.res 
          branch_and_bound.res0 branch_and_bound.res1 branch_and_bound.res2 branch_and_bound.res0'
          branch_and_bound.smaller_solution1 branch_and_bound.smaller_solution2 branch_and_bound.smaller_solution3*)
-         mathcomp.tarjan.kosaraju.kosaraju HiFirrtl.Qrev extract_cs.extract_constraints_c extract_cs.expandwhens
+         mathcomp.tarjan.kosaraju.kosaraju HiFirrtl.Qrev extract_cswithmin.extract_constraints_c extract_cs.expandwhens
          (*seperate.extract_constraints_c graph.build_dependency_graph seperate.solve *)
-         solve_fun.InferWidths_fun HiFirrtl.pv2ref HiFirrtl.href_eqn extract_cswithmin.min2cs2 extract_cswithmin.collect_power1_vars extract_cswithmin.collect_power2_vars
+         inferWidths.InferWidths_fun HiFirrtl.pv2ref HiFirrtl.href_eqn extract_cswithmin.min2cs2 
+         extract_cswithmin.collect_power1_vars extract_cswithmin.collect_power2_vars extract_cswithmin.remove_power1 extract_cswithmin.remove_power2 extract_cswithmin.remove_power_min
          (*HiFirrtl.pmap0 HiFirrtl.tmap0' HiFirrtl.tmap0 graph.res graph.res_r
          simple_cycle.s0 simple_cycle.solve_sc0 simple_cycle.nv
          extract_cs.constraints extract_cs.nv0 extract_cs.nv extract_cs.nv' extract_cs.nv2 extract_cs.nv3
          extract_cs.cs1 extract_cs.val extract_cs.nv3' extract_cs.nval*)
-         constraints.split_constraints' (*seperate.inferwidths_fun*)
+         constraints.split_constraints' inferWidths.solve_alg_check
          .
 Cd "../..".

@@ -3,6 +3,7 @@ From Coq Require Import ZArith Arith List Ascii String Lia FMaps.
 From Solver Require Import Env LoFirrtl HiEnv HiFirrtl constraints.
 Require Import Coq.Bool.Bool.
 Import ListNotations.
+Require Import Coq.Classes.RelationClasses.
 
 Set Implicit Arguments.
 (*Unset Strict Implicit.*) 
@@ -356,7 +357,7 @@ Fixpoint inner_loop2 (n : list ProdVar.t) (m : adj_matrix) :=
 Definition floyd_loop_map' (nodes: list ProdVar.t) (cs : list Constraint1) : adj_matrix :=
   inner_loop2 nodes (init_dist_map' nodes cs).
 
-Axiom find_empty_None : forall s, PVM.find s (PVM.empty (NVM.t Z.t)) = None.
+Axiom find_empty_None : forall [A : Type] s, PVM.find s (PVM.empty A) = None.
 
 Lemma map0_correct : forall nds n  ml d,
     PVM.find n (map0 nds (PVM.empty (NVM.t Z.t))) = Some ml ->
@@ -666,12 +667,12 @@ Proof.
       * case Hfdz' : (NVM.find Zero ml') => [mlz'|].
         { rewrite find_add_neq_z_fm.
           rewrite Hfdc0 => Hinj; injection Hinj; move => Heq; rewrite -Heq//.
-          move => Heq; rewrite Heq eq_refl// in Hneql.}
+          move => Heq; rewrite Heq eq_refl// in Hneql. }
         { rewrite find_add_neq_z_fm.
           rewrite Hfdc0 => Hinj; injection Hinj; move => Heq; rewrite -Heq//.
-          move => Heq; rewrite Heq eq_refl// in Hneql.}
+          move => Heq; rewrite Heq eq_refl// in Hneql. }
       * case Ha : a => [|n].
-        { rewrite Hfdc0 => Hinj; injection Hinj; move => Heq; rewrite -Heq//.}
+        { rewrite Hfdc0 => Hinj; injection Hinj; move => Heq; rewrite -Heq//. }
         { case Hn : n => [|m] .
           - case Htl : tl => [|tltl].
             + case Hfds : (NVM.find (Node s) ml' ) => [d1|].
@@ -696,7 +697,7 @@ Proof.
           move => Hinj; injection Hinj; move => Heq; rewrite -Heq find_add_neq_z//.
         }
       * case Ha : a => [|n].
-        { rewrite Hfdc0 => Hinj; injection Hinj; move => Heq; rewrite -Heq//.}
+        { rewrite Hfdc0 => Hinj; injection Hinj; move => Heq; rewrite -Heq//. }
         { case Hn : n => [|m] .
           - case Htl : tl => [|tltl].
             + case Hfds : (NVM.find (Node s) dm0) => [d1|].
@@ -1065,31 +1066,55 @@ Proof.
   move => Hinj; injection Hinj; move => Heq; rewrite -Heq//.
 Qed.
 
+Instance Symmetric_neq {A : Type} : Symmetric (fun x y : A => x <> y).
+Proof.
+  intros x y Hneq Heq.
+  apply Hneq.                  (* 目标：x = y → False *)
+  symmetry in Heq; assumption. (* 将 y=x 转为 x=y *)
+Qed.
+
 Lemma new_dst_map_aux_correct3 :
-  forall dm j k i m x dst0 dik dkj,
+  forall dm j k i m x dst0,
     NVM.find j dm = Some dst0 ->
-    get_weight i (Node k) m = Some dik ->
-    get_weight k j m = Some dkj ->
     (x <> j)->
     NVM.find j (new_dst_map_aux dm x k i m) = Some dst0.
 Proof.
-  move => dm j k i m x dstn dik dkj Hfdj0 Hgwik Hgwkj Hfdn.  
+  move => dm j k i m x dstn Hfdj0 Hfdn.  
   rewrite /new_dst_map_aux. 
   case Hfdn1 : (NVM.find x dm) => [dstn1|].
-  - rewrite Hgwik.
+  - case Hgwik : (get_weight i (Node k) m) => [wik|].
     case Hgwkx : (get_weight k x m ) => [wkx|]; last done.
-    rewrite find_add_neq_z; last by symmetry.
+    rewrite find_add_neq_z//; last by symmetry.
     rewrite Hfdj0//.
-  - rewrite Hgwik.
+  - case Hgwik : (get_weight i (Node k) m) => [wik|].
     case Hgwkx : (get_weight k x m ) => [wkx|]; last done.
-    rewrite find_add_neq_z; last by symmetry.
+    rewrite find_add_neq_z//; last by symmetry.
     rewrite Hfdj0//.
 Qed.
 
+(* Lemma new_dst_map_aux_correct3 : *)
+(*   forall dm j k i m x dst0 dik dkj, *)
+(*     NVM.find j dm = Some dst0 -> *)
+(*     get_weight i (Node k) m = Some dik -> *)
+(*     get_weight k j m = Some dkj -> *)
+(*     (x <> j)-> *)
+(*     NVM.find j (new_dst_map_aux dm x k i m) = Some dst0. *)
+(* Proof. *)
+(*   move => dm j k i m x dstn dik dkj Hfdj0 Hgwik Hgwkj Hfdn.   *)
+(*   rewrite /new_dst_map_aux.  *)
+(*   case Hfdn1 : (NVM.find x dm) => [dstn1|]. *)
+(*   - rewrite Hgwik. *)
+(*     case Hgwkx : (get_weight k x m ) => [wkx|]; last done. *)
+(*     rewrite find_add_neq_z; last by symmetry. *)
+(*     rewrite Hfdj0//. *)
+(*   - rewrite Hgwik. *)
+(*     case Hgwkx : (get_weight k x m ) => [wkx|]; last done. *)
+(*     rewrite find_add_neq_z; last by symmetry. *)
+(*     rewrite Hfdj0//. *)
+(* Qed. *)
+
 Lemma new_dst_map_aux_correct4 :
   forall dm j k i m x (* dik dkj *),
-    (* get_weight i (Node k) m = Some dik -> *)
-    (* get_weight k j m = Some dkj -> *)
     NVM.find j dm = None ->
     (j <> x)->
     NVM.find j (new_dst_map_aux dm x k i m) = None.
@@ -1157,56 +1182,118 @@ Proof.
     move : (IHm dm j k i m dst Hfdj0). rewrite Hfdj1//.
 Qed.
 
-Print new_dst_map_aux.
+Lemma in_notin_neq_p : forall l (a b: ProdVar.t) ,
+    In a l -> ~ In b l -> a <> b.
+Proof.
+  elim => [|hd tl IHm]; rewrite /=//.
+  move => a b [Heq |Hin] Hnin; apply Decidable.not_or in Hnin; move : Hnin => [Hneq Hnin].
+  rewrite Heq // in Hneq.
+  apply IHm; try done.
+Qed.
+
+Lemma in_notin_neq_n : forall l (a b: node) ,
+    In a l -> ~ In b l -> a <> b.
+Proof.
+  elim => [|hd tl IHm]; rewrite /=//.
+  move => a b [Heq |Hin] Hnin; apply Decidable.not_or in Hnin; move : Hnin => [Hneq Hnin].
+  rewrite Heq // in Hneq.
+  apply IHm; try done.
+Qed.
+
+Lemma new_dst_map_correct2 :
+  forall nds dm j k i m dst0 dstn,
+    ~ In j nds ->
+    NVM.find j dm = Some dst0 ->
+    NVM.find j (new_dst_map nds dm k i m) = Some dstn ->
+    dst0 = dstn.
+Proof.
+  elim => [|nhd ntl IHm] dm j k i m d0 dn; rewrite /=.
+  - move => _ Hfdj0 ; rewrite Hfdj0; move => Hinj; by injection Hinj.
+  - move => Hnin Hfd0 Hfdn. apply Decidable.not_or in Hnin.
+    move : Hnin => [Hneq Hnin].
+    case Hfdj1 : (NVM.find j (new_dst_map ntl dm k i m)) => [d1|].
+    + move : (@new_dst_map_aux_correct3 (new_dst_map ntl dm k i m) j k i m nhd d1 Hfdj1 Hneq).
+      rewrite Hfdn; move => Hinj; injection Hinj; move => Heq1n.
+      move : (@IHm dm j k i m d0 d1 Hnin Hfd0 Hfdj1); rewrite -Heq1n//.
+    + move : (@new_dst_map_nn ntl dm j k i m d0 Hfd0); rewrite Hfdj1//.
+Qed.    
+
 Lemma new_dst_map_correct1 :
   forall nds dm j k i m dst0 dstn dik dkj,
+    In j nds -> NoDup nds ->
     NVM.find j dm = Some dst0 ->
     NVM.find j (new_dst_map nds dm k i m) = Some dstn ->
     get_weight i (Node k) m = Some dik ->
     get_weight k j m = Some dkj ->
-    Z.le (Z.add dik dkj) dst0 ->
     dstn = Z.max dst0 (Z.add dik dkj).
 Proof.
-  elim => [|nhd ntl IHm] dm j k i m dst0 dstn dik dkj.
-  - rewrite /=. move => Hfdj0; rewrite Hfdj0; move => Hinj1; injection Hinj1; move => Heq1; rewrite -Heq1. 
-    move => Hgwik Hgwkj. lia. 
-  - move => Hfdj0 Hfdj Hgwik Hgwkj. move : Hfdj. rewrite /=.
+  elim => [|nhd ntl IHm] dm j k i m dst0 dstn dik dkj; first done.
+  rewrite /=.
+  move => [Heq|Hin] Hnd Hfdj0 Hfdjn Hgwik Hgwkj.
+  -rewrite Heq in Hnd Hfdjn.
+   rewrite NoDup_cons_iff in Hnd; move : Hnd => [Hnin Hnd].
+   case Hfdj1 : (NVM.find j (new_dst_map ntl dm k i m)) => [dst1|].
+   + move : (new_dst_map_aux_correct1 (new_dst_map ntl dm k i m) j k i m Hgwik Hgwkj Hfdj1 Hfdjn).
+     move : (new_dst_map_correct2 ntl dm j k i m Hnin Hfdj0 Hfdj1) => Hd01; rewrite Hd01 Z.max_comm//.
+   + move : (new_dst_map_nn ntl dm j k i m Hfdj0); rewrite Hfdj1//.
+  - rewrite NoDup_cons_iff in Hnd; move : Hnd => [Hnin Hnd].
     case Hfdj1 : (NVM.find j (new_dst_map ntl dm k i m)) => [dst1|].
-    + move : Hfdj0 Hgwkj Hfdj1. 
-      case Hj : j =>[|vj]; case Hnhd : nhd => [|vn].
-      * move => Hfdj0 Hgwkj Hfdj1 Hfdj Hle.
-        move : (new_dst_map_aux_correct1 (new_dst_map ntl dm k i m) Zero k i m Hgwik Hgwkj Hfdj1 Hfdj).
-        move : (IHm dm Zero  k i m dst0 dst1 dik dkj Hfdj0 Hfdj1 Hgwik Hgwkj Hle) => Haux.
-        move : Hle => _.
-        rewrite Haux. lia.
-      * have Hneq : (nhd <> Zero) by rewrite Hnhd//.
-        move => Hfdj0 Hgwkj Hfdj1 Hfdj Hle.
-        move : (new_dst_map_aux_correct3 (new_dst_map ntl dm k i m)  k i m Hfdj1 Hgwik Hgwkj Hneq ).
-        rewrite Hnhd Hfdj => Hinj; injection Hinj; move => Heq; rewrite Heq.
-        exact : (IHm  dm Zero k i m dst0 dst1 dik dkj Hfdj0 Hfdj1 Hgwik Hgwkj Hle).
-      * have Hneq : (Zero <> Node vj) by done.
-        move => Hfdj0 Hgwkj Hfdj1 Hfdj Hle.
-        move : (new_dst_map_aux_correct3 (new_dst_map ntl dm k i m)  k i m Hfdj1 Hgwik Hgwkj Hneq ).
-        rewrite Hfdj => Hinj; injection Hinj; move => Heq; rewrite Heq.
-        exact : (IHm  dm (Node vj) k i m dst0 dst1 dik dkj Hfdj0 Hfdj1 Hgwik Hgwkj Hle).
-      * case Hnj : (vj == vn).
-        {
-          rewrite (eqP Hnj). move => Hfdj0 Hgwkj Hfdj1 Hfdj Hle.
-          move : (new_dst_map_aux_correct1 (new_dst_map ntl dm k i m) (Node vn) k i m Hgwik Hgwkj Hfdj1 Hfdj).
-          move : (IHm dm (Node vn) k i m dst0 dst1 dik dkj Hfdj0 Hfdj1 Hgwik Hgwkj Hle) => Haux.
-          move : Hle => _.
-          rewrite Haux. lia.
-        }
-        {
-          have Hneq : (Node vn <> Node vj) by move => Hinj; injection Hinj; move => Heq; rewrite Heq eq_refl// in Hnj.
-          move => Hfdj0 Hgwkj Hfdj1 Hfdj Hle.
-          move : (new_dst_map_aux_correct3 (new_dst_map ntl dm k i m)  k i m Hfdj1 Hgwik Hgwkj Hneq ).
-        rewrite Hfdj => Hinj; injection Hinj; move => Heq; rewrite Heq.
-        exact : (IHm  dm (Node vj) k i m dst0 dst1 dik dkj Hfdj0 Hfdj1 Hgwik Hgwkj Hle).
-        }
-    + move => Hfdjn.
-      move : (new_dst_map_nn ntl dm j k i m Hfdj0). rewrite Hfdj1//.
+    + move : (not_eq_sym (in_notin_neq_n ntl Hin Hnin)) => Hneq. 
+      move : (@new_dst_map_aux_correct3 (new_dst_map ntl dm k i m) j k i m nhd dst1 Hfdj1 Hneq).
+      rewrite Hfdjn; move => Hinj; injection Hinj; move => Heq; rewrite Heq.
+      exact : (IHm dm j k i m dst0 dst1 dik dkj Hin Hnd Hfdj0 Hfdj1 Hgwik Hgwkj).
+    + move : (new_dst_map_nn ntl dm j k i m Hfdj0); rewrite Hfdj1//.
 Qed.
+
+(* Lemma new_dst_map_correct1 : *)
+(*   forall nds dm j k i m dst0 dstn dik dkj, *)
+(*     NVM.find j dm = Some dst0 -> *)
+(*     NVM.find j (new_dst_map nds dm k i m) = Some dstn -> *)
+(*     get_weight i (Node k) m = Some dik -> *)
+(*     get_weight k j m = Some dkj -> *)
+(*     Z.le (Z.add dik dkj) dst0 -> *)
+(*     dstn = Z.max dst0 (Z.add dik dkj). *)
+(* Proof. *)
+(*   elim => [|nhd ntl IHm] dm j k i m dst0 dstn dik dkj. *)
+(*   - rewrite /=. move => Hfdj0; rewrite Hfdj0; move => Hinj1; injection Hinj1; move => Heq1; rewrite -Heq1.  *)
+(*     move => Hgwik Hgwkj Hle. Search Z.max. apply Z.max_unicity. lia.  *)
+(*   - move => Hfdj0 Hfdj Hgwik Hgwkj. move : Hfdj. rewrite /=.  *)
+(*     case Hfdj1 : (NVM.find j (new_dst_map ntl dm k i m)) => [dst1|]. *)
+(*     + move : Hfdj0 Hgwkj Hfdj1.  *)
+(*       case Hj : j =>[|vj]; case Hnhd : nhd => [|vn]. *)
+(*       * move => Hfdj0 Hgwkj Hfdj1 Hfdj Hle. *)
+(*         move : (new_dst_map_aux_correct1 (new_dst_map ntl dm k i m) Zero k i m Hgwik Hgwkj Hfdj1 Hfdj). *)
+(*         move : (IHm dm Zero  k i m dst0 dst1 dik dkj Hfdj0 Hfdj1 Hgwik Hgwkj Hle) => Haux. *)
+(*         move : Hle => _. *)
+(*         rewrite Haux. lia. *)
+(*       * have Hneq : (nhd <> Zero) by rewrite Hnhd//. *)
+(*         move => Hfdj0 Hgwkj Hfdj1 Hfdj Hle. *)
+(*         move : (new_dst_map_aux_correct3 (new_dst_map ntl dm k i m)  k i m Hfdj1 Hgwik Hgwkj Hneq ). *)
+(*         rewrite Hnhd Hfdj => Hinj; injection Hinj; move => Heq; rewrite Heq. *)
+(*         exact : (IHm  dm Zero k i m dst0 dst1 dik dkj Hfdj0 Hfdj1 Hgwik Hgwkj Hle). *)
+(*       * have Hneq : (Zero <> Node vj) by done. *)
+(*         move => Hfdj0 Hgwkj Hfdj1 Hfdj Hle. *)
+(*         move : (new_dst_map_aux_correct3 (new_dst_map ntl dm k i m)  k i m Hfdj1 Hgwik Hgwkj Hneq ). *)
+(*         rewrite Hfdj => Hinj; injection Hinj; move => Heq; rewrite Heq. *)
+(*         exact : (IHm  dm (Node vj) k i m dst0 dst1 dik dkj Hfdj0 Hfdj1 Hgwik Hgwkj Hle). *)
+(*       * case Hnj : (vj == vn). *)
+(*         { *)
+(*           rewrite (eqP Hnj). move => Hfdj0 Hgwkj Hfdj1 Hfdj Hle. *)
+(*           move : (new_dst_map_aux_correct1 (new_dst_map ntl dm k i m) (Node vn) k i m Hgwik Hgwkj Hfdj1 Hfdj). *)
+(*           move : (IHm dm (Node vn) k i m dst0 dst1 dik dkj Hfdj0 Hfdj1 Hgwik Hgwkj Hle) => Haux. *)
+(*           move : Hle => _. *)
+(*           rewrite Haux. lia. *)
+(*         } *)
+(*         { *)
+(*           have Hneq : (Node vn <> Node vj) by move => Hinj; injection Hinj; move => Heq; rewrite Heq eq_refl// in Hnj. *)
+(*           move => Hfdj0 Hgwkj Hfdj1 Hfdj Hle. *)
+(*           move : (new_dst_map_aux_correct3 (new_dst_map ntl dm k i m)  k i m Hfdj1 Hgwik Hgwkj Hneq ). *)
+(*         rewrite Hfdj => Hinj; injection Hinj; move => Heq; rewrite Heq. *)
+(*         exact : (IHm  dm (Node vj) k i m dst0 dst1 dik dkj Hfdj0 Hfdj1 Hgwik Hgwkj Hle). *)
+(*         } *)
+(*     + move => Hfdjn. *)
+(*       move : (new_dst_map_nn ntl dm j k i m Hfdj0). rewrite Hfdj1//. *)
+(* Qed. *)
 
 Lemma new_dst_map_aux_nnsm nhd j dm k i m dstn :
   NVM.find j dm = None ->
@@ -1264,7 +1351,7 @@ Qed.
 (*   rewrite find_add_eq_z. move => Hinj; by injection Hinj. *)
 (* Qed. *)
 
-Lemma new_dst_map_correct2 :
+Lemma new_dst_map_correct3 :
   forall nds dm j k i m  dstn dik dkj,
     NVM.find j dm = None ->
     NVM.find j (new_dst_map nds dm k i m) = Some dstn ->
@@ -1292,10 +1379,10 @@ Proof.
       * move : (new_dst_map_aux_correct1 (new_dst_map ntl dm k i m) Zero k i m Hgwik Hgwkj Hfdj1 Hfdjn) => Hdstaux.
         rewrite Hdstaux Hdstaux2. lia.
       * have Hneq : Node vn <> Zero by done.
-        move : (@new_dst_map_aux_correct3 (new_dst_map ntl dm k i m) Zero k i m (Node vn) dst1 dik dkj Hfdj1 Hgwik Hgwkj Hneq) => Hdstaux.
+        move : (@new_dst_map_aux_correct3 (new_dst_map ntl dm k i m) Zero k i m (Node vn) dst1  Hfdj1  Hneq) => Hdstaux.
         rewrite Hfdjn in Hdstaux . injection Hdstaux; move => Heq; rewrite Heq Hdstaux2//.
       * have Hneq : Zero <> Node vj by done.
-        move : (@new_dst_map_aux_correct3 (new_dst_map ntl dm k i m) (Node vj) k i m Zero dst1 dik dkj Hfdj1 Hgwik Hgwkj Hneq) => Hdstaux.
+        move : (@new_dst_map_aux_correct3 (new_dst_map ntl dm k i m) (Node vj) k i m Zero dst1 Hfdj1 Hneq) => Hdstaux.
         rewrite Hfdjn in Hdstaux . injection Hdstaux; move => Heq; rewrite Heq Hdstaux2//.
       * case Hnj : (vn == vj).
         rewrite (eqP Hnj) in Hfdjn.
@@ -1303,29 +1390,52 @@ Proof.
         rewrite Hdstaux Hdstaux2. lia.
         have Hneq : Node vn <> Node vj.
         move => Hinj; injection Hinj; move => Heq; rewrite Heq eq_refl// in Hnj.
-        move : (@new_dst_map_aux_correct3 (new_dst_map ntl dm k i m) (Node vj) k i m (Node vn) dst1 dik dkj Hfdj1 Hgwik Hgwkj Hneq) => Hdstaux.
+        move : (@new_dst_map_aux_correct3 (new_dst_map ntl dm k i m) (Node vj) k i m (Node vn) dst1 Hfdj1 Hneq) => Hdstaux.
         rewrite Hfdjn in Hdstaux . injection Hdstaux; move => Heq; rewrite Heq Hdstaux2//.
   - move : (new_dst_map_aux_nnsm nhd j (new_dst_map ntl dm k i m) k i m Hfdj1 Hfdjn) => Heq.
     rewrite Heq in Hfdjn.
     exact : (new_dst_map_aux_correct2 (new_dst_map ntl dm k i m) j k i m Hgwik Hgwkj Hfdj1 Hfdjn).
 Qed.
-  
-        
+
+Fixpoint in_bool_n (a : node) (l : list node) : bool :=
+  match l with
+  | [] => false
+  | Node hd :: tl => match a with
+                     | Node n => (hd == n) || in_bool_n a tl
+                     | Zero => false
+                     end
+  | Zero :: tl => match a with
+                  | Zero => in_bool_n a tl
+                  | _ => false
+                  end
+  end.
+
+Lemma In_in_bool_n : forall a l, in_bool_n a l <-> In a l.
+Proof.
+Admitted.
+
+Lemma nodup_addzero : forall j ntl,
+    NoDup ntl -> ~ In (j) ntl -> 
+    NoDup [:: Zero, Node j & map [eta Node] ntl].
+Proof.
+Admitted.
+
 Lemma floyd_update_correct1 :
   forall nds k i s m dmi0 dmin dst0 dstn dik dkj,
+    In s nds ->
+    NoDup nds ->
     PVM.find i m = Some dmi0 ->
     NVM.find s dmi0 = Some dst0 ->
     PVM.find i (floyd_update' k i nds m) = Some dmin ->
                get_weight i (Node k) m = Some dik ->
                get_weight k s m = Some dkj ->
-               Z.le (Z.add dik dkj) dst0 ->
                NVM.find s dmin = Some dstn ->
                dstn = Z.max dst0 (Z.add dik dkj).
 Proof.
-  move => nds k i s m dmi0 dmin dst0 dstn dik dkj Hfdi0 Hfds0. 
+  move => nds k i s m dmi0 dmin dst0 dstn dik dkj Hin Hnd Hfdi0 Hfds0. 
   rewrite /floyd_update' /= Hfdi0 find_add_eq_z_fm.
   move => Hinj; injection Hinj; move => Heq; rewrite -Heq.
-  move => Hgwik Hgekj Hle Hfdsn.
+  move => Hgwik Hgekj Hfdsn.
   apply new_dst_map_correct1 with nds dmi0 s k i m; try done.
 Qed.
 
@@ -1344,7 +1454,7 @@ Proof.
   move => Hfds0.
   move => Hinj; injection Hinj; move => Heq; rewrite -Heq.
   move => Hgwik Hgekj Hfdsn.
-  apply new_dst_map_correct2 with nds dmi0 s k i m; try done.
+  apply new_dst_map_correct3 with nds dmi0 s k i m; try done.
 Qed.
 
 Lemma floyd_update_correct3 :
@@ -1372,6 +1482,28 @@ Proof.
     done.
 Qed.
 
+Lemma floyd_update_correct5 :
+  forall nds k i j s m dmi0 dmin,
+    ~ In s nds ->
+    PVM.find i m = Some dmi0 ->
+    PVM.find i (floyd_update' k j nds m) = Some dmin ->
+    NVM.find s dmi0 = NVM.find s dmin.
+Proof.
+  move => nds k i j s m d0 dn Hnin Hfdi0.
+  rewrite /floyd_update'.
+  case Hij : (i == j).
+  - rewrite -(eqP Hij) Hfdi0 find_add_eq_z_fm; move => Hinj.
+    injection Hinj; move => Heq; rewrite -Heq.
+    case Hnfds : (NVM.find s d0) => [ds|]; case Hnfdsn : (NVM.find s (new_dst_map nds d0 k i m)) => [dsn|]; last done.
+    move : (new_dst_map_correct2 nds d0 s k i m Hnin Hnfds Hnfdsn) => Heq2; rewrite Heq2//.
+    move : (new_dst_map_nn nds d0 s k i m Hnfds); rewrite Hnfdsn//.
+    move : (new_dst_map_nnsm nds s d0 k i m Hnfds Hnfdsn) => Hin. contradiction.
+  - case Hfdj : (PVM.find j m ) => [dj|].
+    rewrite find_add_neq_z_fm; last by (move => Heq; rewrite -Heq eq_refl //in Hij).
+    rewrite Hfdi0; move => Hinj; injection Hinj; move => Heq; rewrite -Heq//.
+    rewrite Hfdi0; move => Hinj; injection Hinj; move => Heq; rewrite -Heq//.
+Qed.
+
 Lemma floyd_update_smnn :
   forall nds k i j m dmi0,
     PVM.find i m = Some dmi0 ->
@@ -1396,7 +1528,6 @@ Lemma floyd_update_smnn_nodes :
 Proof.
 Admitted.
 
-
 Lemma floyd_update_gw_diff : forall nds i m k j ml0 dik0 dikn,
     PVM.find i m = Some ml0 ->
     i <> j ->
@@ -1415,34 +1546,34 @@ Proof.
 Qed.
 
 Lemma floyd_update_gw_same1 : forall nds i m k ml0 dik0 dkk dikn,
+    In (Node k) nds -> NoDup nds ->
     PVM.find i m = Some ml0 ->
     get_weight k (Node k) m = Some dkk ->
     get_weight i (Node k) m = Some dik0 ->
     get_weight i (Node k) (floyd_update' k i nds m) = Some dikn ->
-    Z.le (Z.add  dik0 dkk) dik0 ->
     dikn = Z.max dik0 (Z.add dik0 dkk).
 Proof.
-  move => nds i m k ml0 dik0 dkk dikn Hfdi0.
-  move => Hgwki Hgwik Hgwikn Hle. generalize Hgwki Hgwik Hgwikn.
+  move => nds i m k ml0 dik0 dkk dikn Hin Hnd Hfdi0.
+  move => Hgwki Hgwik Hgwikn. generalize Hgwki Hgwik Hgwikn.
   rewrite /get_weight Hfdi0.
   case Hfdk : (PVM.find k m) => [dmk|]; last done.
   move => Hfdki Hfdik.
   case  Hfdin : (PVM.find i (floyd_update' k i nds m)) => [dimn|]; last done.
   move => Hfdikn. 
-    exact : (floyd_update_correct1 nds k i (Node k) m Hfdi0 Hfdik Hfdin Hgwik Hgwki Hle Hfdikn ).
+  exact : (floyd_update_correct1 k i (Node k) m Hin Hnd Hfdi0 Hfdik Hfdin Hgwik Hgwki Hfdikn ).
 Qed.
   
 Lemma floyd_update_gw_same2 : forall nds i m k j ml0 dij0 dik0 dkj0 dikn,
+    In (Node j) nds -> NoDup nds ->
     PVM.find i m = Some ml0 ->
     NVM.find (Node j) ml0 = Some dij0 ->
     get_weight k (Node j) m = Some dkj0 ->
     get_weight i (Node k) m = Some dik0 ->
     j <> k ->
     get_weight i (Node j) (floyd_update' k i nds m) = Some dikn ->
-    Z.le (Z.add dik0 dkj0) dij0 ->
     dikn = Z.max dij0 (Z.add dik0 dkj0).
 Proof.
-  move => nds i m k j ml0 dij0 dik0 dkj0 dikn Hfdi0 Hnfdj0 Hgwkj Hgwik Hneq Hgwijn Hle.
+  move => nds i m k j ml0 dij0 dik0 dkj0 dikn Hin Hnd Hfdi0 Hnfdj0 Hgwkj Hgwik Hneq Hgwijn.
   generalize Hgwkj Hgwik Hgwijn.
   rewrite /get_weight Hfdi0.
   case Hfdk0 : (PVM.find k m) => [mlk|]; last done.
@@ -1464,38 +1595,82 @@ Proof.
   - move : (@floyd_update_smnn nds y i x m mli0 Hfdi0). rewrite Hfdin//.
 Qed.
 
-Lemma inner_loop1_correct1 : forall nds i m k j ml0 mln dik0 dkj0 dkk0 dikn dkjn dkkn dij0 dijn,
-  PVM.find i m = Some ml0 ->
-  PVM.find i (inner_loop1 nds m k) = Some mln ->
-  get_weight i (Node k) m = Some dik0 ->
-  get_weight k j m = Some dkj0 ->
-  get_weight k (Node k) m = Some dkk0 ->
-  get_weight i (Node k) (inner_loop1 nds m k) = Some dikn ->
-  get_weight k j (inner_loop1 nds m k) = Some dkjn ->
-  get_weight k (Node k) (inner_loop1 nds m k) = Some dkkn ->
-  NVM.find j ml0 = Some dij0 ->
-  NVM.find j mln = Some dijn ->
-
-  Z.le (Z.add dikn dkjn) dijn ->
-  Z.le (Z.add dik0 dkj0) dij0 ->
-  dijn = Z.max dij0 (Z.add dikn dkjn).
+Lemma noin_addzero : forall j ntl,
+    ~ (In ([eta Node] j) [:: Zero & map [eta Node] ntl] ) ->
+    ~ In j ntl.
 Proof.
-  elim => [|nhd ntl IHm] i m k j ml0 mln dik0 dkj0 dkk0 dikn dkjn dkkn dij0 dijn; rewrite /=.
-  - move => Hfdi0. rewrite Hfdi0.
-    move => Hinj; injection Hinj; move => Heq; rewrite Heq.
-    move => Hgwik Hgwkj Hgwkk Hgwikn Hgwkjn Hgwkkn Hnfdj0. rewrite Hnfdj0.
-    move => Hinj2; injection Hinj2; move => Heq2; rewrite Heq2. lia.
-  - case Hfdi1 : (PVM.find i (floyd_update' k nhd [:: Zero, Node nhd & map [eta Node] ntl] m)) => [ml1|].
-    + case Heqin : (nhd == i).
-      * rewrite (eqP Heqin) in Hfdi1 *.
-        move => Hfdi0 Hfdin Hgwik Hgwkj Hgwkk Hgwikn Hgwkjn Hgwkkn Hnfdij0 Hnfdjn Hle0 Hlen.
-        move : (@floyd_update_smnn_nodes [:: Zero, Node i & map [eta Node] ntl] k i i m ml0 ml1 j dij0 Hfdi0 Hfdi1 Hnfdij0) => Hnfdij1nn.
-        case Hnfdj1 : (NVM.find j ml1) => [dij1|]; last done.
-        have Hgwij1 : (get_weight i j (floyd_update' k i [:: Zero, Node i & map [eta Node] ntl] m)) = Some dij1.
-        rewrite /get_weight Hfdi1 Hnfdj1//.
-        move : (@floyd_update_gw_smnn k (Node k) dkk0 k i [:: Zero, Node i & map [eta Node] ntl] m Hgwkk) => Hgwkknn.
-        case Hgwkk1 : (get_weight k (Node k) (floyd_update' k i [:: Zero, Node i & map [eta Node] ntl] m)) => [dkk1|]; last done. (* dkk1 *)
-        move : (floyd_update_correct1 [:: Zero, Node i & map [eta Node] ntl] k i j m Hfdi0 Hnfdij0 Hfdi1 Hgwik Hgwkj Hlen Hnfdj1) => Haux.
+  rewrite /=. move => j nds /Decidable.not_or Hnor Hin. move : Hnor => [Hl Hr].
+  - apply Hr. by apply in_map.
+Qed.
+
+Definition del_node d n := match n with | Node p => p | Zero => d end.
+
+Lemma noin_addzero' : forall j ntl,
+    ~ In j ntl ->
+    ~ (In ([eta Node] j) [:: Zero & map [eta Node] ntl] ).
+Proof.
+  move => j ns Hnin. rewrite /= => Hor. move : Hor=> [Hl| Hr].
+  done. apply Hnin.
+  have Hj : j = del_node j ([eta Node] j) by rewrite /=//.
+  have Hns : ns = (map (del_node j) (map [eta Node] ns)).
+  elim ns; rewrite /=//. move => a l IHm. rewrite -IHm//.
+  rewrite Hj Hns. by apply in_map.
+Qed.
+
+Lemma inner_loop1_correct2 : forall nds i m k j ml0 mln ,
+    ~ In j nds -> NoDup nds ->
+    PVM.find i m = Some ml0 ->
+    PVM.find i (inner_loop1 nds m k) = Some mln ->
+    NVM.find (Node j) ml0 = NVM.find (Node j) mln.
+Proof.
+  elim => [|nhd ntl IHm] i m k j ml0 mln Hin Hndp Hfd0; rewrite /=.
+  - rewrite Hfd0; move => Hinj; injection Hinj; move => Heq; rewrite Heq//.
+  - case Hfd1 : (PVM.find i (floyd_update' k nhd [:: Zero, Node nhd & map [eta Node] ntl] m)) => [ml1|]. 
+    + move => Hfdn.
+      move : (noin_addzero' (nhd::ntl) Hin) => Hnins. rewrite map_cons in Hnins.
+      move : (floyd_update_correct5 [:: Zero, Node nhd & map [eta Node] ntl] k i nhd (Node j) m Hnins Hfd0 Hfd1 ) => Heq01.
+      rewrite Heq01.
+      move : Hndp; move => /NoDup_cons_iff [Hnin Hndp]. rewrite /= in Hin.
+      move /Decidable.not_or : Hin => [Hneq Hin].
+      exact : (IHm i (floyd_update' k nhd [:: Zero, Node nhd & map [eta Node] ntl] m) k j ml1 mln Hin Hndp Hfd1 Hfdn) => Heq1n.
+    + move : (floyd_update_smnn [:: Zero, Node nhd & map [eta Node] ntl] k i nhd m Hfd0).
+      rewrite Hfd1//.
+Qed.
+
+Lemma inner_loop1_correct1 : forall nds i m k j ml0 mln dik0 dkj0 (* dkk0 *) dikn dkjn (* dkkn *) dij0 dijn,
+    In j nds -> NoDup nds ->
+    PVM.find i m = Some ml0 ->
+    PVM.find i (inner_loop1 nds m k) = Some mln ->
+    get_weight i (Node k) m = Some dik0 ->
+    get_weight k (Node j) m = Some dkj0 ->
+    (* get_weight k (Node k) m = Some dkk0 -> *)
+    get_weight i (Node k) (inner_loop1 nds m k) = Some dikn ->
+    get_weight k (Node j) (inner_loop1 nds m k) = Some dkjn ->
+    (* get_weight k (Node k) (inner_loop1 nds m k) = Some dkkn -> *)
+    NVM.find (Node j) ml0 = Some dij0 ->
+    NVM.find (Node j) mln = Some dijn ->
+    dijn = Z.max dij0 (Z.add dikn dkjn).
+Proof.
+  (*elim => [|nhd ntl IHm] i m k j ml0 mln dik0 dkj0 (* dkk0 *) dikn dkjn (* dkkn *) dij0 dijn; rewrite /=//.
+  move => [Heq |Hin]. move => /NoDup_cons_iff [Hnin Hndp].
+  - rewrite Heq in Hnin *. 
+    case Hfdi1 : (PVM.find i (floyd_update' k j [:: Zero, Node j & map [eta Node] ntl] m)) => [ml1|].
+    + move => Hfdi0 Hfdin Hgwik Hgwkj (* Hgwkk *) Hgwikn Hgwkjn (* Hgwkkn *) Hnfdij0 Hnfdijn .
+      move : (@floyd_update_smnn_nodes [:: Zero, Node j & map [eta Node] ntl] k i j m ml0 ml1 (Node j) dij0 Hfdi0 Hfdi1 Hnfdij0) => Hnfdij1nn.
+      case Hnfdj1 : (NVM.find (Node j) ml1) => [dij1|]; last done.
+      have Hgwij1 : (get_weight i (Node j) (floyd_update' k j [:: Zero, Node j & map [eta Node] ntl] m)) = Some dij1.
+      rewrite /get_weight Hfdi1 Hnfdj1//.
+      (* move : (@floyd_update_gw_smnn k (Node k) dkk0 k j [:: Zero, Node j & map [eta Node] ntl] m Hgwkk) => Hgwkknn. *)
+      (* case Hgwkk1 : (get_weight k (Node k) (floyd_update' k j [:: Zero, Node j & map [eta Node] ntl] m)) => [dkk1|]; last done. (* dkk1 *) *)
+      have Hjin : In (Node j) [:: Zero, Node j & map [eta Node] ntl] by rewrite /=; right; left.
+      case Hijeq : (i == j).
+      * rewrite (eqP Hijeq) in Hfdi1 Hfdi0 Hfdin Hgwik Hgwikn Hnfdij0 Hnfdijn Hgwij1 Hjin.
+        move : (floyd_update_correct1 k j (Node j) m Hjin (nodup_addzero j Hndp Hnin) Hfdi0 Hnfdij0 Hfdi1 Hgwik Hgwkj Hnfdj1) => Hdst01.
+        move : (inner_loop1_correct2 j (floyd_update' k j [:: Zero, Node j & map [eta Node] ntl] m) k j Hnin Hndp Hfdi1 Hfdin).
+        rewrite  Hnfdijn Hnfdj1. move => Hinj; injection Hinj; move => Hdij1n; rewrite -Hdij1n.
+        move : (IHm j (floyd_update' k j [:: Zero, Node j & map [eta Node] ntl] m) k j ml1 mln dik0 dkj0 dikn dkjn dij1 dijn).
+        
+        (* What has been changed, need to be checked *)
         move : (@floyd_update_gw_smnn i (Node k) dik0 k i [:: Zero, Node i & map [eta Node] ntl] m Hgwik) => Hgwiknn.
         case Hgwik1 : (get_weight i (Node k) (floyd_update' k i [:: Zero, Node i & map [eta Node] ntl] m)) => [dik1|]; last done. (* dik1 *)
         (* move : (@floyd_update_gw_same1 [:: Zero, Node i & map [eta Node] ntl] i m k ml0 dik0 dkk0 dik1 Hfdi0 Hgwkk Hgwik Hgwik1). *)
@@ -1522,26 +1697,59 @@ Proof.
         exact : (@IHm i (floyd_update' k nhd [:: Zero, Node nhd & map [eta Node] ntl] m) k j ml1 mln dik1 dkj1 dkk1 dikn dkjn dkkn dij0 dijn Hfdi1 Hfd0n Hgwik1 Hgwkj1 Hgwkk1 Hgwikn Hgwkjn Hgwkkn Hnfdj1 Hfdjn Hlen H).
     + move => Hfdi0.
       move : (@floyd_update_smnn [:: Zero, Node nhd & map [eta Node] ntl] k i nhd m ml0 Hfdi0).
-      rewrite Hfdi1//.
+      rewrite Hfdi1//.*)
 Admitted.
 
-Lemma inner_loop2_correct1 : forall nds i m k j ml0 mln dik0 dkj0 dkk0 dikn dkjn dkkn dij0 dijn,
+Lemma inner_loop1_gw1 : forall nds i m k j ml0 mln dik0 dkj0 dkk0 dikn dkjn dkkn dij0 dijn,
   PVM.find i m = Some ml0 ->
-  PVM.find i (inner_loop2 nds m) = Some mln ->
+  PVM.find i (inner_loop1 nds m k) = Some mln ->
   get_weight i (Node k) m = Some dik0 ->
   get_weight k j m = Some dkj0 ->
   get_weight k (Node k) m = Some dkk0 ->
   get_weight i (Node k) (inner_loop1 nds m k) = Some dikn ->
   get_weight k j (inner_loop1 nds m k) = Some dkjn ->
   get_weight k (Node k) (inner_loop1 nds m k) = Some dkkn ->
-  NVM.find j ml0 = Some dij0 ->
-  NVM.find j mln = Some dijn ->
-
   Z.le (Z.add dikn dkjn) dijn ->
   Z.le (Z.add dik0 dkj0) dij0 ->
-  dijn = Z.max dij0 (Z.add dikn dkjn).
+  get_weight i j m = Some dij0 ->
+  get_weight i j (inner_loop1 nds m k) = Some (Z.max dij0 (Z.add dikn dkjn)).
 Proof.
 Admitted.
+
+
+
+(* Lemma inner_loop2_correct1 : forall nds i m j ml0 mln (* dik0 dkj0 dkk0 *)  dij0 dijn, *)
+(*   PVM.find i m = Some ml0 -> *)
+(*   PVM.find i (inner_loop2 nds m) = Some mln -> *)
+(*   (* get_weight i (Node k) m = Some dik0 -> *) *)
+(*   (* get_weight k j m = Some dkj0 -> *) *)
+(*   (* get_weight k (Node k) m = Some dkk0 -> *) *)
+(*   NVM.find j ml0 = Some d -> *)
+(*   (* Z.le (Z.add dikn dkjn) dijn -> *) *)
+(*   (* Z.le (Z.add dik0 dkj0) dij0 -> *) *)
+(*   (fall k j dikn dkjn       NVM.find j mln = Some dijn      get_weight i (Node k) (inner_loop2 nds m) = Some dikn      get_weight k j (inner_loop2 nds m) = Some dkjn      get_weight k (Node k) (inner_loop2 nds m) = Som)e dkkn      dijn = Z.max dij0 (Z.add dikn)dkjn)). *)
+(* Proof. *)
+(*   elim => [|nhd ntl IHm]  i m k j ml0 mln dik0 dkj0 dkk0 dikn dkjn dkkn dij0 dijn. *)
+(*   - rewrite /=. move => Hfdi0; rewrite Hfdi0; move => Hinj; injection Hinj; move => Heq; rewrite Heq. *)
+(*     move => Hik0 Hkj0 Hkk0 Hikn Hkjn Hkkn Hnfdj0. rewrite Hnfdj0; move => Hinj2; injection Hinj2. *)
+(*     move => Heq2; rewrite Heq2. lia. *)
+(*   - rewrite /=. move => Hfdi0 Hfdin Hik0 Hkj0 Hkk0 Hikn Hkjn Hkkn Hnfdj0 Hnfdjn Hlen Hle0. *)
+(*     have Hreplace : (inner_loop1 ntl (floyd_update' nhd nhd [:: Zero, Node nhd & map [eta Node] ntl] m) nhd = inner_loop1 (nhd::ntl) m nhd) by rewrite/=//. *)
+(*     rewrite Hreplace in Hfdin Hikn Hkjn Hkkn. *)
+(*     case Hgwik1 : *)
+(*       (get_weight i (Node k) (inner_loop1 (nhd :: ntl) m nhd)) => [dik1|]; last admit. (*inner_loop1_gw_smnn*) *)
+(*     case Hgwkj1 :  *)
+(*       (get_weight k j (inner_loop1 (nhd :: ntl) m nhd)) => [dkj1|]; last admit. (*inner_loop1_gw_smnn*) *)
+(*     case Hgwkk1 : (get_weight k (Node k) (inner_loop1 (nhd :: ntl) m nhd)) => [dkk1|]; last admit. (*inner_loop1_gw_smnn*) *)
+(*     case Hfdi1 : (PVM.find i (inner_loop1 (nhd :: ntl) m nhd)) => [ml1|]. (*inner_loop1_smnn*) *)
+(*     case Hnfdj1 : (NVM.find j ml1) => [dij1|]; last admit. (*inner_loop1_node_smnn*) *)
+(*       have Hmono1 : (Z.le (dik1 + dkj1) dij1)%Z. admit. (*inner_loop1_get_weight_mono *) *)
+(*     + move : (@inner_loop1_correct1 (nhd::ntl) i m nhd j ml0 ml1 dik0 dkj0 dkk0 dik1 dkj1 dkk1 dij0  dij1 Hfdi0 Hfdi1 Hik0 Hkj0 Hkk0 Hgwik1 Hgwkj1 Hgwkk1 Hnfdj0 Hnfdj1 Hmono1 Hle0) => Haux. *)
+(*       move : (@IHm i (inner_loop1 (nhd :: ntl) m k) k j ml1 mln dik1 dkj1 dkk1 dikn dkjn dkkn dij1 dijn Hfdi1 Hfdin). *)
+
+      
+    
+(* Admitted. *)
 
       
 Lemma find_new_dst_map_some : forall n dm dst0 ntl s d m,
@@ -1817,10 +2025,6 @@ Proof.
     + rewrite Z.max_le_iff. right. by apply Hm.
 Qed.
 
-(* (* [In v bds] means: forall x in dom(bds), v(x) \in bds(x) *) *)
-(* (* v can contain more variables than bds. *) *)
-(* (* Variables that are not in bds are unbounded. *) *)
-
 (* Definition In (v : Valuation) (bds : Bounds) : Prop := *)
 (*   forall (x : ProdVar.t) (lb ub : nat), *)
 (*     PVM.find x bds = Some (lb, ub) -> *)
@@ -1848,8 +2052,8 @@ Fixpoint uni_cs (ns : list Constraint1) :=
 
 Definition In_cs c cs := (c \in cs) && (uni_cs cs).
 
-Definition well_defined_m (m : adj_matrix) : Prop :=
-  forall (x : ProdVar.t) dst, PVM.find x m = Some dst .
+(* Definition well_defined_m (m : adj_matrix) : Prop := *)
+(*   forall (x : ProdVar.t) dst, PVM.find x m = Some dst . *)
 
 Definition rhs_vars1 :=
 fun c : Constraint1 => (map snd (rhs_terms1 c)).
@@ -1865,7 +2069,7 @@ Lemma conform1_m_back : forall hd tl fm,
 Proof. Admitted.
 
 Definition well_formed (m : adj_matrix) (cs1 : list Constraint1) :=
-  well_defined_m m /\ conform1_m cs1 m.
+  (* well_defined_m m /\  *)conform1_m cs1 m.
 
 
 Lemma satisfies_constraint1_add_maxzlist :
@@ -1899,7 +2103,7 @@ Lemma satisfies_all_constraint1_add_maxzlist :
       (PVM.add (lhs_var1 c) (Z.to_nat (maxz_list dist)) v0) cs.
 Proof.
   elim => [|cshd cstl Hm] dst c s fm schm a v0 Hin Hrhs Hrhsp Hrhsc Hcf Hfdsch Hfdnn (* Hnn *) ; first done . 
-  - rewrite/=. Search (_ && _). move/negP => Hst. rewrite negb_andb in Hst.
+  - rewrite/=. move/negP => Hst. rewrite negb_andb in Hst.
     move/orP : Hst => [Hsthd|Hsttl].
     move : Hsthd. rewrite /satisfies_constraint1'.
     case Hcshd : (PVM.find (lhs_var1 cshd) v0) => [hd|].
@@ -1986,9 +2190,15 @@ Definition solve_simple_cycle' (simple_cycle : list ProdVar.t) (cs : list Constr
     save_longest_dist simple_cycle m v0
   else None.
 
+Lemma solve_simple_cycle_eq : forall sc cs ,
+    solve_simple_cycle' sc cs initial_valuation =
+      solve_simple_cycle sc cs.
+Proof.
+Admitted.
+
 End simplecycle.
 
-Lemma solve_simple_cycle_correctness :
+Lemma solve_simple_cycle_correctness' :
   forall sc cs v0 val,
     (* In_fm v0 (floyd_loop_map' sc cs) -> *)
     conform1_m cs (floyd_loop_map' sc cs) ->
@@ -2000,6 +2210,22 @@ Proof.
   case Hpos : (negcycb sc (floyd_loop_map' sc cs) true); last done.
   move => Hinval Hsve.
   exact: (save_longest_dist_correct sc v0 Hinval Hsve).
+Qed.
+
+
+Lemma solve_simple_cycle_correctness :
+  forall sc cs val,
+    (* In_fm v0 (floyd_loop_map' sc cs) -> *)
+    conform1_m cs (floyd_loop_map' sc cs) ->
+    solve_simple_cycle sc cs = Some val ->
+    satisfies_all_constraint1 val cs.
+Proof.
+  move => sc cs val (*Hin*).
+  rewrite -solve_simple_cycle_eq.
+  rewrite /solve_simple_cycle'.
+  case Hpos : (negcycb sc (floyd_loop_map' sc cs) true); last done.
+  move => Hinval Hsve.
+  exact: (save_longest_dist_correct sc initial_valuation Hinval Hsve).
 Qed.
 
 Definition scc_smallest_prop (fm : adj_matrix) cs1 (ret : option Valuation) :=
@@ -2017,7 +2243,7 @@ Proof.
   
 Admitted.
 
-Lemma scc_smallest :
+Lemma scc_smallest' :
     forall (sc : list ProdVar.t) fm
            (cs : list Constraint1) (val : Valuation),
        well_formed fm cs ->
@@ -2028,6 +2254,26 @@ Lemma scc_smallest :
 Proof.
   exact scc_smallest_aux.
 Qed.
+
+Lemma scc_smallest :
+    forall (sc : list ProdVar.t) fm
+           (cs : list Constraint1) (val : Valuation),
+       well_formed fm cs ->
+       solve_simple_cycle sc cs = Some val ->
+       forall (s : Valuation), 
+         satisfies_all_constraint1 s cs ->
+         le val s.
+Proof.
+  move => sc fm cs val.
+  rewrite -solve_simple_cycle_eq. 
+  exact : scc_smallest_aux.
+Qed.
+
+Lemma scc_none_unsat cs : forall sc, solve_simple_cycle sc cs = None -> forall v : Valuation, forallb (satisfies_constraint1 v) cs = false.
+Proof.
+(* Added by KY *)
+Admitted.
+
   
 (* Theorem solve_simple_cycle_smallest : *)
 (*   forall (sc : list ProdVar.t)  *)
