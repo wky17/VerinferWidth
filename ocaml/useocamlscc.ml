@@ -40,7 +40,7 @@ let build_graph_from_constraints constraints =
     Stdlib.List.iter (fun (_, rhs_var) ->
       let rhs_node = get_node (pair_to_nat rhs_var) in
       G.add_edge g lhs_node rhs_node
-    ) c.rhs_terms1
+    ) (Stdlib.List.append c.rhs_terms1 c.rhs_power)
   ) constraints;
   g
 

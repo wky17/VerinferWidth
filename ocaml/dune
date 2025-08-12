@@ -1,0 +1,10 @@
+(env
+  (dev
+    (flags    (:standard -w -a))))
+
+(executable
+ (name hipparser)
+ (libraries unix extraction hifirrtl_lang ocamlgraph mlir_lang)
+ ;(flags (:standard -strict-sequence -strict-formats))  ; 启用严格检查
+  ;(ocamlopt_flags (:standard -O3))                     ; 确保优化生效
+ )

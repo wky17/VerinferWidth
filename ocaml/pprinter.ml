@@ -6,7 +6,7 @@ open Extraction.Kosaraju
 open Extraction.Constraints
 open List
 
-let () =
+(*let () =*)
   (* test case 1 : simple cycle done *) 
   (*
   Stdlib.List.iter (fun y -> Stdlib.List.iter (fun x -> printf "%d" (Obj.magic x); printf "; ") y; printf "\n") res0;
@@ -77,9 +77,9 @@ let () =
   *)
 
   (* test bnb *)
-  match Branch_and_bound.res with
+  (*match Branch_and_bound.res with
   | (Some vs, _) -> Stdlib.List.iter (fun x -> printf "%d : %d\n" x (vs (Obj.magic x))) [1;2;3]
-  | _ -> printf "unsolved.\n"
+  | _ -> printf "unsolved.\n"*)
 
   (* test solve_scc *)
 

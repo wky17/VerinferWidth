@@ -3,6 +3,7 @@ open Printf
 open Nodehelper
 open Extraction
 open Extraction.Constraints
+open Extraction.Extract_cswithmin
 (*open Extraction.TopoSort*)
 open Useocamlscc
 open Big_int_Z
@@ -359,19 +360,29 @@ let pp_cstrt1 out c1 = fprintf out "x(%d,%d) >= " (fst (Obj.magic c1.lhs_var1)) 
     Stdlib.List.iter (fun (_, var) -> fprintf out "2 ^ x(%d,%d) + " (fst (Obj.magic var)) (snd (Obj.magic var))) c1.rhs_power;
     fprintf out "%d\n" c1.rhs_const1
 
-let pp_cstrt2 out c2 = fprintf out "%d >= " c2.lhs_const2;
-Stdlib.List.iter (fun (coe, var) -> fprintf out "%d * x(%d,%d) + " coe (fst (Obj.magic var)) (snd (Obj.magic var))) c2.rhs_terms2; fprintf out "0\n"
+let rec pp_min_rhs out r =
+  match r with
+  | Extract_cswithmin.Expr e ->
+    Stdlib.List.iter (fun (coe, var) -> fprintf out "%d * x(%d,%d) + " coe (fst (Obj.magic var)) (snd (Obj.magic var))) e.regular_terms;
+    Stdlib.List.iter (fun (_, var) -> fprintf out "2 ^ x(%d,%d) + " (fst (Obj.magic var)) (snd (Obj.magic var))) e.regular_power;
+    fprintf out "%d" e.regular_const
+  | Min (min1, min2) -> fprintf out "min("; pp_min_rhs out min1; fprintf out ","; pp_min_rhs out min2; fprintf out ")"
+
+let pp_cstrt_min out c1 = fprintf out "x(%d,%d) >= " (fst (Obj.magic c1.lhs_var_min)) (snd (Obj.magic c1.lhs_var_min));
+  pp_min_rhs out c1.rhs_expr_min; fprintf out "\n"
+    
+let pp_cstrt2 out c2 = fprintf out "1 >= "; pp_min_rhs out c2; fprintf out "\n"
 
 let pp_cstrt2_new out c2 = fprintf out "%d >= " c2.lhs_const2_new;
 Stdlib.List.iter (fun (coe, var) -> fprintf out "%d * x(%d,%d) + " coe (fst (Obj.magic var)) (snd (Obj.magic var))) c2.rhs_terms2_new; fprintf out "0\n"
 
-let pp_cstrt out c =
+(*let pp_cstrt out c =
   match c with
   | Constraints.Phi1 c1 -> pp_cstrt1 out c1
-  | Phi2 c2 -> pp_cstrt2 out c2
+  | Phi2 c2 -> pp_cstrt2_new out c2
 
 
-(*let my_solve c =
+let my_solve c =
   match Extract_cs.extract_constraints_c c with
   | Some p ->
     let (c1map, cs2) = p in
@@ -451,7 +462,7 @@ open Str
 let convert_path path =
   Str.global_replace (Str.regexp "\\(.*/\\)preprowhen/\\(.*\\)\\.fir$") "\\1mlir/\\2.mlir" path
 
-let inline_transf in_file hif_ast = 
+(*let inline_transf in_file hif_ast = 
   let flatten_cir = Inline.inline_cir stdout hif_ast in 
   output_string stdout ("flattened\n"); 
 
@@ -583,7 +594,7 @@ let inline_transf in_file hif_ast =
     (*close_out oc_cons; close_out oc_fir; close_out oc_res_num; close_out oc_res_str*)
 
     | None -> output_string stdout "error extracting constraints\n");
-    | _ -> output_string stdout "no circuit_map\n"
+    | _ -> output_string stdout "no circuit_map\n"*)
 
 
 let try_mlir_parse f =
