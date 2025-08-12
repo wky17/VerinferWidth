@@ -31,4 +31,9 @@ dune build;
 
 # run the execution file
 ./_build/default/hipparser.exe ./demo/firrtl_program/example.fir
+
+通过编辑hipparser.ml中所调用的函数名，试用工具的不同功能：
+1) 输入hifirrtl例子example.fir，输出经ocaml位宽推断后的电路，保存为example_iw.fir
+2) 输入hifirrtl例子example.fir，输出电路中位宽待推断变量对应的约束 和 经ocaml位宽推断算法接出的最小可行解。使用Gurobi的python api来验证解的正确性
+3) 输入hifirrtl例子example.fir 和 经firtool inferwidths转换后的mlir中间表示example.mlir。使用ocaml位宽推断算法接出的最小可行解，与firtool输出的结果进行一致性比较
 ```
