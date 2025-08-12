@@ -116,9 +116,6 @@ Definition fgtyp_explicit : Type :=
 (* disallow implicit widths *)
 { x : fgtyp | not_implicit_width x }.
 
-(*Instead of explicit_to_fgtyp you can use proj1_sig.
-Definition explicit_to_fgtyp (H: fgtyp_inferred) : fgtyp := let (x, _) := H in x.*)
-
 Definition fgtyp_remove_implicit (gt : fgtyp) : fgtyp := 
 match gt with
 | Fuint_implicit n => Fuint n 
@@ -157,9 +154,3 @@ all: apply ReflectF ;
 Qed.
 
 HB.instance Definition _ := hasDecEq.Build fgtyp_explicit fgtyp_explicit_eqP.
-
-(* 
-1. 定义 finType 的 DecidableType Module
-2. 定义 map 的 Module
-3. 直接 Module.t 就是map的类型
-*)
