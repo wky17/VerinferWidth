@@ -8,17 +8,6 @@ let initmap_s = StringMap.empty
 module IntMap = Map.Make(Stdlib.Int)
 let initmap_i = IntMap.empty
 
-(*lec collect_insts sts = 
-  match sts with
-  | Ast.Qnil -> []
-  | Qcons (s, st) -> Stdlib.List.append (collect_inst s) (collect_insts st)
-
-and collect_inst s =
-  match s with
-  | Ast.Sinst (v, _) -> [v]
-  | Ast.Swhen (_, s1, s2) -> Stdlib.List.append (collect_insts s1) (collect_insts s2)
-  | _ -> []*)
-
 let collect_insts sts =
   let rec loop sts acc =
     match sts with
@@ -116,5 +105,3 @@ let inline_cir out hif_ast =
                               let flattenmain = Ast.FInmod (cv, pl, revstmts flattensl Ast.Qnil) in
                               (*Ast.pp_module out flattenmain; *)
                               Ast.Fcircuit (cv, [flattenmain])
-
-                            

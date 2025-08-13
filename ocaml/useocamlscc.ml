@@ -58,20 +58,3 @@ let print_graph g =
       (G.V.label src) 
       (G.V.label dst)
   ) g
-
-(* 构建图并分析 
-let () =
-      let g = build_graph_from_constraints Transhiast.cs in
-      (* 计算强连通分量 *)
-      let ut0 = (Unix.times()).tms_utime in 
-      let scc_list = SCC.scc_list g in
-      (* 打印结果 *)
-      Stdlib.List.iteri (fun i component ->
-        Printf.printf "SCC %d: [ " (i + 1);
-        Stdlib.List.iter (fun v -> Printf.printf "(%d,%d) " (fst (nat_to_pair (G.V.label v))) (snd (nat_to_pair (G.V.label v)))) component;
-        Printf.printf "]\n"
-      ) scc_list;
-      Printf.printf "tarjan : %f 秒\n" (Float.sub (Unix.times()).tms_utime ut0) 
-      print_graph g*)
-
-

@@ -258,11 +258,7 @@ and pp_statement out s =
   match s with
   | Sskip -> output_string out "sskip\n"
   | Swire (v, ty) -> output_string out "(swire "; output_string out (v^" : "); pp_type out ty; output_string out ")\n"
-  | Smem (v, m) -> output_string out "smem ( "; output_string out (v^" : "); (*pp_type out (m.data_type); output_string out "Depth ";
-   output_string out (Int.to_string m.depth); output_string out " ReadL "; output_string out (Int.to_string m.read_latency); output_string out " WriteL "; 
-   output_string out (Int.to_string m.write_latency); output_string out "  Reader "; List.iter (fun c ->  output_string out (c^" "); output_string out "") m.reader; 
-   output_string out " Writer "; List.iter (fun c ->  output_string out (c^" "); output_string out "") m.writer; output_string out " "; output_string out " RuW "; 
-   pp_ruw out (m.read_write);*) output_string out ")\n"
+  | Smem (v, m) -> output_string out "smem ( "; output_string out (v^" : "); output_string out ")\n"
   | Sfcnct (e1, e2) -> output_string out "(sfcnct "; pp_ref out e1; output_string out " "; pp_expr out e2; output_string out ")\n"
   | Sinvalid v -> output_string out "(sinvalid "; pp_ref out v; output_string out ")\n"
   | Sreg (v, r) ->

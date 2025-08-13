@@ -4,7 +4,6 @@ open Nodehelper
 open Extraction
 open Extraction.Constraints
 open Extraction.Extract_cswithmin
-(*open Extraction.TopoSort*)
 open Useocamlscc
 open Big_int_Z
 open Mlir_lang
@@ -17,8 +16,7 @@ let initmap_i = IntMap.empty
 let rec mapbtyp_helper v (map, flag, flag') ft = (* 这里flag是list，flag'是int *)
   match ft with
   | Ast.Gtyp _ -> (StringMap.add v (flag' :: flag) map, flag' + 1)
-  | Ast.Atyp (atyp, _) -> (*mapbtyp_helper (v^"[0]") (StringMap.add v (flag' :: flag) map, flag, flag' + 1) atyp*)
-                            mapbtyp_helper v (map, flag, flag') atyp
+  | Ast.Atyp (atyp, _) -> mapbtyp_helper v (map, flag, flag') atyp
   | Ast.Btyp btyp -> let map0 = StringMap.add v (flag' :: flag) map in
                      let (map1, _, flag'0) = mapbtyp v (map0, (flag' :: flag), 0) btyp in (map1, flag' + 1)
   and mapbtyp v (map, flag, flag') btyp =
@@ -31,7 +29,7 @@ let rec mapbtyp_helper v (map, flag, flag') ft = (* 这里flag是list，flag'是
 let rec mapftype v (map, flag) ft = (* 这里flag是int *)
 match ft with
 | Ast.Gtyp _ -> ((StringMap.add v [flag] map), flag+1)
-| Ast.Atyp (atyp, _) -> (*mapftype (v^"[0]") (StringMap.add v [flag] map, flag + 1) atyp*)mapftype v (map, flag) atyp
+| Ast.Atyp (atyp, _) -> mapftype v (map, flag) atyp
 | Ast.Btyp btyp -> let (map0, _, _) = mapbtyp v (StringMap.add v [flag] map, [flag], 0) btyp in
                    (map0, flag + 1)
   
@@ -133,21 +131,6 @@ let trans_ebinop a_ebinop =
   | Ast.Bxor -> LoFirrtl.Bxor
   | Ast.Bcat -> LoFirrtl.Bcat
 
-(*let bits_of_z (size : int) (z : Z.t) =
-    let binstr =
-      if z >= Z.zero then
-        Z.format ("%0" ^ (string_of_int size) ^ "b") z
-      else
-        Z.format ("%0" ^ (string_of_int size) ^ "b")
-          (Z.add (Z.pow (Z.of_int 2) size) z) in
-    let rec helper i max str res =
-      if i >= max then res
-      else match String.get str i with
-      | '0' -> helper (succ i) max str (false::res)
-      | '1' -> helper (succ i) max str (true::res)
-      | _ -> assert false in
-    helper 0 (String.length binstr) binstr []*)
-
 (* 定义函数，计算二进制表示的长度 *)
 let binary_length (signed : bool) (n: Z.t) : int =
   if n = Z.zero then 1  (* 特殊情况：0 的补码表示为 "0"，长度为 1 *)
@@ -189,19 +172,19 @@ let rec trans_ftype v ty map =
 and trans_btyp v btyp map =
   match btyp with
   | Ast.Fnil -> HiEnv.Fnil
-  | Ast.Fflips (fv, fl, ft, ff) -> (*printf "%s\n" (v^"."^fv);*) HiEnv.Fflips (Obj.magic (Stdlib.List.hd (StringMap.find (v^"."^fv) map)), trans_flip fl, trans_ftype (v^"."^fv) ft map, (trans_btyp v ff map))
+  | Ast.Fflips (fv, fl, ft, ff) -> HiEnv.Fflips (Obj.magic (Stdlib.List.hd (StringMap.find (v^"."^fv) map)), trans_flip fl, trans_ftype (v^"."^fv) ft map, (trans_btyp v ff map))
 
 let rec find_nat4v ref =
   match ref with
   | Ast.Eid v -> v
   | Ast.Esubfield (ref1, v) -> (find_nat4v ref1)^"."^v
-  | Ast.Esubindex (ref1, _) -> (find_nat4v ref1) (*"["^(Stdlib.Int.to_string n)^"]"*)
+  | Ast.Esubindex (ref1, _) -> (find_nat4v ref1)
   | Ast.Esubaccess (ref1, _) -> (find_nat4v ref1)
 
 let rec trans_ref ref map = 
   match ref with
-  | Ast.Eid v -> (*printf "%s\n" v;*) HiFirrtl.Eid (Obj.magic (Stdlib.List.hd (StringMap.find v map)))
-  | Ast.Esubfield (r, _) -> (*printf "%s\n" (find_nat4v ref);*) HiFirrtl.Esubfield (trans_ref r map, Obj.magic (Stdlib.List.hd (StringMap.find (find_nat4v ref) map)))
+  | Ast.Eid v -> HiFirrtl.Eid (Obj.magic (Stdlib.List.hd (StringMap.find v map)))
+  | Ast.Esubfield (r, _) ->  HiFirrtl.Esubfield (trans_ref r map, Obj.magic (Stdlib.List.hd (StringMap.find (find_nat4v ref) map)))
   | Ast.Esubindex (r, n) -> HiFirrtl.Esubindex (trans_ref r map, n)
   | Ast.Esubaccess (r, _) -> (trans_ref r map)
 
@@ -215,7 +198,6 @@ let rec trans_expr e map =
   | Ast.Eprim_unop (op, e1) -> HiFirrtl.Eprim_unop(trans_eunop op, trans_expr e1 map)
   | Ast.Eprim_binop (bop, e1, e2) -> HiFirrtl.Eprim_binop(trans_ebinop bop, trans_expr e1 map, trans_expr e2 map)
   | Ast.Emux (e1,e2,e3) -> HiFirrtl.Emux(trans_expr e1 map, trans_expr e2 map, trans_expr e3 map)
-  (*| Ast.Evalidif (e1,e2) -> HiFirrtl.Evalidif(trans_expr e1 map,trans_expr e2 map)*)
   | Ast.Ecast (s, e) -> HiFirrtl.Ecast(trans_ucast s, trans_expr e map)
   
 let trans_ruw r = 
@@ -234,17 +216,17 @@ let mk_freg t c r = { HiFirrtl.coq_type = t; clock = c; reset = r}
 let rec trans_stmt s map res tmap = 
   match s with
   | Ast.Sskip -> HiFirrtl.Qcons (HiFirrtl.Sskip, res)
-  | Ast.Swire (v, ty) -> (*printf "%s\n" v;*) 
+  | Ast.Swire (v, ty) -> 
                 let ns = HiFirrtl.Swire(Obj.magic (Stdlib.List.hd (StringMap.find v map)), trans_ftype v ty map) in
                 HiFirrtl.Qcons (ns, res)
   | Ast.Sfcnct (ref, e) -> let ns = HiFirrtl.Sfcnct((trans_ref ref map), trans_expr e map) in
                 HiFirrtl.Qcons (ns, res)
   | Ast.Sinvalid ref -> let ns = HiFirrtl.Sinvalid ((trans_ref ref map)) in
                 HiFirrtl.Qcons (ns, res)
-  | Ast.Snode (v, e) -> (*printf "%s\n" v;*) 
+  | Ast.Snode (v, e) -> 
                 let ns = HiFirrtl.Snode(Obj.magic (Stdlib.List.hd (StringMap.find v map)), trans_expr e map) in
                 HiFirrtl.Qcons (ns, res)
-  | Ast.Sreg (v, r) -> (*printf "%s\n" v;*) 
+  | Ast.Sreg (v, r) -> 
                 let ns = HiFirrtl.Sreg (Obj.magic (Stdlib.List.hd (StringMap.find v map)), mk_freg (trans_ftype v r.coq_type map) (trans_expr r.clock map) (trans_rst r.reset map)) in
                 HiFirrtl.Qcons (ns, res)
   | Ast.Sinferport (v, r, e_clock) -> (match type_of_ref r tmap with
@@ -267,8 +249,8 @@ and trans_stmts ss map res tmap =
 
 let trans_port p map = 
   match p with
-  | Ast.Finput (v, ty) -> (*printf "%s\n" v;*) HiFirrtl.Finput(Obj.magic (Stdlib.List.hd (StringMap.find v map)), trans_ftype v ty map)
-  | Ast.Foutput (v, ty) -> (*printf "%s\n" v;*) HiFirrtl.Foutput(Obj.magic (Stdlib.List.hd (StringMap.find v map)), trans_ftype v ty map)
+  | Ast.Finput (v, ty) -> HiFirrtl.Finput(Obj.magic (Stdlib.List.hd (StringMap.find v map)), trans_ftype v ty map)
+  | Ast.Foutput (v, ty) -> HiFirrtl.Foutput(Obj.magic (Stdlib.List.hd (StringMap.find v map)), trans_ftype v ty map)
 
 let rec revstmts sts res = 
   match sts with 
@@ -328,7 +310,6 @@ let rec pp_expr out e =
  | Eprim_unop (op, e1) -> output_string out "(eprim_unop ?"; pp_expr out e1; output_string out ")"
  | Eprim_binop (bop, e1, e2) -> output_string out "(eprim_binop ?"; pp_expr out e1; output_string out " "; pp_expr out e2; output_string out ")"
  | Emux (e1,e2,e3)  -> output_string out "(emux "; pp_expr out e1; output_string out " "; pp_expr out e2; output_string out " "; pp_expr out e3; output_string out " "; output_string out ")"
- (*| Evalidif (e1,e2)  -> output_string out "(evalidif "; pp_expr out e1; output_string out " "; pp_expr out e2; output_string out ")"*)
  | Ecast (s, e) -> output_string out "(ecast ?"; output_string out " "; pp_expr out e; output_string out ")";
 
 and pp_ref out ref = 
@@ -376,51 +357,6 @@ let pp_cstrt2 out c2 = fprintf out "1 >= "; pp_min_rhs out c2; fprintf out "\n"
 let pp_cstrt2_new out c2 = fprintf out "%d >= " c2.lhs_const2_new;
 Stdlib.List.iter (fun (coe, var) -> fprintf out "%d * x(%d,%d) + " coe (fst (Obj.magic var)) (snd (Obj.magic var))) c2.rhs_terms2_new; fprintf out "0\n"
 
-(*let pp_cstrt out c =
-  match c with
-  | Constraints.Phi1 c1 -> pp_cstrt1 out c1
-  | Phi2 c2 -> pp_cstrt2_new out c2
-
-
-let my_solve c =
-  match Extract_cs.extract_constraints_c c with
-  | Some p ->
-    let (c1map, cs2) = p in
-    let cs1 = Stdlib.List.concat (snd (Stdlib.List.split (HiFirrtl.PVM.elements c1map))) in
-    let dpdcg = build_graph_from_constraints cs1 in
-    let res = SCC.scc_list dpdcg in
-    let res' = Stdlib.List.map (fun l -> Stdlib.List.map (fun v-> nat_to_pair (G.V.label v)) l) res in
-    Solve_fun.solve_alg_check res' c1map cs2
-  | None -> None
-
-let my_coq_InferWidths_fun c =
-  match HiFirrtl.circuit_tmap c with
-    | Some tmap ->
-      (match my_solve c with
-      | Some solution ->
-        let Fcircuit (cv, l) = c in
-        (match l with
-          | [] -> None
-          | h :: l0 ->
-            (match h with
-            | FInmod (mv, ps, ss) ->
-              (match l0 with
-                | [] ->
-                  (match Solve_fun.update_tmap tmap (HiFirrtl.PVM.elements solution) with
-                  | Some newtm ->
-                    (match Solve_fun.coq_InferWidths_transps ps newtm with
-                      | Some nps ->
-                        (match Solve_fun.coq_InferWidths_transss ss newtm with
-                        | Some nss ->
-                          Some (HiFirrtl.Fcircuit (cv, ((FInmod (mv, nps, nss)) :: [])), newtm)
-                        | None -> None)
-                      | None -> None)
-                  | None -> None)
-                | _ :: _ -> None)
-            | FExmod (_, _, _) -> None))
-      | None -> None)
-    | None -> None
-*)
 let pp_bits bs = Stdlib.List.iter (printf "%b;") bs; printf "\n"
 
 let fir_mlir_gt_eq mlir_gt fir_gt =
@@ -461,141 +397,6 @@ let process_string str suffix =
 open Str
 let convert_path path =
   Str.global_replace (Str.regexp "\\(.*/\\)preprowhen/\\(.*\\)\\.fir$") "\\1mlir/\\2.mlir" path
-
-(*let inline_transf in_file hif_ast = 
-  let flatten_cir = Inline.inline_cir stdout hif_ast in 
-  output_string stdout ("flattened\n"); 
-
-  match flatten_cir with
-  | Ast.Fcircuit (v, ml) -> 
-    (* generate numbering *)
-    let ((map0, flag), tmap_ast) = mapcir flatten_cir in 
-    (*StringMap.iter (fun key value -> output_string stdout (key^": ["); Stdlib.List.iter (printf "%d;") value; output_string stdout "]\n") map0;*)
-
-    (* generate firrtl circuit *)
-    let fcir = trans_cir flatten_cir map0 flag tmap_ast in 
-    match HiFirrtl.circuit_tmap fcir with
-    | Some tmap ->(
-    
-    (*let oc_fir = open_out (process_string in_file "_iw.fir") in
-    let oc_cons = open_out (process_string in_file "_cons.txt") in
-    let oc_res_num = open_out (process_string in_file "_res_num.txt") in
-    let oc_res_str = open_out (process_string in_file "_res_str.txt") in*)
-    (*let mfile = convert_path in_file in
-    let mlirf = Mparser.mlirparse mfile in 
-    let inlined = Mast.inline_cir mlirf in 
-    let mlirmap = Mast.mapcir inlined in*)
-
-    (* extract constraint *)
-    let ut0 = (Unix.times()).tms_utime in 
-    match Extract_cs.extract_constraints_c fcir tmap with
-    | Some c1map_cs2 -> let (c1map, cs2) = Stdlib.List.hd c1map_cs2 in
-                let ut1 = (Unix.times()).tms_utime in 
-                let cs1 = Stdlib.List.concat (snd (Stdlib.List.split (HiFirrtl.PVM.elements c1map))) in
-                (*output_string out ("constraint1 length : "^(Stdlib.Int.to_string (Stdlib.List.length cs1))^"\n");
-                output_string out ("constraint2 length : "^(Stdlib.Int.to_string (Stdlib.List.length cs2))^"\n");*)
-                Stdlib.List.iter (pp_cstrt1 stdout) cs1;
-                Stdlib.List.iter (pp_cstrt2 stdout) cs2;
-
-    let ut2 = (Unix.times()).tms_utime in 
-    let g = build_graph_from_constraints cs1 in
-    output_string stdout ("depandency graph built\n");
-
-    let ut3 = (Unix.times()).tms_utime in 
-    let scc_list = SCC.scc_list g in
-    output_string stdout ("compute scc\n");
-    let ut4 = (Unix.times()).tms_utime in 
-    let res = Stdlib.List.map (fun l -> Stdlib.List.map (fun v-> nat_to_pair (G.V.label v)) l) scc_list in
-    
-    (*Stdlib.List.iteri (fun i component ->
-      Printf.printf "SCC %d: [ " (i + 1);
-      Stdlib.List.iter (fun v -> Printf.printf "(%d,%d) " (fst v) (snd v)) component;
-      Printf.printf "]\n"
-    ) res;
-
-    Stdlib.List.iter (fun component ->
-      if (Stdlib.List.length component > 1) then
-        (Stdlib.List.iter (fun v -> Printf.printf "(%d,%d) " (fst v) (snd v)) component;
-        printf "\nis simple_cycle : %b\n" (Solve_fun.is_simple_cycle component cs1);)
-    ) res;
-
-    let hd = [(5,0);(4,0);(3,0)] in
-    let cs = (Extract_cs.extract_cs hd c1map) in
-    let m = Floyd_sc.floyd_loop_map hd cs in
-    let init = Floyd_sc.init_dist_map hd cs in
-    let m' = Floyd_sc.floyd_update (3,0) (5,0) (Stdlib.List.map (fun p -> Floyd_sc.Node p) [(5,0);(4,0);(3,0)]) init in
-
-    Stdlib.List.iter (fun (v, value) -> printf "(%d,%d) : " (fst v) (snd v);
-      Stdlib.List.iter (fun (v', w) -> match v' with
-        | Floyd_sc.Zero -> printf "-> 0 : %d; " w 
-        | Floyd_sc.Node node -> printf "-> (%d,%d) : %d; " (fst node) (snd node) w) (Floyd_sc.NVM.elements value);
-      printf "\n")
-         (HiFirrtl.PVM.elements m');
-
-    Stdlib.List.iter (pp_cstrt1 stdout) cs;
-    let hd_cs = Stdlib.List.nth cs 0 in
-    pp_cstrt1 stdout hd_cs;
-    
-    (match Simple_cycle.simplify_constraint (4,0) 2 1 1 hd_cs cs initial_valuation with
-    | Some value -> printf "%d\n" value
-    | _ -> printf "no value\n");
-
-    match Simple_cycle.solve_simple_cycle' 3 (4,0) (Extract_cs.extract_cs hd c1map) initial_valuation with
-    | Some _ -> printf "solved\n";
-    | _ -> printf "wrong\n";);
-    match Scc.solve_ubs hd hd (Extract_cs.extract_cs hd c1map) with
-             | Some nv -> printf "solved";
-             | _ -> printf "wrong ubs\n";);
-    match Scc.solve_ub (2,0) hd (Extract_cs.extract_cs hd c1map) with
-    | Some ub -> printf "%d\n" ub;
-    | _ -> printf "wrong ub\n";);
-    Stdlib.List.iter (pp_cstrt1 stdout) (Scc.substitute_vs [(3,0);(4,0)] (Extract_cs.extract_cs hd c1map));
-    *)
-    
-
-    let ut5 = (Unix.times()).tms_utime in 
-                (match Solve_fun.solve_alg res [] initial_valuation c1map with
-                | Some values -> 
-                  let ut6 = (Unix.times()).tms_utime in 
-                  (*output_string stdout ("solved\n");*)
-                  
-                  (* update and print result *)
-                  (match Solve_fun.update_tmap tmap (HiFirrtl.PVM.elements values) with
-                  | Some newtm ->
-                    Stdlib.List.iter (fun (var, value) -> printf (*oc_res_num*) "x(%d,%d) : %d\n" (fst (Obj.magic var)) (snd (Obj.magic var)) value) (HiFirrtl.PVM.elements values);
-                    (*match my_coq_InferWidths_fun fcir with
-                    | Some (newc, _) -> Printfir.pp_fcircuit_fir oc_fir v newc
-                    | _ -> output_string stdout ("no inferred circuit\n"));*)
-
-                    (*output_string stdout ("mlir tmap:\n");
-                    StringMap.iter (fun key value -> 
-                      (*output_string stdout (key^": "); Mast.pp_type stdout value; output_string stdout "\n";*)
-                      match HiFirrtl.VM.find (Obj.magic (Stdlib.List.hd (Stdlib.List.rev (StringMap.find key map0)))) newtm with
-                      | Some (ft, _) -> 
-                        if (fir_mlir_ty_eq value ft) then printf "" else (
-                            printf "%s\n%s : " in_file key; Printmlir.pp_ftype_mlir stdout ft; printf "<->"; Mast.pp_type stdout value; printf "\n")
-                      | _ -> printf "%s not find\n" key
-                      ) mlirmap;*)
-
-                    (*output_string stdout ("coq inferred tmap:\n");
-                    StringMap.iter (fun key value -> if (Stdlib.List.length value = 1) then 
-                      (printf "%s : " key; 
-                      match HiFirrtl.VM.find (Obj.magic (Stdlib.List.hd (Stdlib.List.rev (value)))) newtm with
-                      | Some (ft, _) -> Printmlir.pp_ftype_mlir stdout ft; printf "\n";
-                      | _ -> printf "wrong infer\n")) map0;*)
-
-                    (* scale and time *)
-                    (*printf "amount of implicit gtyp components : %d\n" (Stdlib.List.length (HiFirrtl.PVM.elements values));
-                    printf "extract constraints : %f\ndraw graph : %f\ntarjan : %f\niw : %f\n"
-                      (Float.sub ut1 ut0) (Float.sub ut3 ut2) (Float.sub ut4 ut3) (Float.sub ut6 ut5);*)
-                  | _ -> printf "update error\n");
-
-                | _ -> printf "solve error\n";);
-    (*close_out oc_cons; close_out oc_fir; close_out oc_res_num; close_out oc_res_str*)
-
-    | None -> output_string stdout "error extracting constraints\n");
-    | _ -> output_string stdout "no circuit_map\n"*)
-
 
 let try_mlir_parse f =
   let mlirf = Mparser.mlirparse f in 
