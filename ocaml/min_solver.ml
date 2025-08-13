@@ -28,8 +28,8 @@ let my_solve_helper c1map cs2 =
   let res' = tr_map (fun l -> tr_map (fun v-> nat_to_pair (G.V.label v)) l) res in
   InferWidths.solve_alg_check res' c1map cs2
 
-  let my_solve_fun c tmap =
-    let ut0 = (Unix.times()).tms_utime in 
+let my_solve_fun c tmap =
+  let ut0 = (Unix.times()).tms_utime in 
     match extract_constraints_c c tmap with
     | Some (c1maps, cs2) -> let ut1 = (Unix.times()).tms_utime in 
       let solution = Stdlib.List.fold_left (fun res c1map ->
