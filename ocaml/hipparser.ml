@@ -7,12 +7,8 @@ let args = [
 let usage = "Usage: hipparse FILE\n"
 
 let anon file =
-  (*let gc = Gc.get () in
-  Printf.printf "All GC settings:\n%!";
-  (Gc.print_stat stdout);
-  Printf.printf "%s\n" file;*)
   let f = (Parser.hiparse file) in 
-  let _ = Min_solver.find_segmentation_fault (*Ast.pp_file*) (*Transhiast.inline_transf*) (*print_iw_mlir*) (*Inline.inline_cir*) file f in
+  let _ = Against_firtool.compare_with_mlir (*Against_gurobi.store_cons_res*) (*Min_solver.print_iw_fir*) file f in
   ()
 
 let _ = parse args anon usage

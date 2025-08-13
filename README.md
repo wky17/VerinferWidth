@@ -17,25 +17,25 @@ To compile the Coq formalization, the following packages are required.
 ## Initialize
 ```bash
 # generate configuration file
-coq_makefile -f _CoqProject -o Makefile;
+coq_makefile -f _CoqProject -o Makefile
 
 # initialize an ocaml project
-dune init proj ocaml;
+dune init proj ocaml
 
 # make and the extracted OCaml files are generated in ocaml/extraction
-make;
+make
 
 # enter the subdirectory
-cd ocaml;
+cd ocaml
 ```
 
 ## Run
-This tool provides bitwidth inference capabilities for FIRRTL (Flexible Intermediate Representation for RTL) circuits. To test different functionalities, modify the called **function name** in `hipparser.ml`.
+This tool provides bitwidth inference capabilities for FIRRTL (Flexible Intermediate Representation for RTL) circuits. To test different functionalities, modify the called **function name** in `hipparser.ml` and compile.
 
 **Important Preprocessing Step**:  
 FIRRTL uses indentation to determine nested levels of `when...else...` blocks, which complicates parsing. **Always** preprocess FIRRTL files with:
 ```bash
-python transform_when_blocks.py example.fir
+python transform_when_blocks.py ./your/path/to/example.fir
 ```
 
 ---
@@ -43,7 +43,7 @@ python transform_when_blocks.py example.fir
 ### 1. OCaml inferWidths
 **Function name**: `Min_solver.print_iw_fir` (set in `hipparser.ml`)  
 
-- **Input**: HiFIRRTL file (e.g., `example.fir`)  
+- **Input**: FIRRTL file (e.g., `example.fir`)  
 - **Output**: Circuit with inferred bitwidths (`example_iw.fir`)  
 
 ```
@@ -59,10 +59,10 @@ The output file `example_iw.fir` can be processed by downstream tools like `firt
 
 ---
 
-### 2. Compare against Gurobi
+### 2. Compare with Gurobi
 **Function name**: `Against_gurobi.store_cons_res`  (set in `hipparser.ml`)  
 
-- **Input**: HiFIRRTL file (e.g., `example.fir`)  
+- **Input**: FIRRTL file (e.g., `example.fir`)  
 - **Outputs**:
   Bitwidth constraints (`example_cons.txt`) and our result (`example_res_num.txt`)
 
@@ -80,9 +80,9 @@ To compare with Gurobi:
 python compare_with_gurobi.py example_cons.txt
 ```
 
-Please put `example_res_num.txt` in the same path of `example_cons.txt`, it is read automatically.
+Please place `example_res_num.txt` in the same directory as `example_cons.txt`, it is read automatically.
 
-**Note that** Gurobi only supports basic `a = min(b, c)` expressions (all variables). Manually adjust constraints if needed.  
+**Note that** Gurobi only supports basic `a = min(b, c)` expressions (all variables). Manually adjust the constraints if needed.  
 **Example Adjustment**:  
 
 - Original: `x(85325,0) >= min(x(85324,0),2)`  
@@ -95,7 +95,7 @@ Please put `example_res_num.txt` in the same path of `example_cons.txt`, it is r
 
 ---
 
-### 3. Compare against firtool
+### 3. Compare with firtool
 
 **Prerequisites**:
 
@@ -106,13 +106,13 @@ Please put `example_res_num.txt` in the same path of `example_cons.txt`, it is r
 
 2. Ignore connection statements, retain definitions
    ```bash
-   ./filter_mlir.sh example.mlir
+   ./process_mlir.sh example.mlir
    ```
 
 **Function name**: `Against_firtool.compare_with_mlir` (set in `hipparser.ml`)  
 
-- **Input**: HiFIRRTL file (e.g., `example.fir`) and inferred MLIR file from firtool (e.g., `example.mlir`)
-- **Output**: firtool gives the same result as ours or not
+- **Input**: FIRRTL file (e.g., `example.fir`) and inferred MLIR file from firtool (e.g., `example.mlir`)
+- **Output**: firtool gives the same result as ours or not?
 
 ```
 # compile the project
