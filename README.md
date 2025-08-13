@@ -1,4 +1,4 @@
-# VerinferWidth
+#  BFWInferWidths
 ## Abstract
 FIRRTL is an intermediate representation language for Register Transfer Level (RTL) hardware designs. In FIRRTL programs, the bit widths of some components may not be given explicitly, thus they must be inferred during compilation. In mainstream FIRRTL compilers such as firtool, the width inference is conducted by a compilation pass called InferWidths, which may fail even for simple FIRRTL programs. In this paper, we investigate the width inference problem for FIRRTL programs. We show that if the constraint obtained from a FIRRTL program is satisfiable, there must exist a unique least solution. Based on this result, we propose a complete procedure for solving the width inference problem, which can handle programs while firtool may fail. We implement the procedure in Rocq and prove its correctness. From the Rocq implementation, we extract an OCaml implementation, which is the first formally verified InferWidths pass. Extensive experiments demonstrate that it can solve more instances than the official InferWidths pass in firtool using less time.
 
@@ -60,11 +60,11 @@ The output file `example_iw.fir` can be processed by downstream tools like `firt
 ---
 
 ### 2. Compare with Gurobi
-**Function name**: `Against_gurobi.store_cons_res`  (set in `hipparser.ml`)  
+**Function name**: `Against_gurobi.store_cons_res` (set in `hipparser.ml`)  
 
 - **Input**: FIRRTL file (e.g., `example.fir`)  
 - **Outputs**:
-  Bitwidth constraints (`example_cons.txt`) and our result (`example_res_num.txt`)
+  FIRRTL Width INEquality (FIRWINE) constraints (`example_cons.txt`) and our result (`example_res_num.txt`)
 
 ```
 # compile the project
