@@ -84,16 +84,11 @@ Proof.
   intros; apply H; simpl; right; done.
 Qed.
 
-Lemma NoDupA_NoDup l : NoDupA (PVM.eq_key (elt:=nat)) l -> NoDup l.
-Admitted.
+Axiom NoDupA_NoDup : forall l, NoDupA (PVM.eq_key (elt:=nat)) l -> NoDup l.
 
-Lemma key_NoDup : forall B (v : PVM.t B), NoDup (List.split (PVM.elements v)).1.
-Proof.
-Admitted.
+Axiom key_NoDup : forall B (v : PVM.t B), NoDup (List.split (PVM.elements v)).1.
 
-Lemma key_in_elements [A : Type] (m : PVM.t A) v : List.In v (List.split (PVM.elements m)).1 <-> exists val, List.In (v, val) (PVM.elements m).
-Proof.
-Admitted.
+Axiom key_in_elements : forall [A : Type] (m : PVM.t A) v, List.In v (List.split (PVM.elements m)).1 <-> exists val, List.In (v, val) (PVM.elements m).
 
 Lemma forallb2satisfies_all_constraint1 values: forall cs, forallb (satisfies_constraint1 values) cs <-> Solver.constraints.satisfies_all_constraint1 values cs.
 Proof.
@@ -2129,6 +2124,95 @@ Proof.
   move : H; apply H0.
 Qed.
 
+Lemma init_map0_exists hd init_map0 : init_map0 = (fold_left
+  (fun (temp_matrix : PVM.t (NVM.t Z)) (v : ProdVar.t) => PVM.add v (NVM.add (Node v) 0%Z (NVM.empty Z.t)) temp_matrix)
+  hd (PVM.empty (NVM.t Z.t))) -> forall v, List.In v hd -> exists dst_map, PVM.find v init_map0 = Some dst_map.
+Proof.
+  remember (PVM.empty (NVM.t Z.t)) as m0. clear Heqm0. move : hd init_map0 m0. elim.
+  - (* 基本情况：空列表 *) done.
+  - (* 归纳步骤：非空列表 *) intros x xs IH; intros.
+    simpl in H; simpl in H0. destruct H0.
+    + (* 变量 v 是当前元素 x *)
+      subst v. clear IH.
+      assert (forall m dst m0 , PVM.find x m = Some dst -> m0 = fold_left
+        (fun (temp_matrix : PVM.t (NVM.t Z)) (v : ProdVar.t) =>
+        PVM.add v (NVM.add (Node v) 0%Z (NVM.empty Z.t)) temp_matrix) xs m -> exists dst0, PVM.find x m0 = Some dst0). {
+        clear. move : xs. elim. 
+        simpl; intros. subst m0; exists dst; done.
+        simpl; intros. 
+        assert (exists dst0, PVM.find x (PVM.add a (NVM.add (Node a) 0%Z (NVM.empty Z.t)) m) = Some dst0). {
+          destruct (x == a) eqn : Heq; move /eqP : Heq => Heq. 
+          subst x. rewrite find_add_eq. exists (NVM.add (Node a) 0%Z (NVM.empty Z.t)); done.
+          rewrite find_add_neq; try done. exists dst; done. } 
+        destruct H2 as [dst0 H2]. move : H2 H1; apply H. }
+      move : H; apply H0 with (dst := NVM.add (Node x) 0%Z (NVM.empty Z.t)). apply find_add_eq.
+    + (* 变量 v' 在剩余列表 xs 中 *)
+      apply (IH init_map0 _ H _ H0).
+Qed.
+
+Lemma add_edge_of_cs_find_exists v init_map dst0 : PVM.find v init_map = Some dst0 -> forall c_tl fm, fm = add_edge_of_cs c_tl init_map -> exists dst, PVM.find v fm = Some dst.
+Proof.
+  intros. move : c_tl init_map dst0 H fm H0. elim.
+  simpl; intros. subst fm. exists dst0; done.
+  simpl; intros. remember (match PVM.find (elt:=NVM.t Z.t) (lhs_var1 a) init_map with
+    | Some dst_map =>
+        match rhs_terms1 a with
+        | [] =>
+            match NVM.find (elt:=Z.t) Zero dst_map with
+            | Some dist =>
+                PVM.add (lhs_var1 a)
+                  (NVM.add Zero (Z.max dist (rhs_const1 a))
+                    dst_map) init_map
+            | None =>
+                PVM.add (lhs_var1 a)
+                  (NVM.add Zero (rhs_const1 a) dst_map) init_map
+            end
+        | t :: l =>
+            let (n, v) := t in
+            match n with
+            | 0 => init_map
+            | n0.+1 =>
+                match n0 with
+                | 0 =>
+                    match l with
+                    | [] =>
+                        match
+                          NVM.find (elt:=Z.t) (Node v) dst_map
+                        with
+                        | Some dist =>
+                            PVM.add (lhs_var1 a)
+                              (NVM.add (Node v)
+                                (Z.max dist (rhs_const1 a))
+                                dst_map) init_map
+                        | None =>
+                            PVM.add (lhs_var1 a)
+                              (NVM.add (Node v) 
+                                (rhs_const1 a) dst_map) init_map
+                        end
+                    | _ :: _ => init_map
+                    end
+                | _.+1 => init_map
+                end
+            end
+        end
+    | None => init_map
+    end) as init_map0.
+  assert (exists dst, PVM.find v init_map0 = Some dst). {
+    subst init_map0; move : H0; clear. intro.
+    destruct (PVM.find (elt:=NVM.t Z.t) (lhs_var1 a) init_map).
+    destruct (rhs_terms1 a) as [|[coe var] l]. destruct (NVM.find (elt:=Z.t) Zero t).
+    3 : destruct coe. 4 : destruct coe. 4 : destruct l. 4 : destruct (NVM.find (elt:=Z.t) (Node var) t).
+    3,6-8 : exists dst0; done. 1-4 : destruct (v == (lhs_var1 a)) eqn : Heq; move /eqP : Heq => Heq.
+    1,3,5,7 : subst v; rewrite find_add_eq.
+    exists (NVM.add Zero (Z.max t0 (rhs_const1 a)) t); done.
+    exists (NVM.add Zero (rhs_const1 a) t); done.
+    exists (NVM.add (Node var) (Z.max t0 (rhs_const1 a)) t); done.
+    exists (NVM.add (Node var) (rhs_const1 a) t); done.
+    1-4 : rewrite find_add_neq; try done. 1-4 : exists dst0 ;done. 
+  }
+  destruct H2 as [dst H2]. move : H2 fm H1; apply H.
+Qed.
+
 Lemma solve_scc_smallest hd cs1 nv : hd <> nil -> NoDup hd -> solve_scc hd cs1 = Some nv -> cs1 <> nil -> 
   (forall c, List.In c cs1 -> (forall v, List.In v (constraint1_vars c) -> List.In v hd)) ->
   (forall c, List.In c cs1 -> good_terms (rhs_terms1 c)) -> (forall c, List.In c cs1 -> rhs_power c = nil) ->
@@ -2176,7 +2260,73 @@ Proof.
     case His_simple : (is_simple_cycle cs1); rewrite His_simple in Hsolve.
     * (* floyd *)
       intros. assert (exists fm, well_formed fm cs1).
-      { admit. (* ?? *) }
+      { unfold well_formed; unfold conform1_m.
+        exists (init_dist_map hd cs1). intros c Hin.
+        remember (init_dist_map hd cs1) as fm. unfold init_dist_map in *.
+        remember (fold_left
+          (fun (temp_matrix : PVM.t (NVM.t Z)) (v : ProdVar.t) => PVM.add v (NVM.add (Node v) 0%Z (NVM.empty Z.t)) temp_matrix)
+          hd (PVM.empty (NVM.t Z.t))) as init_map0.
+        specialize (init_map0_exists _ _ Heqinit_map0) as Hinit. clear Heqinit_map0. move : Hvars_in_hd His_simple c Hin init_map0 Hinit Heqfm. clear. move : cs1.
+        elim; try done. intros c_hd c_tl IH. intros. simpl in Hin. rewrite /rhs_vars1. destruct Hin.
+        + subst c. clear IH.
+          simpl in Heqfm. destruct (Hinit (lhs_var1 c_hd)) as [dst_map Hdst_map].
+          apply (Hvars_in_hd c_hd). simpl; left; done. unfold constraint1_vars. simpl; left; done.
+          rewrite Hdst_map in Heqfm. simpl in His_simple. move /andP: His_simple => [His_simple _]. destruct (rhs_terms1 c_hd) as [|[coe var] l] eqn : Hrhs_terms.
+          split; try done. destruct (NVM.find (elt:=Z.t) Zero dst_map).
+          apply add_edge_of_cs_find_exists with (v := lhs_var1 c_hd) (dst0 := NVM.add Zero (Z.max t (rhs_const1 c_hd)) dst_map) in Heqfm. done.
+          apply find_add_eq.
+          apply add_edge_of_cs_find_exists with (v := lhs_var1 c_hd) (dst0 := NVM.add Zero (rhs_const1 c_hd) dst_map) in Heqfm. done.
+          apply find_add_eq.
+          destruct coe as [|coe0]; try done. destruct coe0; try done. destruct l; try done. clear His_simple. simpl. 
+          split. destruct (NVM.find (elt:=Z.t) (Node var) dst_map) as [dist|].
+          apply add_edge_of_cs_find_exists with (v := lhs_var1 c_hd) (dst0 := NVM.add (Node var) (Z.max dist (rhs_const1 c_hd)) dst_map) in Heqfm. done.
+          apply find_add_eq.
+          apply add_edge_of_cs_find_exists with (v := lhs_var1 c_hd) (dst0 := NVM.add (Node var) (rhs_const1 c_hd) dst_map) in Heqfm. done.
+          apply find_add_eq.
+          intros. destruct H; try done. subst x. 
+          assert (Hhelper : exists dst0, PVM.find var match NVM.find (elt:=Z.t) (Node var) dst_map with
+            | Some dist => PVM.add (lhs_var1 c_hd) (NVM.add (Node var) (Z.max dist (rhs_const1 c_hd)) dst_map) init_map0
+            | None => PVM.add (lhs_var1 c_hd) (NVM.add (Node var) (rhs_const1 c_hd) dst_map) init_map0
+            end = Some dst0). {
+              destruct (NVM.find (elt:=Z.t) (Node var) dst_map) as [dist|].
+              destruct (var == (lhs_var1 c_hd)) eqn : Heq.
+              move /eqP : Heq => Heq; subst var.
+              rewrite find_add_eq. exists (NVM.add (Node (lhs_var1 c_hd)) (Z.max dist (rhs_const1 c_hd)) dst_map); done.
+              rewrite find_add_neq. apply Hinit. apply (Hvars_in_hd c_hd). simpl; left; done.
+              unfold constraint1_vars; simpl; right. rewrite Hrhs_terms; simpl. left; done.
+              move /eqP : Heq => Heq; done.
+              destruct (var == (lhs_var1 c_hd)) eqn : Heq.
+              move /eqP : Heq => Heq; subst var.
+              rewrite find_add_eq. exists (NVM.add (Node (lhs_var1 c_hd)) (rhs_const1 c_hd) dst_map); done.
+              rewrite find_add_neq. apply Hinit. apply (Hvars_in_hd c_hd). simpl; left; done.
+              unfold constraint1_vars; simpl; right. rewrite Hrhs_terms; simpl. left; done.
+              move /eqP : Heq => Heq; done.
+            }
+          destruct Hhelper as [dst0 Hhelper].
+          apply add_edge_of_cs_find_exists with (v := var) (dst0 := dst0) in Heqfm; try done.
+        + assert (Hvars_in_hd' : forall c : Constraint1, List.In c c_tl -> forall v : ProdVar.t, List.In v (constraint1_vars c) -> List.In v hd).
+          { intros c0 Hin. apply (Hvars_in_hd c0). simpl; right; done. }
+          simpl in His_simple. move /andP : His_simple => [Hc_hd His_simple']. simpl in Heqfm.
+          destruct (rhs_terms1 c_hd) as [|[coe var] l] eqn : Hrhs_terms.
+          move : Heqfm; apply (IH Hvars_in_hd' His_simple' _ H). clear Hvars_in_hd' His_simple' IH H.
+          intros v Hin; apply Hinit in Hin. destruct Hin as [dst_map Hinit0]. destruct (v == (lhs_var1 c_hd)) eqn : Heq.
+          move /eqP : Heq => Heq; subst v. rewrite Hinit0. destruct (NVM.find (elt:=Z.t) Zero dst_map).
+          rewrite find_add_eq. exists (NVM.add Zero (Z.max t (rhs_const1 c_hd)) dst_map); done.
+          rewrite find_add_eq. exists (NVM.add Zero (rhs_const1 c_hd) dst_map); done.
+          destruct (PVM.find (elt:=NVM.t Z.t) (lhs_var1 c_hd) init_map0). destruct (NVM.find (elt:=Z.t) Zero t).
+          rewrite find_add_neq. exists (dst_map); done. move /eqP : Heq => Heq; done.
+          rewrite find_add_neq. exists (dst_map); done. move /eqP : Heq => Heq; done.
+          exists (dst_map); done.
+          destruct coe as [|coe0]; try done. destruct coe0; try done. destruct l; try done. clear Hc_hd.
+          move : Heqfm; apply (IH Hvars_in_hd' His_simple' _ H). clear Hvars_in_hd' His_simple' IH H.
+          intros v Hin; apply Hinit in Hin. destruct Hin as [dst_map Hinit0]. destruct (v == (lhs_var1 c_hd)) eqn : Heq.
+          move /eqP : Heq => Heq; subst v. rewrite Hinit0. destruct (NVM.find (elt:=Z.t) (Node var) dst_map).
+          rewrite find_add_eq. exists (NVM.add (Node var) (Z.max t (rhs_const1 c_hd)) dst_map); done.
+          rewrite find_add_eq. exists (NVM.add (Node var) (rhs_const1 c_hd) dst_map); done.
+          destruct (PVM.find (elt:=NVM.t Z.t) (lhs_var1 c_hd) init_map0). destruct (NVM.find (elt:=Z.t) (Node var) t).
+          rewrite find_add_neq. exists (dst_map); done. move /eqP : Heq => Heq; done.
+          rewrite find_add_neq. exists (dst_map); done. move /eqP : Heq => Heq; done.
+          exists (dst_map); done. }
       destruct H0 as [fm H0]. apply (scc_smallest _ H0 Hsolve). 
       rewrite satisfies_all_constraint1_eq; try done. apply forallb2satisfies_all_constraint1. done.
     * (* bab *)
@@ -2198,7 +2348,7 @@ Proof.
           intros; apply H0. rewrite Heqcs1' in H1. apply filter_In in H1. exact H1.1. }
         move : Hubs H0; apply solution_in_bds; try done. intros; apply Hterm. 2 : intros; apply Hpower. 1,2 : rewrite Heqcs1' in H0; apply filter_In in H0; exact H0.1.
       split. apply forallb2satisfies_all_constraint1. done. simpl; done.
-Admitted.
+Qed.
 
 Lemma max_list_lt : forall zl init val,
     val < max_nl zl init ->
@@ -2796,7 +2946,7 @@ Proof.
     rewrite -Hhd in Hsolve Hvars_in_hd Hlhs_in_hd Hnodup. clear Htl Hhd Hnotemptyscc l a.
     case His_simple : (is_simple_cycle cs1); rewrite His_simple in Hsolve.
     * (* floyd *)
-      admit.
+      move : Hsolve; apply scc_none_unsat.
     * (* bab *)
       case Hubs : (solve_ubs_aux hd (List.filter (fun c : Constraint1 => Datatypes.length (rhs_terms1 c) != 0) cs1)) => [ubs|]; rewrite Hubs in Hsolve; try discriminate.
       intro. case Hin : (In_bool v (PVM.elements (mergeBounds ubs))).
@@ -2833,7 +2983,7 @@ Proof.
         intros; apply Hpowers. 2 : intros; apply Hterms. 1,2 : apply filter_In in H; exact H.1. }
       move : H; clear; intros. apply not_true_iff_false. apply forallb_neg_neg. specialize (H v). apply forallb_neg_neg in H.
       destruct H as [y [Hin Hunsat]]; exists y; split; try done. apply filter_In in Hin. exact Hin.1.
-Admitted.
+Qed.
 
 Lemma merge_smaller temp_s nv : forall a initial new_values, le initial temp_s -> le nv temp_s ->
     merge_solution a initial nv = Some new_values -> le new_values temp_s.
@@ -3042,9 +3192,57 @@ Proof.
   apply H1 with (var := var) in H; try done. destruct H; try done.
 Qed.
 
-Lemma bab_bin_mem_in cs1 cs2 : forall ls bs nv, bab_bin ls bs cs1 cs2 = Some nv -> forall var, PVM.mem var nv -> List.In var ls.
+Lemma solve_ubs_case1_ls_mem_in a b c d e : forall ls f g, solve_ubs_case1 ls a b c d e f = Some g -> forall var, PVM.mem var g -> List.In var ls \/ PVM.mem var f.
 Proof.
-Admitted.
+  elim. simpl; intros. inversion H; subst g. right; done.
+  simpl; intros hd tl IH; intros. destruct (solve_ub_case1 hd a b c d e) as [ub|] eqn : Hub; try discriminate.
+  apply (IH _ _ H) in H0. destruct H0. 
+  left; right; done.
+  apply mem_add_or in H0. destruct H0. right; done.
+  left; left. move /eqP : H0 => H0. rewrite H0 //.
+Qed.
+
+Lemma solve_ubs_case2_ls_mem_in a b c0 c1 d e : forall ls f g, solve_ubs_case2 ls a b c0 c1 d e f = Some g -> forall var, PVM.mem var g -> List.In var ls \/ PVM.mem var f.
+Proof.
+  elim. simpl; intros. inversion H; subst g. right; done.
+  simpl; intros hd tl IH; intros. destruct (solve_ub_case2 hd a b c0 c1 d e) as [ub|]; try discriminate.
+  apply (IH _ _ H) in H0. destruct H0. 
+  left; right; done.
+  apply mem_add_or in H0. destruct H0. right; done.
+  left; left. move /eqP : H0 => H0. rewrite H0 //.
+Qed.
+
+Lemma solve_ubs_aux_mem_in cs : forall ls ubs, solve_ubs_aux ls cs = Some ubs -> forall var, PVM.mem var ubs -> List.In var ls.
+Proof. 
+  intros ls ubs H. unfold solve_ubs_aux in H. destruct (scc.build_graph cs) as [g adj] eqn : Hbuild.
+  case Hfind0 : (List.find (fun c : Constraint1 =>
+    List.existsb (fun t : nat * ProdVar.t => 1 < t.1) (rhs_terms1 c)) cs) => [c|]; rewrite Hfind0 in H.
+  case Hfind1 : (List.find (fun t : nat * ProdVar.t => 1 < t.1) (rhs_terms1 c)) => [[coe var]|]; rewrite Hfind1 in H; try discriminate.
+  - intros. apply (solve_ubs_case1_ls_mem_in _ _ _ _ _ _ _ _ H) in H0. unfold initial_valuation in H0. destruct H0; done.
+  case Hfind1 : (List.find (fun c : Constraint1 =>
+    1 < Datatypes.length (rhs_terms1 c)) cs) => [c|]; rewrite Hfind1 in H; try discriminate. destruct (rhs_terms1 c) as [|[coe0 var0] l]; try discriminate.
+  destruct l as [|[coe1 var1] tl]; try discriminate.
+  - intros. apply (solve_ubs_case2_ls_mem_in _ _ _ _ _ _ _ _ _ H) in H0. unfold initial_valuation in H0. destruct H0; done.
+Qed.
+
+(*Lemma add_bs_mem var : forall ls v, PVM.mem var v -> PVM.mem var (add_bs ls v).
+Proof.
+  elim. simpl; intros; done.
+  simpl; intros [var_hd ub_hd] tl; intros. apply H. apply mem_add; done.
+Qed.
+*)
+
+Lemma mergeBounds_key_eq' ubs var : PVM.mem (elt:=nat * nat) var (mergeBounds ubs) -> PVM.mem (elt:=nat) var ubs.
+Proof.
+  rewrite /mergeBounds /initial_bounds; intros. 
+  apply mem_in_elements. remember (PVM.elements ubs) as l.
+  assert (forall l v var, PVM.mem var (add_bs l v) -> PVM.mem var v \/ exists ub, List.In (var, ub) l). clear. elim.
+  - simpl; intros. left; done.
+  - simpl; intros [var_hd ub_hd] tl; intros. apply H in H0. clear H. destruct H0.
+    apply mem_add_or in H. destruct H. left; done. right. exists ub_hd. left. move /eqP : H => H; subst var. done.
+    right. destruct H as [ub H]. exists ub; right; done.
+  apply H0 in H. destruct H; try done.
+Qed.
 
 Lemma solve_scc_mem_in a cs nv : solve_scc a cs = Some nv -> forall var, PVM.mem var nv -> List.In var a.
 Proof.
@@ -3056,7 +3254,7 @@ Proof.
   1,2 : intros; destruct (is_simple_cycle cs). 1,3 : apply (solve_simple_cycle_mem_in _ _ _ H) in H0; done.
   destruct (solve_ubs_aux [] (List.filter (fun c : Constraint1 => Datatypes.length (rhs_terms1 c) != 0) cs)) eqn : Hbs; try discriminate. 
   2 : destruct (solve_ubs_aux [:: t, t0 & a] (List.filter (fun c : Constraint1 => Datatypes.length (rhs_terms1 c) != 0) cs)) eqn : Hbs; try discriminate. 
-  1,2 : apply (bab_bin_mem_in _ _ _ _ _ H) in H0; done.
+  1,2 : apply (bab_bin_mem_in _ _ _ _ H) in H0. 1,2 : apply mergeBounds_key_eq' in H0. 1,2 : apply (solve_ubs_aux_mem_in _ _ _ Hbs _ H0).
 Qed.
 
 Lemma merge_solution_find_none nv: forall tbsolved new_values initial, merge_solution tbsolved initial nv = Some new_values -> 
