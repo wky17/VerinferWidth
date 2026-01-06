@@ -37,5 +37,6 @@ WORKDIR /app
 COPY . .
 
 # 验证入口点
-CMD ["sh", "-c", "coq_makefile -f _CoqProject -o Makefile && make"]
-#CMD coq_makefile -f app/_CoqProject -o app/Makefile
+#CMD ["sh", "-c", "mkdir ocaml_try && cd ocaml_try && ls ../ocaml/demo"]
+CMD ["sh", "-c", "./build_and_run.sh"]
+#CMD []
