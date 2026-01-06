@@ -37,6 +37,5 @@ WORKDIR /app
 COPY . .
 
 # 验证入口点
-#CMD ["ls app"]
 CMD ["sh", "-c", "coq_makefile -f _CoqProject -o Makefile && make"]
 #CMD coq_makefile -f app/_CoqProject -o app/Makefile

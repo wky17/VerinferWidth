@@ -7,7 +7,7 @@ Solver.TopoSort Solver.extract_cs Solver.inferWidths.
 From mathcomp.tarjan Require Import kosaraju.
 
 Extraction Language OCaml.
-Cd "ocaml/extraction".
+Cd "ocaml_try/extraction".
 Extraction Inline ssrbool.predT ssrbool.pred_of_argType.
 Separate Extraction
          HiFirrtl.Qrev extract_cswithmin.extract_constraints_c extract_cs.expandwhens
