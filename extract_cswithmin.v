@@ -31,7 +31,14 @@ Fixpoint min_rhs_value (v : Valuation) (rhs : min_rhs) : Z.t :=
   | Expr r => terms_value v (regular_terms r) (regular_const r) + power_value v (regular_power r)
   | Min e1 e2 => Z.min (min_rhs_value v e1) (min_rhs_value v e2)
   end.
-
+  
+(* inequality of form: lhs_ >= min(fr1_ + const1_, fr2_ + const2_)
+This is introduced to indicate the "rem" operation
+  e.g. z <= rem(x,y) indicates lhs_(w_z), fr1_(w_x), const1_(0), fr2_(w_y),
+  const2_(0)
+The use of "const" here is to take into account the case where the expression
+is a constant. However, it is not actually utilized because in MLIR,
+constants are also declared with variable names. *)
 Record Constraint_Min : Type := {
   lhs_var_min : ProdVar.t;
   rhs_expr_min : min_rhs

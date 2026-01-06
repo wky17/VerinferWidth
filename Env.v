@@ -20,7 +20,6 @@ Fuint : nat -> fgtyp
 | Fclock
 | Freset (* HiFIRRTL only *)
 | Fasyncreset
-(*| Fanalog : nat -> fgtyp*) (* TBD, HiFirrtl *)
 .
 
 (* Size of types *)

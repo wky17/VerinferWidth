@@ -338,16 +338,8 @@ HB.instance Definition _ := hasDecEq.Build hfreg hfreg_eqP.
   | Sinst : var -> var -> hfstmt
   | Snode : var -> hfexpr -> hfstmt
   | Sfcnct : href -> hfexpr -> hfstmt
-  (* | Spcnct : href -> hfexpr -> hfstmt *)
   | Sinvalid : href -> hfstmt
-  (* | Sattach : seq var -> fstmt *)
   | Swhen : hfexpr -> hfstmt_seq -> hfstmt_seq -> hfstmt
-  (* | Sstop : hfexpr -> hfexpr -> nat -> hfstmt *)
-  (* | Sprintf (* TBD *) *)
-  (* | Sassert (* TBD *) *)
-  (* | Sassume (* TBD *) *)
-  (* | Sdefname : var -> fstmt *) (* TBD *)
-  (* | Sparam : var -> fexpr -> fstmt *) (* TBD *)
   with hfstmt_seq : Type :=
        | Qnil
        | Qcons : hfstmt -> hfstmt_seq -> hfstmt_seq.
@@ -366,16 +358,8 @@ HB.instance Definition _ := hasDecEq.Build hfreg hfreg_eqP.
   | Sinst vx wx, Sinst vy wy => (vx == vy) && (wx == wy)
   | Snode vx ex, Snode vy ey => (vx == vy) && (ex == ey)
   | Sfcnct rx ex, Sfcnct ry ey => (rx == ry) && (ex == ey)
-  (* | Spcnct : href -> hfexpr -> hfstmt *)
   | Sinvalid rx, Sinvalid ry => rx == ry
-  (* | Sattach : seq var -> fstmt *)
   | Swhen ex tx fx, Swhen ey ty fy => (ex == ey) && hfstmt_seq_eqn tx ty && hfstmt_seq_eqn fx fy
-  (* | Sstop : hfexpr -> hfexpr -> nat -> hfstmt *)
-  (* | Sprintf (* TBD *) *)
-  (* | Sassert (* TBD *) *)
-  (* | Sassume (* TBD *) *)
-  (* | Sdefname : var -> fstmt *) (* TBD *)
-  (* | Sparam : var -> fexpr -> fstmt *) (* TBD *)
   | _, _ => false
   end
   with hfstmt_seq_eqn (x y : hfstmt_seq) : bool :=

@@ -140,7 +140,6 @@ Compute (Badd == Bsub).
 
   Variable var : eqType.
 
-  (* mux, valid, sub-xxx, TBD *)
   Inductive fexpr : Type :=
   | Econst : fgtyp -> bitseq -> fexpr
   | Ecast : ucast -> fexpr -> fexpr
@@ -351,19 +350,11 @@ Record fwriter_port : Type :=
   | Sinst : finst -> fstmt
   | Snode : var -> fexpr -> fstmt
   | Sfcnct : var -> fexpr -> fstmt
-  (*| Spcnct : fexpr -> fexpr -> fstmt*)
   | Sinvalid : var -> fstmt
-  (* | Sattach : seq var -> fstmt *)
   | Swhen : fexpr -> fstmt -> fstmt -> fstmt
   | Sstop : fexpr -> fexpr -> nat -> fstmt
-  (* | Sprintf (* TBD *) *)
-  (* | Sassert (* TBD *) *)
-  (* | Sassume (* TBD *) *)
-  (* | Sdefname : var -> fstmt *) (* TBD *)
-  (* | Sparam : var -> fexpr -> fstmt *) (* TBD *)
   .
 
-  (* TBD *)
   Inductive fmodule : Type :=
   | FInmod : var -> seq fport -> seq fstmt -> fmodule
   | FExmod : var -> seq fport -> seq fstmt -> fmodule

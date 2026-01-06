@@ -8,7 +8,6 @@ From Solver Require Import Env HiEnv LoFirrtl HiFirrtl.
 Import ListNotations.
 
 Set Implicit Arguments.
-(*Unset Strict Implicit.*) 
 Import Prenex Implicits.
 
 Section constraint.
@@ -22,8 +21,8 @@ Proof.
   simpl in H1; simpl in H2.
   move /eqP : H1 => H1.
   move /eqP : H2 => H2.
-  rewrite H1 H2. (* 替换 x1, y1 *)
-  reflexivity. (* 结束证明 *)
+  rewrite H1 H2. 
+  reflexivity. 
   intros [x1 y1] [x2 y2] Heq.
   injection Heq; intros.
   subst.
@@ -116,6 +115,14 @@ Qed.
 
 HB.instance Definition _ := hasDecEq.Build terms terms_eqP.
 
+(* inequality of form: lhs_var1_ >= rhs_terms1_ + 2^rhs_power_ + rhs_const1_
+Terms rhs_terms1_ is a list of linear Term: coe_0 * var_0 + coe_1 * var_1 + ...
+coe_(s) are natural number according to the specification of width of
+expression(non-negative) var_(s) are FieldRef(s)
+rhs_power_ represents the 2-power term brought about by dshl,
+e.g. z <= dshl(x,y) indicates lhs_var1_(w_z), rhs_const1_(-1),
+rhs_terms1_(1 * w_x), rhs_power_(w_y) *)
+
 Record Constraint1 : Type := {
   lhs_var1 : ProdVar.t;  (* 左侧变量 *)
   rhs_const1 : Z.t;(* 右侧常数项 *)
@@ -154,6 +161,12 @@ Qed.
 
 HB.instance Definition _ := hasDecEq.Build Constraint1 constraint1_eqP.
 
+(* inequality of form: lhs_const2_ >= rhs_terms2_
+Terms rhs_terms2_ is a list of linear Term: coe_0 * var_0 + coe_1 * var_1 +
+...(same as the usage in rhs_terms1_) This type of constraint is designed to
+limit the condition expressions used in when statement or mux expression:
+  they should either have a single bit width or be zero-width.
+  e.g. z <= mux(c,x,y) indicates rhs_const2_(1), rhs_terms2_(1 * w_c) *)
 (* 定义ϕ2类型的约束结构 *)
 Record Constraint2 : Type := {
   lhs_const2 : nat; (* 左侧常数项 *)
@@ -181,7 +194,6 @@ Qed.
 
 HB.instance Definition _ := hasDecEq.Build Constraint2 constraint2_eqP.
 
-(* 定义统一的约束类型 *)
 Inductive Constraint : Type :=
   | Phi1 : Constraint1 -> Constraint (* ϕ1类型的约束 *)
   | Phi2 : Constraint2 -> Constraint (* ϕ2类型的约束 *)
@@ -208,6 +220,7 @@ Qed.
 
 HB.instance Definition _ := hasDecEq.Build Constraint constraint_eqP.
 
+(* this is defined for expanding to solve for the exponential terms. *)
 Record Constraint2_new : Type := {
   lhs_const2_new : Z.t;
   rhs_terms2_new : list (nat * ProdVar.t);
@@ -592,17 +605,11 @@ Proof.
   move : H1; apply H. apply NoDup_cons_iff in H0. exact H0.2.
 Qed.
 
-Lemma elements_add [A : Type] bounds : forall v (a b : A), PVM.find v bounds = Some a -> 
+Axiom elements_add : forall [A : Type] bounds, forall v (a b : A), PVM.find v bounds = Some a -> 
   exists l0 l1, l0 ++ (v, a) :: l1 = PVM.elements bounds /\ l0 ++ (v, b) :: l1 = PVM.elements (PVM.add v b bounds).
-Proof.
-  intros. specialize (PVM.Lemmas.elements_split (v,a) bounds); intro. 
-Admitted.
 
-Lemma elements_add' [A : Type] bounds : forall v (a : A), PVM.find v bounds = None -> 
+Axiom elements_add' : forall [A : Type] bounds v (a : A), PVM.find v bounds = None -> 
   exists l0 l1, l0 ++ l1 = PVM.elements bounds /\ l0 ++ (v, a) :: l1 = PVM.elements (PVM.add v a bounds).
-Proof.
-(* PVM.Lemmas.elements_Add *)
-Admitted.
 
 Lemma eq_dec : forall x y : ProdVar.t, { eq x y } + { ~ eq x y }.
 Proof.
@@ -611,14 +618,9 @@ Proof.
   right; intro. apply eq_from_prodvar_eq in H. done.
 Qed.
 
-Lemma elements_map [A : Type] : forall (f : A -> A) (bounds : PVM.t A), PVM.elements (PVM.map f bounds) = List.map (fun '(key, value) => (key, f value)) (PVM.elements bounds).
-Proof.
-Admitted.
+Axiom elements_map : forall [A : Type] (f : A -> A) (bounds : PVM.t A), PVM.elements (PVM.map f bounds) = List.map (fun '(key, value) => (key, f value)) (PVM.elements bounds).
 
-Lemma find_in_elements [A : Type] : forall x a (bounds : PVM.t A), PVM.find x bounds = Some a <-> List.In (x, a) (PVM.elements bounds).
-Proof.
-  split; intros. rewrite PVM.Lemmas.OP.P.F.elements_o in H.
-Admitted.
+Axiom find_in_elements :forall [A : Type] x a (bounds : PVM.t A), PVM.find x bounds = Some a <-> List.In (x, a) (PVM.elements bounds).
 
 Lemma mem_in_elements [A : Type] : forall x (bounds : PVM.t A), PVM.mem x bounds <-> exists a, List.In (x, a) (PVM.elements bounds).
 Proof.

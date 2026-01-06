@@ -1557,6 +1557,63 @@ Qed.
 
 (* Key property:
    if there are two solutions, their smaller_valuation is also a solution. *)
+
+Lemma smaller_valuation_find_eq_min v s s' val val' : PVM.find v s = Some val -> PVM.find v s' = Some val' -> PVM.find v (smaller_valuation s s') = Some (minn val val').
+Proof.
+  unfold smaller_valuation. intros. rewrite PVM.map2_1. rewrite H H0 //. 
+  apply PVM.Lemmas.find_some_in in H. left; done.
+Qed.
+
+Lemma smaller_valuation_terms_value_le_l s s' ts init' init : (init' <= init)%Z -> (terms_value (smaller_valuation s s') ts init' <= terms_value s ts init)%Z.
+Proof.
+  move : ts init init'. elim. simpl. done.
+  simpl; intros [coe var] tl; intros. apply H; clear H.
+  apply Z.add_le_mono; try done. simpl. unfold smaller_valuation. destruct (PVM.find var s) eqn : Hfind. 
+  rewrite PVM.map2_1. rewrite Hfind. destruct (PVM.find var s') eqn : Hfind'. apply inj_le.
+  apply (elimT leP). apply leq_mul; try done. apply geq_minl.
+  rewrite muln0. simpl. intuition. apply PVM.Lemmas.find_some_in in Hfind. left; done.
+  rewrite PVM.Lemmas.F.map2_1bis; try done. rewrite Hfind. apply Z.le_refl.
+Qed.
+
+Lemma smaller_valuation_power_value_le_l s s' ts : (power_value (smaller_valuation s s') ts <= power_value s ts)%Z.
+Proof.
+  unfold power_value. destruct ts; try done.
+  apply Z.pow_le_mono_r; try done.
+  apply smaller_valuation_terms_value_le_l; try done.
+Qed.
+
+Lemma smaller_valuation_rhs_value1_le_l s s' c : (rhs_value1 (smaller_valuation s s') c <= rhs_value1 s c)%Z.
+Proof.
+  unfold rhs_value1. apply Z.add_le_mono.
+  apply smaller_valuation_terms_value_le_l. apply Z.le_refl.
+  apply smaller_valuation_power_value_le_l.
+Qed.
+
+Lemma smaller_valuation_terms_value_le_r s s' ts init' init : (init' <= init)%Z -> (terms_value (smaller_valuation s s') ts init' <= terms_value s' ts init)%Z.
+Proof.
+  move : ts init init'. elim. simpl. done.
+  simpl; intros [coe var] tl; intros. apply H; clear H.
+  apply Z.add_le_mono; try done. simpl. unfold smaller_valuation. destruct (PVM.find var s') eqn : Hfind. 
+  rewrite PVM.map2_1. rewrite Hfind. destruct (PVM.find var s) eqn : Hfind'. apply inj_le.
+  apply (elimT leP). apply leq_mul; try done. apply geq_minr.
+  rewrite muln0. simpl. intuition. apply PVM.Lemmas.find_some_in in Hfind. right; done.
+  rewrite PVM.Lemmas.F.map2_1bis; try done. rewrite Hfind. destruct (PVM.M.find var s); simpl; apply Z.le_refl.
+Qed.
+
+Lemma smaller_valuation_power_value_le_r s s' ts : (power_value (smaller_valuation s s') ts <= power_value s' ts)%Z.
+Proof.
+  unfold power_value. destruct ts; try done.
+  apply Z.pow_le_mono_r; try done.
+  apply smaller_valuation_terms_value_le_r; try done.
+Qed.
+
+Lemma smaller_valuation_rhs_value1_le_r s s' c : (rhs_value1 (smaller_valuation s s') c <= rhs_value1 s' c)%Z.
+Proof.
+  unfold rhs_value1. apply Z.add_le_mono.
+  apply smaller_valuation_terms_value_le_r. apply Z.le_refl.
+  apply smaller_valuation_power_value_le_r.
+Qed.
+
 Theorem smaller_sol_is_sol :
   forall (cs1 : list Constraint1) (cs2 : list Constraint2) (s s' : Valuation),
     satisfies_all_constraint1 s cs1 /\ satisfies_all_constraint2 s cs2 ->
@@ -1564,8 +1621,45 @@ Theorem smaller_sol_is_sol :
     satisfies_all_constraint1 (smaller_valuation s s') cs1 /\
       satisfies_all_constraint2 (smaller_valuation s s') cs2.
 Proof.
-Admitted.
-
+  intros; split. 
+  - destruct H as [H _]. destruct H0 as [H0 _].
+    apply in_sat_all_ctr1; intros. specialize (sat_all_in_ctr1 _ _ _ H H1). specialize (sat_all_in_ctr1 _ _ _ H0 H1). intros. clear H H0 H1 cs1.
+    unfold satisfies_constraint1 in *. destruct (PVM.find (lhs_var1 c) s') as [val'|] eqn : Hfind'; try done. 
+    destruct (PVM.find (lhs_var1 c) s) as [val|] eqn : Hfind; try done. apply Z.leb_le in H2; apply Z.leb_le in H3.
+    rewrite (smaller_valuation_find_eq_min _ _ _ Hfind Hfind'). apply Z.leb_le.
+    specialize (leqVgt val val'); intro. destruct (val <= val') eqn : Hle.
+    * clear H. assert (minn val val' = val). apply /minn_idPl. done. rewrite H; clear H.
+      specialize (smaller_valuation_rhs_value1_le_l s s' c); intro. 
+      apply (Z.le_trans _ _ _ H H3).
+    * rewrite orb_false_l in H; clear Hle. assert (minn val val' = val'). apply /minn_idPr. intuition. rewrite H0; clear H0.
+      specialize (smaller_valuation_rhs_value1_le_r s s' c); intro. 
+      apply (Z.le_trans _ _ _ H0 H2).
+  - destruct H as [_ H]. destruct H0 as [_ H0].
+    apply in_sat_all_ctr2; intros. specialize (sat_all_in_ctr2 _ _ _ H H1). specialize (sat_all_in_ctr2 _ _ _ H0 H1). intros. clear H H0 H1 cs1.
+    unfold satisfies_constraint2 in *. remember (rhs_terms2 c) as ts. remember (lhs_const2 c) as cst.
+    move : H2; clear; intros.
+    assert (forall ts init init', init >= init' -> fold_left
+      (fun (acc : nat) '(bi, xi) =>
+      acc + bi * match PVM.find xi s' with
+                | Some val => val
+                | None => 0
+                end) ts init >= fold_left
+                (fun (acc : nat) '(bi, xi) =>
+                 acc +
+                 bi *
+                 match PVM.find xi (smaller_valuation s s') with
+                 | Some val => val
+                 | None => 0
+                 end) ts init').
+    { clear. elim. simpl; done.
+      simpl; intros [coe var] tl; intros. apply H; clear H. apply leq_add; try done. clear H0 init init'. apply leq_mul; try done.
+      unfold smaller_valuation. destruct (PVM.find var s) eqn : Hfind. 
+      rewrite PVM.map2_1. rewrite Hfind. destruct (PVM.find var s') eqn : Hfind'; try done. apply geq_minr.
+      apply PVM.Lemmas.find_some_in in Hfind. left; done.
+      rewrite PVM.Lemmas.F.map2_1bis; try done. rewrite Hfind. intuition. }
+    specialize (H ts _ _ (leqnn 0)). apply leb_correct. apply (elimT leP). apply Nat.leb_le in H2. apply (introT leP) in H2. 
+    apply (leq_trans H H2).
+Qed.
 
 Corollary sol_in_halve : forall (bds : Bounds) (cs1 : list Constraint1) (cs2 : list Constraint2),
   forall (sol : Valuation), In sol (halve bds) /\

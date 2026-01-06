@@ -1,0 +1,15 @@
+.vscode/
+.git/
+.github/
+_build/
+*.vo
+*.vos
+*.vok
+*.glob
+*.aux
+.DS_Store
+*.d
+*.cache
+Makefile
+*.conf
+*.md
