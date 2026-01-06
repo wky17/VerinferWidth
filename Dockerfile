@@ -16,7 +16,8 @@ RUN opam install -y depext && \
     opam depext -y coq.8.16.0
 
 # 使用单线程编译 (-j 1) 减少内存压力
-RUN opam install -y -j 1 coq=8.16.0
+RUN opam install -y -j 1 coq=8.16.0 && \
+    opam pin add coq 8.16.0 
 
 # 安装Coq相关依赖
 RUN opam install -y \
@@ -35,9 +36,7 @@ WORKDIR /app
 # 复制项目文件
 COPY . .
 
-RUN coq_makefile -f _CoqProject -o Makefile
-RUN dune init proj ocaml
-RUN make
-
 # 验证入口点
-CMD ["ls"]
+#CMD ["ls app"]
+CMD ["sh", "-c", "coq_makefile -f _CoqProject -o Makefile && make"]
+#CMD coq_makefile -f app/_CoqProject -o app/Makefile
