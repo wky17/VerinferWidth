@@ -8,6 +8,10 @@ RUN sudo apt-get update && \
     pkg-config \
     libgmp-dev 
 
+RUN sudo apt install -y python3
+RUN sudo apt install -y python3-pip
+RUN pip install gurobipy
+
 # 设置OPAM环境
 RUN opam repo add coq-released https://coq.inria.fr/opam/released
 
@@ -38,5 +42,5 @@ COPY . .
 
 # 验证入口点
 #CMD ["sh", "-c", "mkdir ocaml_try && cd ocaml_try && ls ../ocaml/demo"]
-CMD ["sh", "-c", "./build_and_run.sh"]
-#CMD []
+#CMD ["sh", "-c", "./build_and_run.sh"]
+CMD []

@@ -25,4 +25,4 @@ dune build
 ./_build/default/run_store_res.exe ../ocaml/demo/AddNot.fir
 
 # 步骤7: 对比一致性和效率
-python compare_with_gurobi.py ../ocaml/demo/AddNot_cons.txt
+python3 compare_with_gurobi.py ../ocaml/demo/AddNot_cons.txt

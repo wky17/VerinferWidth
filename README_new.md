@@ -1,25 +1,14 @@
-好的，根据AE的要求和您项目的具体情况，我为您创建一个结构完整、符合评估要求的README.md模板。
+# Artifact for [A Formally Verified Procedure for Width Inference in FIRRTL]
 
-```markdown
-# Artifact for [Paper Title]
-
-This artifact contains the implementation and formalization accompanying the paper **"[Paper Title]"** by [Authors]. It includes:
-- A Coq formalization of [核心理论，例如：a graph algorithm and its correctness proofs]
-- An OCaml implementation of [工具名称，例如：an optimizing compiler pass]
+This artifact contains the implementation and formalization accompanying the paper **"[A Formally Verified Procedure for Width Inference in FIRRTL]"** by [Wang, Shi, Liu, Wu, Song, Chen, Jansen]. It includes:
+- A Coq formalization of [a width inference algorithm and its correctness proofs]
+- An OCaml implementation of [a complete procedure for solving the width inference problem in FIRRTL]
 - Evaluation datasets and scripts to reproduce the experiments from the paper
 
-## 📋 Claims Supported by this Artifact
+## Abstract
+FIRRTL is an intermediate representation language for Register Transfer Level (RTL) hardware designs. In FIRRTL programs, the bit widths of some components may not be given explicitly, thus they must be inferred during compilation. In mainstream FIRRTL compilers such as firtool, the width inference is conducted by a compilation pass called InferWidths, which may fail even for simple FIRRTL programs. In this paper, we investigate the width inference problem for FIRRTL programs. We show that if the constraint obtained from a FIRRTL program is satisfiable, there must exist a unique least solution. Based on this result, we propose a complete procedure for solving the width inference problem, which can handle programs while firtool may fail. We implement the procedure in Rocq and prove its correctness. From the Rocq implementation, we extract an OCaml implementation, which is the first formally verified InferWidths pass. Extensive experiments demonstrate that it can solve more instances than the official InferWidths pass in firtool using less time.
 
-**Supported Claims:**
-- **Claim 1:** [简要描述论文中的第一个主张，例如：Our algorithm produces optimized circuits that are 30% smaller on average]
-- **Claim 2:** [简要描述第二个主张，例如：The optimization preserves semantic equivalence with the original circuit]
-- **Claim 3:** [简要描述第三个主张，例如：The formal verification guarantees the correctness of the transformation]
-
-**Not Supported:**
-- **Performance measurements on specific hardware platforms** - This requires physical hardware setup beyond the scope of this artifact.
-- **Comparison with proprietary tools** - Licensing restrictions prevent distribution of commercial tools.
-
-## 🚀 Getting Started Guide (30-minute setup)
+## 🚀 Getting Started Guide
 
 ### Prerequisites
 
@@ -32,7 +21,14 @@ Choose one of the following two approaches:
 #### Option B: Native Installation (15-20 minutes)
 - macOS 12+ or Linux (Ubuntu 22.04+)
 - OPAM 2.1+
-- Gurobi 12.0.1 (academic license)
+* [Coq](https://coq.inria.fr) 8.16.0 
+* [MathComp](https://github.com/math-comp/math-comp) 2.2.0
+* [MathComp-tarjan](https://github.com/coq-community/tarjan) 1.0.2
+* [Ocaml](https://ocaml.org) 4.14.1 
+* [Ocamgraph](https://github.com/backtracking/ocamlgraph/) 2.1.0
+* [dune](https://github.com/ocaml/dune) 3.16.0
+* [Gurobi](https://www.gurobi.com) 12.0.1(academic license)
+* [circt](https://github.com/llvm/circt/)
 
 ### Installation & Smoke Test
 
@@ -40,109 +36,141 @@ Choose one of the following two approaches:
 ```bash
 # 1. Clone this repository
 git clone [your-repo-url]
-cd [repository-name]
+chmod -R 777 VerinferWidth/ # Obtain executable permission(not neccessary)
+cd Verinferwidth
 
 # 2. Build the Docker image
-docker build -t coq-artifact .
+docker build -t esop-artifact .
 
 # 3. Run the smoke test
-docker run --rm coq-artifact ./build_and_run.sh
+docker run --rm esop-artifact ./build_and_run.sh
 ```
 
-#### Native Approach:
+#### Local Approach:
 ```bash
-# 1. Install dependencies (see REQUIREMENTS for detailed versions)
-opam install . --deps-only
+# 1. Install dependencies (see REQUIREMENTS.txt for detailed versions, the following are only suggestions for macOS)
+opam pin add coq 8.16.0
+opam pin add ocaml 4.14+
+opam install -y \
+    coq-mathcomp-algebra=2.2.0 \
+    coq-mathcomp-fingroup=2.2.0 \
+    coq-mathcomp-ssreflect=2.2.0 \
+    coq-mathcomp-tarjan=1.0.2
+opam install -y \
+    ocamlgraph=2.1.0 
 
-# 2. Build the project
-dune build
-
-# 3. Run the smoke test
+# 2. Run the smoke test
 ./build_and_run.sh
 ```
 
 ### Expected Smoke Test Output
-```
+```bash
 ✅ Coq formalization compiled successfully
 ✅ OCaml implementation built
 🚀 Running demo on sample circuit...
-📊 Results: 
-- Original size: 15 gates
-- Optimized size: 10 gates (33% reduction)
-- Verification: PASSED
+extraction time : ...
+computation time : ...
+total time : ...
+components amount : ...
+circuit Foo : (the inferred FIRRTL circuit as a result)
+  module Foo : 
+    input _0 : UInt<1>
+    output _1 : UInt<1>
+    when _0 : 
+      _1 <= UInt<1>(1)
+    else : 
+      _1 <= UInt<1>(1)
+../ocaml/demo/AddNot.fir width inference is finished
 🎉 Smoke test completed successfully!
 ```
+In fact, if you run the test locally, when it's completed, you will find a new firrtl file named AddNot_iw.fir in the same directory as AddNot.fir. This is the new firrtl circuit obtained through our width inference process(it canot seen through "docker run"). The output file can be processed by downstream tools like `firtool`.
 
-**Time Check:** This should complete within 10-15 minutes. If you see the above output, your installation is correct.
-
-## 🔬 Step-by-Step Instructions
-
-### Part 1: Reproducing Paper Results
-
-#### 1.1 Compile the Full Coq Development
+### Note
+We are using the simple FIRRTL program AddNot.fir in ocaml/demo/AddNot.fir, in fact, the benchmarks mentioned in the article are all included in [ocaml/demo/firrtl program]. You can replace the test file in build_and_run.sh with any of the test cases provided by us, for example:
 ```bash
-# In Docker container or native environment
-make coq-all  # or: dune build @coq
+./_build/default/run_solver.exe ../ocaml/demo/firrtl\ program/GCD.fir
 ```
-This compiles all Coq theories, verifying the formal proofs referenced in Sections 3-4 of the paper.
-
-#### 1.2 Run Complete Evaluation Suite
+Furthermore, we also support any FIRRTL test cases provided by any user. All that is required is a simple preprocessing step:
 ```bash
-# Run all experiments from the paper
-./scripts/run_experiments.sh
+python transform_when_blocks.py ./your/path/to/example.fir
 ```
+Because FIRRTL uses indentation to determine nested levels of `when...else...` blocks, which complicates parsing. 
 
-This script will:
-- Process all benchmarks in `ocaml/demo/` (the same ones used in paper evaluation)
-- Generate results matching Table 1 and Figure 3 from the paper
-- Output CSV files to `results/` directory
+## 🔬 Reproducing Paper Results
 
-#### 1.3 Verify Results
+### Part 1: Compare with Gurobi
+Before conducting the test, please make sure that you have installed the Gurobi 12.0.1(python API) with an academic license.
+Change the file content of `ocaml/dune` to
+```
+(env
+  (dev
+    (flags    (:standard -w -a))))
+
+(executable
+ (name run_store_res)
+ (libraries unix extraction hifirrtl_lang ocamlgraph mlir_lang)
+ )
+```
+Then do this :
 ```bash
-# Compare with expected results
-./scripts/verify_results.py results/experiment_output.csv
+docker run --rm esop-artifact ./compare_with_gurobi.sh # Docker
+or
+./compare_with_gurobi.sh # local
 ```
 
-Expected outcomes:
-- **Table 1 Reproduction:** The optimization ratios should match within 2% of paper values
-- **Figure 3 Data:** The scalability trends should be reproducible
-- **Formal Verification:** All Coq proofs should compile without errors
-
-### Part 2: Experimenting with New Examples
-
-#### 2.1 Input Format Preparation
-Your input circuits should be in the following format:
-```json
-{
-  "name": "circuit_name",
-  "gates": [
-    {"type": "AND", "inputs": ["a", "b"], "output": "c"},
-    {"type": "OR", "inputs": ["c", "d"], "output": "out"}
-  ]
-}
-```
-
-Example files are provided in `ocaml/demo/format_example.json`.
-
-#### 2.2 Running Your Own Circuit
+#### Expected Output
 ```bash
-# Pre-process your circuit
-./ocaml/preprocess.py your_circuit.json -o prepared_circuit.json
+time cost : ...
+value equal for ... = ...
+...
 
-# Run the optimization
-./ocaml/main.exe --input prepared_circuit.json --output optimized_circuit.json
-
-# Verify equivalence
-./ocaml/verify.exe original.json optimized.json
+The values of all variables match!
 ```
 
-#### 2.3 Understanding the Output
-The tool generates:
-- `optimized_circuit.json`: Optimized version with size metrics
-- `verification_log.txt`: Coq-proof-based equivalence certificate
-- `performance_stats.csv`: Optimization statistics
+### Part 2: Compare with firtool
+Change the file content of `ocaml/dune` to
+```
+(env
+  (dev
+    (flags    (:standard -w -a))))
 
-### Part 3: Artifact Structure & Code Guide
+(executable
+ (name run_compare_firtool)
+ (libraries unix extraction hifirrtl_lang ocamlgraph mlir_lang)
+ )
+```
+For quick inference consistency check and efficiency comparison of the test cases provided in our article, just do this:
+```bash
+docker run --rm esop-artifact ./compare_with_firtool.sh # Docker
+or
+./compare_with_firtool.sh # local
+```
+This is just a demonstration on the simple FIRRTL program AddNot.fir in ocaml/demo/AddNot.fir. Similarly, you can replace the test files in the script with any of the test cases provided in [ocaml/demo/firrtl program] and [ocaml/demo/mlir]. (The files start with `designed` cannot be tested in this part, because these cannot be inferred by `firtool`.)
+
+#### Expected Output
+```bash
+extraction time : ...
+computation time : ...
+total time : ...
+components amount : ...
+... has type ... in both file
+... has type ... in both file
+../ocaml/demo/firrtl program/AddNot.fir type check finished.
+```
+
+#### Note
+We also support checking any other firrtl program. Before conducting the test, please obtain the latest release version of [firtool] from https://github.com/llvm/circt/releases.
+
+```bash
+# generate MLIR of your own FIRRTL proram
+firtool --mlir-print-ir-after=firrtl-infer-widths ./your/path/to/example.fir &> example.mlir
+# Ignore connection statements, retain definitions
+./process_mlir.sh example.mlir
+```
+
+Place your example.fir and example.mlir in [ocaml/demo/firrtl program] and [ocaml/demo/mlir] respectively, modify the corresponding file names in the script, and then execute `./compare_with_firtool.sh`.
+
+## Artifact Structure & Code Guide
 
 ```
 .
@@ -167,26 +195,17 @@ The tool generates:
 - `ocaml/src/optimizer.ml`: Main optimization implementation
 - `ocaml/src/verifier.ml`: Semantic equivalence checker
 
-## ⏱️ Time Estimates
-
-| Activity | Estimated Time |
-|----------|----------------|
-| Docker setup + smoke test | 15 minutes |
-| Full Coq compilation | 10-20 minutes |
-| Paper experiments reproduction | 15-30 minutes |
-| New circuit experimentation | 5-10 minutes per circuit |
-
 ## 🛠️ Troubleshooting
 
 **Common Issues:**
+- **Network problem during building docker**: Try `docker pull ocaml/opam:debian-11-ocaml-4.14` before build.
+- **Permission denied**: Try `chmod -R 777 your/file`
 - **Gurobi license errors**: Ensure academic network connection or configure license file
 - **Coq compilation errors**: Check Coq version is exactly 8.16.0
-- **Performance differences**: ARM vs x86 may show slight variation (<5%)
+- **Performance differences**: ARM vs x86 may show slight variation 
 
 **Getting Help:**
-- Check `DEBUG.md` for advanced debugging
-- Open an issue on [GitHub repository]
-- Contact: [your-email@domain]
+- Contact: [wangky@ios.cn.cn]
 
 ## 📄 License & Citation
 
@@ -194,39 +213,3 @@ This artifact is released under [license name]. If you use this work, please cit
 ```bibtex
 [Your paper citation here]
 ```
-
----
-
-*Last updated: [Date] | AE version: [Version]*
-```
-
-### 这个README的设计要点：
-
-1. **明确区分两部分结构**
-   - **Getting Started**: 30分钟内可完成的安装和冒烟测试
-   - **Step-by-Step**: 详细的复现和实验指南
-
-2. **支持的主张明确声明**
-   - 清晰列出哪些论文主张可复现，哪些不可及原因
-
-3. **双部署方案支持**
-   - Docker方案（推荐，快速）
-   - 原生方案（完整控制）
-
-4. **时间预估和进度检查**
-   - 每个步骤都有时间估计
-   - 冒烟测试提供即时反馈
-
-5. **完整的实验复现流程**
-   - 从Coq编译到结果验证的完整链条
-   - 包含与论文图表的具体对应关系
-
-6. **扩展实验指导**
-   - 新测例的输入格式说明
-   - 自定义实验的完整流程
-
-7. **代码结构映射**
-   - 将代码文件与论文章节对应
-   - 帮助评审人理解实现与理论的关联
-
-这个模板可以直接使用，您只需要填充`[括号中的占位符]`为您的具体信息即可。特别是论文标题、作者、主张描述和具体的文件路径需要根据您的项目调整。
