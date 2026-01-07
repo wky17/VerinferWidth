@@ -1,0 +1,2 @@
+firrtl.circuit "Foo" {
+  firrtl.module @Foo(out %si0: !firrtl.sint<3>, out %si1: !firrtl.sint<3>, out %si2: !firrtl.sint<2>, out %si3: !firrtl.sint<1>, out %si4: !firrtl.sint<1>, out %si5: !firrtl.sint<2>, out %si6: !firrtl.sint<3>, out %si7: !firrtl.sint<3>, out %si8: !firrtl.sint<4>, out %ui0: !firrtl.uint<1>, out %ui1: !firrtl.uint<1>, out %ui2: !firrtl.uint<2>, out %ui3: !firrtl.uint<2>, out %ui4: !firrtl.uint<3>) attributes {convention = #firrtl<convention scalarized>} {

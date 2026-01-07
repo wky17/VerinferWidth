@@ -135,6 +135,6 @@ let print_iw_fir in_file hif_ast =
     let ((map0, flag), tmap_ast) = mapcir flatten_cir in 
     let fcir = trans_cir flatten_cir map0 flag tmap_ast in 
     (match my_coq_InferWidths_fun fcir with
-    | Some (newc, newtm) -> Printfir.pp_fcircuit_fir oc_fir v newc; close_out oc_fir;
+    | Some (newc, newtm) -> Printfir.pp_fcircuit_fir oc_fir v newc; Printfir.pp_fcircuit_fir stdout v newc; close_out oc_fir;
       printf "%s width inference is finished\n" in_file
     | _ -> output_string stdout ("cannot be inferred\n"))

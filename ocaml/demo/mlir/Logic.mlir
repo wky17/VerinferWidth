@@ -1,0 +1,24 @@
+firrtl.circuit "Logic" {
+  firrtl.module @Logic(in %clock: !firrtl.clock, in %reset1: !firrtl.uint<1>, out %io: !firrtl.bundle<a flip: uint<1>, b flip: uint<1>, c flip: uint<1>, out_wky: uint<1>, cat_wky: uint<16>, ch: uint<8>, word: uint<16>, result: uint<4>>) attributes {convention = #firrtl<convention scalarized>} {
+    %logic = firrtl.node %11 : !firrtl.uint<1>
+    %bop = firrtl.node %12 : !firrtl.uint<1>
+    %and_wky = firrtl.node %9 : !firrtl.uint<1>
+    %or_wky = firrtl.node %13 : !firrtl.uint<1>
+    %xor_wky = firrtl.node %14 : !firrtl.uint<1>
+    %not_wky = firrtl.node %15 : !firrtl.uint<1>
+    %add_wky = firrtl.node %18 : !firrtl.uint<1>
+    %sub_wky = firrtl.node %21 : !firrtl.uint<1>
+    %neg_wky = firrtl.node %24 : !firrtl.uint<1>
+    %mul_wky = firrtl.node %25 : !firrtl.uint<2>
+    %div_wky = firrtl.node %26 : !firrtl.uint<1>
+    %mod = firrtl.node %27 : !firrtl.uint<1>
+    %w = firrtl.wire : !firrtl.uint<1>
+    %word = firrtl.node %30 : !firrtl.uint<16>
+    %sel = firrtl.node %31 : !firrtl.uint<1>
+    %result = firrtl.node %32 : !firrtl.uint<1>
+    %assignWord = firrtl.wire : !firrtl.uint<16>
+    %split = firrtl.wire : !firrtl.bundle<high: uint<8>, low: uint<8>>
+    %vecResult = firrtl.wire : !firrtl.vector<uint<1>, 4>
+    %uintResult_lo = firrtl.node %41 : !firrtl.uint<2>
+    %uintResult_hi = firrtl.node %42 : !firrtl.uint<2>
+    %uintResult = firrtl.node %43 : !firrtl.uint<4>

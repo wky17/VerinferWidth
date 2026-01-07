@@ -63,12 +63,12 @@ def check_solution(model, filepath):
         if not abs(user_val - grb_val) <= 1e-6:
             print(f"不一致：'{var_name}' 文件值={user_val}, Gurobi值={grb_val}")
             all_matched = False
-        #else:
-            #print(f"一致：'{var_name}' 值={user_val}")
+        else:
+            print(f"value equal for '{var_name}' = {user_val}")
 
     # 输出总结
     if all_matched:
-        print("\n所有变量的值均匹配！")
+        print("\nThe values of all variables match!")
     else:
         print("\n存在不一致的值。")
 
@@ -166,8 +166,8 @@ def solve_by_gurobi(file_path):
 
     # 输出结果
     if model.status == GRB.OPTIMAL:
-        print(f"Total cost: {model.objVal}")
-        print(f"耗时：{end - start:.6f}s")
+        #print(f"Total cost : {model.objVal}")
+        print(f"time cost : {end - start:.6f}s")
     else:
         print("No optimal solution found.")
         
