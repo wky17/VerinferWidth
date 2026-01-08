@@ -99,31 +99,25 @@ Qed.
 Lemma max_list_correctness : forall zl init, init <= (max_nl zl init) /\ (forall z, List.In z zl -> Z.le z (Z.of_nat (max_nl zl init))).
 Proof.
   elim. 
-  - (* 基础情况: cs = nil *)
-    intros; split.
+  - intros; split.
     + simpl; done. 
     + intros c H. intuition.
-  - (* 归纳情况: cs = c :: cs' *)
-    intros hd tl IH init.
+  - intros hd tl IH init.
     simpl. split.
-    + (* 证明第一部分: max_list >= init *)
-      destruct (IH (Z.to_nat (Z.max (Z.of_nat init) hd))) as [H1 _].
+    + destruct (IH (Z.to_nat (Z.max (Z.of_nat init) hd))) as [H1 _].
       assert (init <= Z.to_nat (Z.max (Z.of_nat init) hd)).
       { destruct (Z.max_spec (Z.of_nat init) hd) as [[Hlt Hmax] | [Hge Hmax]];
         rewrite Hmax; clear Hmax.
-        - (* 情况 1: Z.max = Z.of_nat init *)
-          assert (Hnonneg : (0 <= hd)%Z) by lia. 
+        - assert (Hnonneg : (0 <= hd)%Z) by lia. 
           rewrite <- (Nat2Z.id init). assert (Hnonneg2 : (0 <= (Z.of_nat init))%Z) by lia. 
           apply (introT leP).
           apply (Z2Nat.inj_le _ _ Hnonneg2 Hnonneg). try lia.
-        - (* 情况 2: Z.max = hd *) 
-          rewrite Nat2Z.id //. }
+        - rewrite Nat2Z.id //. }
       apply (leq_trans H H1).
-    + (* 证明第二部分: 对所有c' \in c::cs'，max_list >= rhs_value1 c' *)
-      intros c' Hc'.
+    + intros c' Hc'.
       destruct (IH (Z.to_nat (Z.max (Z.of_nat init) hd))) as [H1 H2].
       destruct Hc'.
-      * (* 子情况1: c' = c *) subst.
+      * subst.
         clear H2. 
         rewrite -(Nat2Z.id (max_nl tl (Z.to_nat (Z.max (Z.of_nat init) c')))) in H1.
         apply (elimT leP) in H1.
@@ -539,11 +533,9 @@ Qed.
 Lemma in_nodup_find_some a b l: List.In (a,b) l -> NoDup (List.split l).2 -> List.find (fun p : term => p.2 == b) l = Some (a,b).
 Proof.
   intros HIn HNodup.
-  (* 对列表 l 进行归纳 *)
   induction l as [| (a0, b0) l IH]; simpl in *.
-  - contradiction. (* 空列表不可能包含 (a,b) *)
-  - (* 分解 NoDup 条件 *)
-    destruct (List.split l) as [left right] eqn : Hsplitl. simpl in *.
+  - contradiction. 
+  - destruct (List.split l) as [left right] eqn : Hsplitl. simpl in *.
     destruct HIn.
     + inversion H; clear H IH; subst a0 b0. rewrite eq_refl //.
     + destruct (b0 == b) eqn : Heqb. move /eqP : Heqb => Heqb; subst b0. apply NoDup_cons_iff in HNodup. move : HNodup => [HNodup _].
@@ -2035,7 +2027,6 @@ Proof.
     simpl; auto.
   - (* cons case *)
     simpl.
-    (* 证明新的初始值 <= n *)
     assert (Ht: (t <= Z.of_nat n)%Z) by (apply H_all; left; auto).
     assert (H_max_val: (Z.max (Z.of_nat init) t <= Z.of_nat n)%Z).
     { apply Z.max_lub. apply Nat2Z.inj_le. apply (elimT leP). done. done. }
@@ -2043,7 +2034,6 @@ Proof.
     { apply Z.le_trans with (Z.of_nat init); [apply Zle_0_nat | apply Z.le_max_l]. }
     apply Z2Nat.inj_le in H_max_val; try assumption; try apply Zle_0_nat.
     rewrite Nat2Z.id in H_max_val.
-    (* 应用归纳假设 *)
     apply IH; split; auto. apply (introT leP). done.
     intros z H_in; apply H_all; right; auto.
 Qed.
@@ -2129,11 +2119,10 @@ Lemma init_map0_exists hd init_map0 : init_map0 = (fold_left
   hd (PVM.empty (NVM.t Z.t))) -> forall v, List.In v hd -> exists dst_map, PVM.find v init_map0 = Some dst_map.
 Proof.
   remember (PVM.empty (NVM.t Z.t)) as m0. clear Heqm0. move : hd init_map0 m0. elim.
-  - (* 基本情况：空列表 *) done.
-  - (* 归纳步骤：非空列表 *) intros x xs IH; intros.
+  - done.
+  - intros x xs IH; intros.
     simpl in H; simpl in H0. destruct H0.
-    + (* 变量 v 是当前元素 x *)
-      subst v. clear IH.
+    + subst v. clear IH.
       assert (forall m dst m0 , PVM.find x m = Some dst -> m0 = fold_left
         (fun (temp_matrix : PVM.t (NVM.t Z)) (v : ProdVar.t) =>
         PVM.add v (NVM.add (Node v) 0%Z (NVM.empty Z.t)) temp_matrix) xs m -> exists dst0, PVM.find x m0 = Some dst0). {
@@ -2146,8 +2135,7 @@ Proof.
           rewrite find_add_neq; try done. exists dst; done. } 
         destruct H2 as [dst0 H2]. move : H2 H1; apply H. }
       move : H; apply H0 with (dst := NVM.add (Node x) 0%Z (NVM.empty Z.t)). apply find_add_eq.
-    + (* 变量 v' 在剩余列表 xs 中 *)
-      apply (IH init_map0 _ H _ H0).
+    + apply (IH init_map0 _ H _ H0).
 Qed.
 
 Lemma add_edge_of_cs_find_exists v init_map dst0 : PVM.find v init_map = Some dst0 -> forall c_tl fm, fm = add_edge_of_cs c_tl init_map -> exists dst, PVM.find v fm = Some dst.
@@ -2355,42 +2343,33 @@ Lemma max_list_lt : forall zl init val,
     (val < init) \/ (exists z, List.In z zl /\ (Z.of_nat val < z)%Z).
 Proof.
   induction zl as [|t tl IH]; intros init val H.
-  - (* 空列表 *)
-    simpl in H. left; auto.
-  - (* 非空列表 *)
-    simpl in H.
+  - simpl in H. left; auto.
+  - simpl in H.
     apply IH in H.
     destruct H as [Hval | [z [Hin Hlt]]].
-    + (* 新初始值贡献 *)
-      set (m := Z.max (Z.of_nat init) t).
+    + set (m := Z.max (Z.of_nat init) t).
       destruct (Z_ge_lt_dec (Z.of_nat init) t) as [Hge | Hlt'].
-      * (* 初始值 ≥ t *)
-        rewrite Z.max_l in Hval; auto.
+      * rewrite Z.max_l in Hval; auto.
         rewrite Nat2Z.id in Hval.
         left; auto. apply Z.ge_le; auto.
-      * (* 初始值 < t *)
-        rewrite Z.max_r in Hval; [|apply Z.lt_le_incl; auto].
+      * rewrite Z.max_r in Hval; [|apply Z.lt_le_incl; auto].
         assert (t >= 0)%Z.
         { destruct (Z_ge_lt_dec t 0) as [Hpos|Hneg]; [auto|].
           specialize (Z.lt_trans _ _ _ Hlt' Hneg); intros. intuition. }
         right; exists t. split; try done. simpl; left; done.
         rewrite -(Z2Nat.id t); try intuition.
         apply Nat2Z.inj_lt. apply (elimT leP). done.
-    + (* 尾部贡献 *)
-      right. exists z. split; [right; auto|auto].
+    + right. exists z. split; [right; auto|auto].
 Qed.
 
 Lemma constraint1s_vars2constraint1_vars : forall cs var, List.In var (constraints1_vars cs) -> exists x, List.In x cs /\ List.In var (constraint1_vars x).
 Proof.
   intros cs. induction cs as [|c1 tl IHcs]; intros var HIn.
-  - (* 基础情况：cs = nil *)
-    inversion HIn. (* HIn1 不成立，因为 nil 中没有元素 *)
-  - (* 归纳步骤：cs = c1 :: tl *)
-    simpl in *. (* 展开 constraints1_vars 的定义 *)
+  - inversion HIn. 
+  - simpl in *.
     destruct HIn as [Hc1 | HIn_tl].
     + subst var. exists c1. split. left; done. left; done.
-    + (* 情况2：x 在 tl 中 *)
-      apply in_app_or in HIn_tl. destruct HIn_tl.
+    + apply in_app_or in HIn_tl. destruct HIn_tl.
       exists c1; split. left; done. right; done.
       apply IHcs in H. destruct H as [x [HIn H]]. exists x; split; try done. right; done.
 Qed.
@@ -2410,17 +2389,15 @@ Lemma In_bool_spec : forall v l x lb ub,
   exists n, PVM.find x v = Some n /\ lb <= n /\ n <= ub.
 Proof.
   induction l as [| [y [lb_y ub_y]] tl IH]; intros x lb ub Hin Hbool.
-  - inversion Hin. (* 空列表不可能有成员 *)
+  - inversion Hin. 
   - simpl in Hbool.
     destruct Hin as [Heq | Hin_tl].
-    + (* 当前元素匹配 *)
-      injection Heq as <- <- <-. (* 解构等式 *)
+    + injection Heq as <- <- <-. 
       destruct (PVM.find y v) eqn:Hfind; [|discriminate].
       rewrite andb_true_iff in Hbool. destruct Hbool as [Hrange _].
       rewrite andb_true_iff in Hrange. destruct Hrange as [Hlow Hhigh].
       exists n; split; auto.
-    + (* 元素在尾部 *)
-      destruct (PVM.find y v) eqn:Hfind; [|discriminate].
+    + destruct (PVM.find y v) eqn:Hfind; [|discriminate].
       rewrite andb_true_iff in Hbool. destruct Hbool as [_ Htl].
       apply IH with (x:=x) (lb:=lb) (ub:=ub); auto.
 Qed.
@@ -2431,7 +2408,7 @@ Lemma In_bool_universal : forall v l,
   In_bool v l = true.
 Proof.
   induction l as [| [x [lb ub]] tl IH]; intros Hforall.
-  - reflexivity. (* 空列表总是 true *)
+  - reflexivity. 
   - simpl.
     assert (List.In (x, (lb, ub)) ((x, (lb, ub)) :: tl)) by (simpl; left; done).
     specialize (Hforall x lb ub H) as Hdestruct; clear H.
@@ -2447,11 +2424,9 @@ Lemma In_In_bool : forall v bs, In_bool v (PVM.elements bs) <-> In v bs.
 Proof.
   intros v bs.
   split; intros H.
-  - (* -> 方向 *)
-    unfold In; intros x lb ub Hfind. apply find_in_elements in Hfind.
+  - unfold In; intros x lb ub Hfind. apply find_in_elements in Hfind.
     apply In_bool_spec with (l := PVM.elements bs); auto.
-  - (* <- 方向 *)
-    apply In_bool_universal.
+  - apply In_bool_universal.
     intros x lb ub Hin. unfold In in H. apply H.
     apply find_in_elements. done.
 Qed.
@@ -2469,14 +2444,14 @@ Proof.
   - (* In_bool -> In_bool' *)
     unfold In_bool'.
     induction bs as [| [var [lb ub]] bs IH].
-    + reflexivity. (* 空列表情况 *)
+    + reflexivity. 
     + simpl in H.
       simpl. move /andP : H => [H H'].
       apply IH in H'; clear IH. rewrite H H' //.
   - (* In_bool' -> In_bool *)
     unfold In_bool' in H.
     induction bs as [| [var [lb ub]] bs IH].
-    + reflexivity. (* 空列表情况 *)
+    + reflexivity. 
     + simpl.
       simpl in H. move /andP : H => [H H'].
       apply IH in H'; clear IH. rewrite H H' //.
@@ -2858,18 +2833,15 @@ Proof.
     intros. remember (max_nl (List.map [eta rhs_const1] cs) 0) as new_val.
     case Hmem : (PVM.find a v) => [val|]. 
     case Hgeq : (new_val <= val).
-    * (* 取值大于等于infer, cs_have_v无法满足 *) 
-      apply not_true_iff_false; apply forallb_neg_neg; 
+    * apply not_true_iff_false; apply forallb_neg_neg; 
       apply not_true_iff_false in Hsat; apply forallb_neg_neg in Hsat. destruct Hsat as [x [Hin Hunsat]].
       exists x; split. apply (elements_in_partition _ _ Hpart); right; done.
-      (* 通过 remove_solved_c initial cs_have_v 的形式一定是 x >= kx + cst, 若values不满足, 大于values不可能满足 *) 
       { rewrite /satisfies_constraint1 in Hunsat; rewrite /satisfies_constraint1.
         assert (List.In x cs1). apply (elements_in_partition _ _ Hpart); right; done. specialize (Hlhs _ H) as H2.
         rewrite H2 Hmem; rewrite H2 find_add_eq in Hunsat. apply Z.leb_gt. apply Z.leb_gt in Hunsat.
         rewrite /rhs_value1; rewrite /rhs_value1 in Hunsat.
         specialize (Hpowers _ H) as Hpowerx. rewrite Hpowerx in Hunsat; rewrite Hpowerx; simpl in Hunsat; simpl. 
           rewrite Z.add_0_r; rewrite Z.add_0_r in Hunsat. 
-        (* 拆成 (terms-v) + power 或 terms+(power-v) 两部分均单调 *)
         rewrite partition_as_filter in Hpart. inversion Hpart; clear Hpart. clear H1. 
         rewrite -H3 in Hin. apply filter_In in Hin. destruct Hin as [_ Hhave_v].
         apply negb_true_iff in Hhave_v. apply andb_false_iff in Hhave_v. destruct Hhave_v.
@@ -2883,19 +2855,14 @@ Proof.
             { clear Hunsat. destruct (rhs_terms1 x) as [|(c, var) tl] eqn : Hrhs; [contradiction |].
               clear H0. simpl in Hnodup. destruct (List.split tl) as [left right] eqn : Hsplit.
               simpl in Hnodup.
-              (* 证明当前变量 v = a *)
               assert (List.In var [a]) as Heq.
               { apply (Hvars_in_hd _ H). rewrite /constraint1_vars. simpl; right. apply in_or_app. left.
                 rewrite Hrhs. simpl; left; done. }
               simpl in Heq. destruct Heq; try done.  
               subst var.
-              (* 处理尾部 tl *)
               destruct tl as [|(c', var') tl'].
-              - (* tl 为空的情况 *)
-                exists c; auto.
-              - (* tl 非空的情况 *)
-                (* 证明 var' = a *)
-                assert (List.In var' [a]) as Heq.
+              - exists c; auto.
+              - assert (List.In var' [a]) as Heq.
                 { apply (Hvars_in_hd _ H). rewrite /constraint1_vars. simpl; right. apply in_or_app. left.
                   rewrite Hrhs. simpl; right; left; done. }
                 simpl in Heq. destruct Heq; try done.  
@@ -2908,25 +2875,20 @@ Proof.
             assert (coe <> 0) by (apply Hcoe with (var := a); rewrite Hterm; apply in_eq).
             move : H0 Hgeq; clear.
             { intros Hcoe Hle.
-              (* 移除公共项 rhs_const1 x *)
               rewrite <- Z.add_sub_assoc, <- Z.add_sub_assoc.
               apply Z.add_le_mono_l.
-              (* 将自然数乘法转换为整数乘法 *)
               rewrite Nat2Z.inj_mul; rewrite Nat2Z.inj_mul.
               rewrite -{2}(Z.mul_1_l (Z.of_nat new_val)).
               rewrite -{2}(Z.mul_1_l (Z.of_nat val)).
-              (* 重写为分配律形式 *)
               rewrite -Z.mul_sub_distr_r; rewrite -Z.mul_sub_distr_r.
-              (* 证明系数非负 *)
               assert (Hcoeff_nonneg : ((Z.of_nat coe - 1) >= 0)%Z) by
-                (destruct coe; [contradiction|]; lia).  (* coe≠0 保证 coe≥1 *)
-              (* 应用乘法单调性 *)
+                (destruct coe; [contradiction|]; lia).  
               apply Zmult_le_compat_l; [|lia].
               apply Nat2Z.inj_le. apply (elimT leP). done. }}
           apply Zlt_left_lt in Hunsat. apply (Z.lt_le_trans _ _ _ Hunsat) in H1.
           rewrite -Z.add_opp_r in H1. apply Zlt_left_rev in H1; done.
         rewrite Hpowerx in H0. discriminate. } 
-    * (* 取值小于infer, cs 不能满足 *) specialize (leqVgt new_val val); intros. rewrite Hgeq in H. rewrite orb_false_l in H. clear Hgeq.
+    * specialize (leqVgt new_val val); intros. rewrite Hgeq in H. rewrite orb_false_l in H. clear Hgeq.
       rewrite Heqnew_val in H. 
       apply max_list_lt in H. destruct H. intuition. destruct H as [z [Hin Hlt]].
       apply in_map_iff in Hin. destruct Hin as [x [Hcst Hin]].
@@ -2937,8 +2899,7 @@ Proof.
       rewrite /satisfies_constraint1. apply Hlhs in Hin. rewrite Hin Hmem.
       apply Z.leb_gt. rewrite /rhs_value1 Hterm Hpower. simpl. rewrite Z.add_0_r.
       rewrite Hcst //. 
-    * (* 没有取值则任意一条不满足 *) 
-      apply not_true_iff_false; apply forallb_neg_neg.
+    * apply not_true_iff_false; apply forallb_neg_neg.
       destruct (destruct_list cs1).
       destruct s as [hd [tl Hcons]]. 2 : done. exists hd. rewrite Hcons. split. simpl; left; done. rewrite /satisfies_constraint1.
       assert (List.In hd cs1) by (rewrite Hcons; simpl; left; done). specialize (Hlhs _ H) as H2. rewrite H2 Hmem //.
@@ -3718,7 +3679,6 @@ Proof.
       * rewrite /initial_smallest in Hinitial.
         assert (~(le initial v)) by (apply not_true_iff_false in Hle; move : Hle; apply contra_not; intros; apply le_le_bool; done). clear Hle. 
         apply Hinitial in H; clear Hinitial.
-        (* forall v 小于 initial, 因为initial是最小解，一定不满足solved中的约束 *)
         apply not_true_iff_false. apply forallb_neg_neg.
         apply not_true_iff_false in H. apply forallb_neg_neg in H. destruct H as [x [Hin Hunsat]].
         exists x; split; try done. apply in_or_app; left; done.

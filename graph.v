@@ -34,7 +34,6 @@ Fixpoint find_path (g : G) (y : T) n (v : list T) (x : T) res : option (list T) 
   end.
 
 Set Implicit Arguments.
-(*Unset Strict Implicit.*) 
 Import Prenex Implicits.
 
 Section dpdcgraph.

@@ -16,7 +16,7 @@ let split2_tailrec l =
 
 let tr_map f lst =
   let rec aux acc = function
-    | [] -> Stdlib.List.rev acc  (* 保持原顺序 *)
+    | [] -> Stdlib.List.rev acc 
     | h :: t -> aux (f h :: acc) t
   in
   aux [] lst
@@ -47,13 +47,13 @@ let my_solve_fun c tmap =
 let my_coq_InferWidths_transps ps tmap =
   let rec loop ps acc =
     match ps with
-    | [] -> Some (Stdlib.List.rev acc)  (* 反转累加器以保持原始顺序 *)
+    | [] -> Some (Stdlib.List.rev acc) 
     | p :: tl ->
         match InferWidths.coq_InferWidths_transp p tmap with
-        | None -> None  (* 提前终止 *)
-        | Some n -> loop tl (n :: acc)  (* 尾递归调用 *)
+        | None -> None 
+        | Some n -> loop tl (n :: acc)
   in
-  loop ps []  (* 初始调用 *)
+  loop ps [] 
 
 let rec revhfstmts sts res = 
   match sts with 

@@ -13,7 +13,7 @@ let initmap_s = StringMap.empty
 module IntMap = Map.Make(Stdlib.Int)
 let initmap_i = IntMap.empty
 
-let rec mapbtyp_helper v (map, flag, flag') ft = (* 这里flag是list，flag'是int *)
+let rec mapbtyp_helper v (map, flag, flag') ft = 
   match ft with
   | Ast.Gtyp _ -> (StringMap.add v (flag' :: flag) map, flag' + 1)
   | Ast.Atyp (atyp, _) -> mapbtyp_helper v (map, flag, flag') atyp
@@ -26,7 +26,7 @@ let rec mapbtyp_helper v (map, flag, flag') ft = (* 这里flag是list，flag'是
                                   let (map1, flag'0) = mapbtyp_helper (v^"."^fv) (map0, flag, flag') ft in
                                   mapbtyp v (map1, flag, flag'0) ff
 
-let rec mapftype v (map, flag) ft = (* 这里flag是int *)
+let rec mapftype v (map, flag) ft = 
 match ft with
 | Ast.Gtyp _ -> ((StringMap.add v [flag] map), flag+1)
 | Ast.Atyp (atyp, _) -> mapftype v (map, flag) atyp
@@ -131,9 +131,8 @@ let trans_ebinop a_ebinop =
   | Ast.Bxor -> LoFirrtl.Bxor
   | Ast.Bcat -> LoFirrtl.Bcat
 
-(* 定义函数，计算二进制表示的长度 *)
 let binary_length (signed : bool) (n: Z.t) : int =
-  if n = Z.zero then 1  (* 特殊情况：0 的补码表示为 "0"，长度为 1 *)
+  if n = Z.zero then 1  
   else let bits = Z.numbits (Z.abs n) in
     if signed then
       if n > Z.zero then
@@ -142,25 +141,20 @@ let binary_length (signed : bool) (n: Z.t) : int =
         else bits + 1
     else bits
 
-(* 辅助函数：将整数转换为布尔列表表示的二进制数 *)
 let rec int_to_bool_list n bits_remaining =
   if bits_remaining = 0 then []
   else
     let bit = Z.testbit n (bits_remaining - 1) in
     bit :: int_to_bool_list n (bits_remaining - 1)
 
-(* 主函数：将整数转换为指定位长的二进制补码表示，并用 bool list 表示 *)
 let bits_of_z (n: Z.t) (bit_length: int) : bool list =
-  (* 计算 2^bit_length 的值 *)
   let two_power_bit_length = Z.shift_left Z.one bit_length in
-  (* 计算补码表示 *)
   let twos_complement =
     if n >= Z.zero then
       Z.rem n two_power_bit_length
     else
       Z.add two_power_bit_length (Z.rem n two_power_bit_length)
   in
-  (* 将补码表示转换为布尔列表 *)
   int_to_bool_list twos_complement bit_length
 
 let rec trans_ftype v ty map = 

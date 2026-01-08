@@ -22,8 +22,6 @@ Section HiFirrtl.
   | Eprim_unop : eunop -> hfexpr -> hfexpr
   | Eprim_binop : ebinop -> hfexpr -> hfexpr -> hfexpr
   | Emux : hfexpr -> hfexpr -> hfexpr -> hfexpr
-  (*| Evalidif : hfexpr -> hfexpr -> hfexpr  This is no longer part of the HiFIRRTL standard, but we leave it because removing it would break some proofs;
-                                             changing the proofs would be simple but it is not important. *)
   | Eref : href -> hfexpr
   with href : Type :=
   | Eid : var -> href
@@ -41,7 +39,6 @@ Section HiFirrtl.
   | Eprim_unop ux ex, Eprim_unop uy ey => (ux == uy) && hfexpr_eqn ex ey
   | Eprim_binop bx ex fx, Eprim_binop by_ ey fy => (bx == by_) && hfexpr_eqn ex ey && hfexpr_eqn fx fy
   | Emux ex fx gx, Emux ey fy gy => hfexpr_eqn ex ey && hfexpr_eqn fx fy && hfexpr_eqn gx gy
-  (*| Evalidif ex fx, Evalidif ey fy => hfexpr_eqn ex ey && hfexpr_eqn fx fy*)
   | Eref rx, Eref ry => href_eqn rx ry
   | _, _ => false
   end
@@ -117,17 +114,6 @@ Proof.
                      destruct IHx3 as [IHx3 _] ; apply IHx3 in H0 ; done).
       destruct IHx3 as [_ IHx3] ; rewrite IHx3 //.
       apply ReflectT ; reflexivity.
-    (*+ specialize (IHx1 y1) ; apply reflect_iff in IHx1.
-      destruct (hfexpr_eqn x1 y1) ;
-            last by (apply ReflectF ; injection ; intros _ H0 ;
-                     destruct IHx1 as [IHx1 _] ; apply IHx1 in H0 ; done).
-      destruct IHx1 as [_ IHx1] ; rewrite IHx1 //.
-      specialize (IHx2 y2) ; apply reflect_iff in IHx2.
-      destruct (hfexpr_eqn x2 y2) ;
-            last by (apply ReflectF ; injection ; intros H0 ;
-                     destruct IHx2 as [IHx2 _] ; apply IHx2 in H0 ; done).
-      destruct IHx2 as [_ IHx2] ; rewrite IHx2 //.
-      apply ReflectT ; reflexivity.*)
     + specialize (href_eqP h h0) ; apply reflect_iff in href_eqP.
       destruct (href_eqn h h0) ;
             last by (apply ReflectF ; injection ; intros H0 ;
@@ -1035,7 +1021,6 @@ Module ProdVar <: OrderedType.
       + move : Hxy2 Hyz2; apply N.lt_trans.
   Qed.
 
-  (* 严格小于蕴含不等 *)
   Lemma lt_not_eq : forall x y : t, lt x y -> ~ eq x y.
   Proof.
     intros [x1 x2] [y1 y2] [Hlt|Hlt] [Heq1 Heq2].
@@ -1045,7 +1030,6 @@ Module ProdVar <: OrderedType.
       apply (OrderedVarType.lt_not_eq Hlt.2). apply Heq2.
   Qed.
 
-  (* 字典序比较函数 *)
   Definition compare : forall x y : t, Compare lt eq x y.
   Proof.
     intros [x1 x2] [y1 y2].
@@ -1718,7 +1702,7 @@ Fixpoint offset_of_subfield_b ft fid n : option nat :=
   Fixpoint offset_ref r tmap : option nat :=
     match r with
     | Eid v => Some 0
-    | Esubindex v i => (* array[i] 的 offset 只考虑 array[0]。用于inferwidth只考虑gtyp，保持一致 *)
+    | Esubindex v i => 
       offset_ref v tmap
     | Esubfield v f => match offset_ref v tmap, type_of_ref v tmap with
       | Some n, Some (Btyp ft) => offset_of_subfield_b ft f n

@@ -7,9 +7,9 @@ Import ListNotations.
 Section Extract_Constraints_with_min.
 
 Record regular_rhs : Type := {
-  regular_const : Z.t;(* 右侧常数项 *)
-  regular_terms : list (nat * ProdVar.t); (* 右侧线性组合项，列表形式 (系数, 变量) *)
-  regular_power : list (nat * ProdVar.t) (* 右侧2的幂项 *)
+  regular_const : Z.t;
+  regular_terms : list (nat * ProdVar.t); 
+  regular_power : list (nat * ProdVar.t) 
 }.
 
 Definition make_rhs a b c : regular_rhs :=
@@ -104,9 +104,6 @@ Definition combine_min_rhs (e1 e2 : min_rhs) : min_rhs :=
   regulars2min nel.
 
 Fixpoint extract_constraint_expr (e : hfexpr) (tmap : VM.t (ftype * forient)) : option ((list min_rhs) * (list min_rhs)) :=
-  (* min_rhs 的 Expr case 是一条phi1约束的一次项，指数项和常数项。rem产生min_rhs 中的 Min case
-     mux 直接生成 list of min_rhs
-     constraint2 来自 mux的condition*)
   match e with
   | Eref r => match type_of_ref r tmap, ref2pv r tmap with
                             | Some (Gtyp (Fuint_implicit _)), Some pv 
@@ -276,14 +273,13 @@ Fixpoint extract_constraint_expr (e : hfexpr) (tmap : VM.t (ftype * forient)) : 
                             | Some (exist (Gtyp (Fuint _)) _), Some (ec, cs0), Some (el1, cs1), Some (el2, cs2) => 
                               Some (el1 ++ el2, ec ++ cs0 ++ cs1 ++ cs2)
                             | _, _, _, _ => None
-                            end (* condition c 只能是 0/1位宽 *)
+                            end 
 end.
 
 (*Compute (combine_terms ([(1,(1%num,0%num))], 4%Z) ([(1,(1%num,0%num))], 0%Z)).
 Compute (flat_map (fun x => map (combine_terms x) [([(1,(1%num,0%num))], 4%Z)]) [([(1,(1%num,0%num))], 0%Z)]).*)
 
 Fixpoint expand_mux (e : hfexpr) (tmap : VM.t (ftype * forient)) : option (list href * list min_rhs) := 
-  (* 同时记录mux的condition产生的约束 *)
   match e with
   | Eref r => Some ([r], nil)
   | Emux c e1 e2 => match type_of_hfexpr c tmap, extract_constraint_expr c tmap, 
@@ -461,8 +457,7 @@ Definition extract_constraint (s : hfstmt) (tmap : VM.t (ftype * forient)) (c1ma
                                       | _ => None
                                       end
                     end
-                | ft => (* reg 只能passive *)
-                        match reset reg with
+                | ft => match reset reg with
                         | NRst => Some (c1map, res2, resmin)
                         | Rst _ rst_val => match rst_val with
                                       | Eref ref => match ref2pv ref tmap, type_of_ref ref tmap with
@@ -570,7 +565,7 @@ Definition list_Constraint_Min (minc : Constraint_Min) : list Constraint1 :=
 
 Fixpoint cartesian_product {A : Type} (l : list (list A)) : list (list A) :=
   match l with
-  | [] => [[]]  (* 空列表的笛卡尔积是包含一个空列表的列表 *)
+  | [] => [[]]
   | x :: xs =>
       let cp := cartesian_product xs in
       flat_map (fun a => map (fun b => a :: b) cp) x
@@ -592,7 +587,7 @@ Definition extract_constraints_c (c : hfcircuit) (tmap : (VM.t (ftype * forient)
                     | Some (c1map, cs2, cs_min) => let group_of_mins := map list_Constraint_Min cs_min in
                       let group_of_cs1 := cartesian_product group_of_mins in
                       match group_of_cs1 with
-                      | nil => Some ([c1map], cs2) (* 不存在min *)
+                      | nil => Some ([c1map], cs2) 
                       | _ => Some (map (fun new_cs1 => add_cs1_2_c1map new_cs1 c1map) group_of_cs1, cs2)
                       end
                     | _ => None

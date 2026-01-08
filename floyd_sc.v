@@ -6,7 +6,6 @@ Import ListNotations.
 Require Import Coq.Classes.RelationClasses.
 
 Set Implicit Arguments.
-(*Unset Strict Implicit.*) 
 Import Prenex Implicits.
 
 (* ------------ solve simple cycle ------------ *)
@@ -83,7 +82,6 @@ Module NodeVar <: OrderedType.
     eapply ProdVar.eq_trans; eauto.
   Qed.
 
-  (* 定义等式判断的可判定性 *)
   Lemma eq_dec : forall x y : t, { eq x y } + { ~ eq x y }.
   Proof.
     destruct x, y; simpl; try done.
@@ -95,7 +93,6 @@ Module NodeVar <: OrderedType.
       + right; congruence.
   Defined.
 
-  (* 定义严格小于关系lt *)
   Definition lt (x y : t) : Prop :=
     match x, y with
     | Zero, Node _ => true
@@ -103,21 +100,18 @@ Module NodeVar <: OrderedType.
     | _, _ => false
     end.
 
-  (* 证明lt是传递的 *)
   Lemma lt_trans : forall x y z : t, lt x y -> lt y z -> lt x z.
   Proof.
     destruct x, y, z; simpl; auto; try done.
     intros Hlt1 Hlt2. eapply ProdVar.lt_trans; eauto.
   Qed.
 
-  (* 证明lt蕴含不等 *)
   Lemma lt_not_eq : forall x y : t, lt x y -> ~ eq x y.
   Proof.
     destruct x, y; simpl; auto.
     apply ProdVar.lt_not_eq.
   Qed.
 
-  (* 定义比较函数 *)
   Definition compare : forall x y : t, Compare lt eq x y.
   Proof.
     destruct x, y; simpl.
@@ -130,7 +124,6 @@ Module NodeVar <: OrderedType.
       + apply GT. assumption.
   Defined.
 
-  (* 定义布尔等式判断函数 *)
   Definition eqn (x y : t) : bool :=
     match x, y with
     | Zero, Zero => true
@@ -138,7 +131,6 @@ Module NodeVar <: OrderedType.
     | _, _ => false
     end.
 
-  (* 证明布尔等式与命题等式的一致性 *)
   Lemma eqP : Equality.axiom eqn.
   Proof.
     intros x y. unfold eqn, eq.
@@ -186,20 +178,19 @@ Fixpoint add_edge_of_cs (cs : list Constraint1) (m : adj_matrix) : adj_matrix :=
   match cs with
   | nil => m
   | hd :: tl => let new_m := match PVM.find (lhs_var1 hd) m, (rhs_terms1 hd) with 
-            (* 经过第一步init，记录所有v到v的距离为0，所有lhs应该都可以被find *)
-            | Some dst_map, nil => match NVM.find Zero dst_map with (* 常数约束, 修改lhs到0点的距离 *) 
+            | Some dst_map, nil => match NVM.find Zero dst_map with 
                             | Some dist => let new_dst_map := NVM.add Zero (Z.max dist (rhs_const1 hd)) dst_map in
                                     PVM.add (lhs_var1 hd) new_dst_map m
                             | None => let new_dst_map := NVM.add Zero (rhs_const1 hd) dst_map in
                                     PVM.add (lhs_var1 hd) new_dst_map m
                             end
-            | Some dst_map, [(1,v)] => match NVM.find (Node v) dst_map with (* 修改lhs到v的距离 *) 
+            | Some dst_map, [(1,v)] => match NVM.find (Node v) dst_map with 
                             | Some dist => let new_dst_map := NVM.add (Node v) (Z.max dist (rhs_const1 hd)) dst_map in
                                     PVM.add (lhs_var1 hd) new_dst_map m
                             | None => let new_dst_map := NVM.add (Node v) (rhs_const1 hd) dst_map in
                                     PVM.add (lhs_var1 hd) new_dst_map m
                             end
-            | _, _ => m (* 不存在其他形式的约束 *)
+            | _, _ => m 
             end in add_edge_of_cs tl new_m
   end.
 
@@ -207,9 +198,8 @@ Fixpoint add_edge_of_cs' (cs : list Constraint1) (m : adj_matrix) : adj_matrix :
   match cs with
   | nil => m
   | hd :: tl => match PVM.find (lhs_var1 hd) m, (rhs_terms1 hd) with 
-            (* 经过第一步init，记录所有v到v的距离为0，所有lhs应该都可以被find *)
                 | Some dst_map, nil =>
-                    match NVM.find Zero dst_map with (* 常数约束, 修改lhs到0点的距离 *) 
+                    match NVM.find Zero dst_map with 
                     | Some dist =>
                         let new_dst_map := NVM.add Zero (Z.max dist (rhs_const1 hd)) dst_map in
                         PVM.add (lhs_var1 hd) new_dst_map (add_edge_of_cs' tl m)
@@ -218,7 +208,7 @@ Fixpoint add_edge_of_cs' (cs : list Constraint1) (m : adj_matrix) : adj_matrix :
                         PVM.add (lhs_var1 hd) new_dst_map (add_edge_of_cs' tl m)
                     end
                 | Some dst_map, [(1,v)] =>
-                    match NVM.find (Node v) dst_map with (* 修改lhs到v的距离 *) 
+                    match NVM.find (Node v) dst_map with
                     | Some dist =>
                         let new_dst_map := NVM.add (Node v) (Z.max dist (rhs_const1 hd)) dst_map in
                         PVM.add (lhs_var1 hd) new_dst_map (add_edge_of_cs' tl m)
@@ -226,14 +216,14 @@ Fixpoint add_edge_of_cs' (cs : list Constraint1) (m : adj_matrix) : adj_matrix :
                         let new_dst_map := NVM.add (Node v) (rhs_const1 hd) dst_map in
                         PVM.add (lhs_var1 hd) new_dst_map (add_edge_of_cs' tl m)
                     end
-            | _, _ => (add_edge_of_cs' tl m) (* 不存在其他形式的约束 *)
+            | _, _ => (add_edge_of_cs' tl m) 
             end 
   end.
 
 Definition add_edge_of_c (c : Constraint1) (m : adj_matrix) : adj_matrix :=
   match PVM.find (lhs_var1 c) m, (rhs_terms1 c) with 
   | Some dst_map, nil =>
-      match NVM.find Zero dst_map with (* 常数约束, 修改lhs到0点的距离 *) 
+      match NVM.find Zero dst_map with 
       | Some dist =>
           let new_dst_map := NVM.add Zero (Z.max dist (rhs_const1 c)) dst_map in
           PVM.add (lhs_var1 c) new_dst_map m
@@ -242,7 +232,7 @@ Definition add_edge_of_c (c : Constraint1) (m : adj_matrix) : adj_matrix :=
           PVM.add (lhs_var1 c) new_dst_map m
       end
   | Some dst_map, [(1,v)] =>
-      match NVM.find (Node v) dst_map with (* 修改lhs到v的距离 *) 
+      match NVM.find (Node v) dst_map with 
       | Some dist =>
           let new_dst_map := NVM.add (Node v) (Z.max dist (rhs_const1 c)) dst_map in
           PVM.add (lhs_var1 c) new_dst_map m
@@ -250,7 +240,7 @@ Definition add_edge_of_c (c : Constraint1) (m : adj_matrix) : adj_matrix :=
           let new_dst_map := NVM.add (Node v) (rhs_const1 c) dst_map in
           PVM.add (lhs_var1 c) new_dst_map m
       end
-  | _, _ => m (* 不存在其他形式的约束 *)
+  | _, _ => m 
   end .
 
 (* Fixpoint add_edge_of_c_s cs m := *)
@@ -267,18 +257,15 @@ Fixpoint add_edge_of_c_s cs m :=
   
           
 Definition init_dist_map (nodes : list ProdVar.t) (cs : list Constraint1) : adj_matrix :=
-  (* 自己到自己设为0 *)
   let map0 := List.fold_left (fun temp_matrix v => let temp_dst_map := NVM.add (Node v) 0%Z (NVM.empty Z.t) in(* v到v距离为0 *)
                                 PVM.add v temp_dst_map temp_matrix) nodes (PVM.empty (NVM.t Z.t)) in
-  (* 将每一条约束画出边 *)
   add_edge_of_cs cs map0.
-(* 其他为None，即为两点间还没有边，距离的最大值为-∞ *)
 
 Fixpoint map0 (n : list ProdVar.t) m :=
   match n with
   | nil => m
   | hd :: tl => 
-      let temp_dst_map := NVM.add (Node hd) 0%Z (NVM.empty Z.t) (* v到v距离为0 *)
+      let temp_dst_map := NVM.add (Node hd) 0%Z (NVM.empty Z.t)
       in
       PVM.add hd temp_dst_map (map0 tl m)
       (* map0 tl (PVM.add hd temp_dst_map m) *)
@@ -289,11 +276,10 @@ Definition init_dist_map' (nodes : list ProdVar.t) (cs : list Constraint1) : adj
 
 
 Definition floyd_update (k i: ProdVar.t) (nodes : list NodeVar.t) (m : adj_matrix) : adj_matrix :=
-  (* 对给定中间节点 k 和源节点 i，更新 i 到所有目标节点的最长路径。 *)
   match PVM.find i m with
   | None => m
   | Some dst_map => let new_dst_map := 
-      List.fold_left (fun acc j => (* j是dst，已存i到j最大路径是w *)
+      List.fold_left (fun acc j => 
         match NVM.find j acc, get_weight i (Node k) m, get_weight k j m with
         | Some w, Some w1, Some w2 => let new_w := Z.max w (Z.add w1 w2) in
                               NVM.add j new_w acc
@@ -1069,8 +1055,8 @@ Qed.
 Instance Symmetric_neq {A : Type} : Symmetric (fun x y : A => x <> y).
 Proof.
   intros x y Hneq Heq.
-  apply Hneq.                  (* 目标：x = y → False *)
-  symmetry in Heq; assumption. (* 将 y=x 转为 x=y *)
+  apply Hneq.  
+  symmetry in Heq; assumption. 
 Qed.
 
 Lemma new_dst_map_aux_correct3 :
@@ -2165,7 +2151,6 @@ Admitted.
         
 Definition solve_simple_cycle (simple_cycle : list ProdVar.t) (cs : list Constraint1) : option Valuation :=
   let m := floyd_loop_map simple_cycle cs in
-  (* 矩阵中，从自己回到自己的最长路径，依然是0(初始化时为0，每次更新取max)，则不存在正环 *)
   if (forallb (fun c => match get_weight c (Node c) m with
                           None => false
                         | Some w => Z.eqb w 0%Z end) simple_cycle)
@@ -2184,7 +2169,6 @@ Fixpoint negcycb (simple_cycle : list ProdVar.t) m b : bool :=
 
 Definition solve_simple_cycle' (simple_cycle : list ProdVar.t) (cs : list Constraint1) v0 : option Valuation :=
   let m := floyd_loop_map' simple_cycle cs in
-  (* 矩阵中，从自己回到自己的最长路径，依然是0(初始化时为0，每次更新取max)，则不存在正环 *)
   if negcycb simple_cycle m true
   then
     save_longest_dist simple_cycle m v0

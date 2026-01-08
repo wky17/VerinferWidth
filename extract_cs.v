@@ -7,7 +7,6 @@ Import ListNotations.
 Section Extract_Constraints_better.
 
 Fixpoint extract_constraint_expr (e : hfexpr) (tmap : VM.t (ftype * forient)) : option (list ((list (list term * list term * Z.t)) * (list Constraint2))) :=
-  (* 同时记录expr中产生的约束，mux的condition。 (list term * list term * Z.t) 是一条phi1约束的一次项，指数项和常数项。list phi1 * list phi2是一组约束。rem产生多组约束*)
   match e with
   | Eref r => match type_of_ref r tmap, ref2pv r tmap with
                             | Some (Gtyp (Fuint_implicit _)), Some pv 
@@ -188,14 +187,13 @@ Fixpoint extract_constraint_expr (e : hfexpr) (tmap : VM.t (ftype * forient)) : 
                                 rhs_terms2 := terms
                               |}) ec in (el1 ++ el2, ncs ++ cs0 ++ cs1 ++ cs2)) el2_cs2) el1_cs1) ec_cs0)
                             | _, _, _, _ => None
-                            end (* condition c 只能是 0/1位宽 *)
+                            end 
 end.
 
 (*Compute (combine_terms ([(1,(1%num,0%num))], 4%Z) ([(1,(1%num,0%num))], 0%Z)).
 Compute (flat_map (fun x => map (combine_terms x) [([(1,(1%num,0%num))], 4%Z)]) [([(1,(1%num,0%num))], 0%Z)]).*)
 
 Fixpoint expand_mux (e : hfexpr) (tmap : VM.t (ftype * forient)) : option (list (list href * list Constraint2)) := 
-  (* 同时记录mux的condition产生的约束 *)
   match e with
   | Eref r => Some [([r], nil)]
   | Emux c e1 e2 => match type_of_hfexpr c tmap, extract_constraint_expr c tmap, 
@@ -348,8 +346,7 @@ Fixpoint extract_constraint (s : hfstmt) (tmap : VM.t (ftype * forient)) (c1map 
                                       | _ => None
                                       end
                     end
-                | ft => (* reg 只能passive *)
-                        match reset reg with
+                | ft => match reset reg with
                         | NRst => Some [(c1map, nil)]
                         | Rst _ rst_val => match rst_val with
                                       | Eref ref => match ref2pv ref tmap, type_of_ref ref tmap with
@@ -495,8 +492,7 @@ Definition extract_constraint_tailrec (s : hfstmt) (tmap : VM.t (ftype * forient
                                       | _ => None
                                       end
                     end
-                | ft => (* reg 只能passive *)
-                        match reset reg with
+                | ft => match reset reg with
                         | NRst => Some [(c1map, nil)]
                         | Rst _ rst_val => match rst_val with
                                       | Eref ref => match ref2pv ref tmap, type_of_ref ref tmap with
@@ -641,12 +637,12 @@ end.
 Definition remove_solved_c (values : Valuation) (c : Constraint1) : Constraint1 :=
   let '(new_terms, new_cst) := remove_solved values (rhs_terms1 c) in
   match rhs_power c with
-  | nil => (* 不含指数项 *)
+  | nil => 
       {| lhs_var1 := lhs_var1 c;
         rhs_const1 := Z.add (rhs_const1 c) new_cst;
         rhs_power := nil;
         rhs_terms1 := new_terms |}
-  | (_, var) :: _ => (* 含 *)
+  | (_, var) :: _ =>
     match PVM.find var values with
     | Some val => 
       {| lhs_var1 := lhs_var1 c;
@@ -662,7 +658,6 @@ Definition remove_solved_c (values : Valuation) (c : Constraint1) : Constraint1 
   end.
 
 Fixpoint remove_solveds (values : Valuation) (cs : list Constraint1) : list Constraint1 :=
-  (* 将已求解变量的值代入并消去 *)
 match cs with
 | nil => nil
 | c :: cs' => remove_solved_c values c :: remove_solveds values cs'

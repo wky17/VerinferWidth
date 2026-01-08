@@ -7,12 +7,9 @@ From mathcomp.tarjan Require Import kosaraju.
 Require Import Program.
 Require Import Recdef.
 Import ListNotations.
-(* From Equations Require Import Equations. *)
-(* Require Import Arith Lia. *)
 
 
 Set Implicit Arguments.
-(*Unset Strict Implicit.*) 
 Import Prenex Implicits.
 
 Lemma leq_mean : forall (a b : nat), a <= b -> a <= (a + b) / 2.
@@ -48,7 +45,6 @@ Qed.
   
 Section Bounds.
 
-(* 定义对于上下界的类型 *)
 Definition Bounds := PVM.t (nat * nat).
 Definition initial_bounds := PVM.empty (nat * nat).
 Definition add_bound := PVM.add.
@@ -57,20 +53,6 @@ Definition mergeValuations (v1 v2 : Valuation) : Bounds :=
     | Some lb, Some ub => Some (lb, ub)
     | _, _ => None
     end) v1 v2.
-
-(*Definition Bounds := V -> (nat * nat).
-Definition initial_bounds : Bounds := fun _ => (0, 0).
-Definition add_bound (s : Bounds) (x : V) (v : nat * nat) :=
-  fun n => if n == x then v else s n.
-
-(* 合并两个 Valuation 为一个 Bounds *)
-Definition mergeValuations (v1 v2 : Valuation V) : Bounds :=
-  fun x =>
-    let val1 := v1 x in
-    let val2 := v2 x in
-    if (val1 <=? val2) then (val1, val2)  (* 对于无值情况 *)
-    else (0, 0).   有值的情况 *)
-
 
 (* =================== product_bounds =================== *)
 
@@ -222,14 +204,12 @@ Qed.
 
 (* =================== update bounds =================== *)
 
-(* 修改x的上界为v *)
 Definition update_ub (s : Bounds) (x : ProdVar.t) (v : nat) :=
   match PVM.find x s with
   | Some (lb, _) => PVM.add x (lb, v) s 
   | _ => s 
   end.
 
-(* 修改x的下界为v *)
 Definition update_lb (s : Bounds) (x : ProdVar.t) (v : nat) :=
   match PVM.find x s with
   | Some (_, ub) => PVM.add x (v, ub) s 
@@ -405,7 +385,6 @@ Qed.
 
 (* =================== key_value =================== *)
 
-(* 生成本轮检查的解 *)
 Definition key_value (s : Bounds) : Valuation :=
   PVM.map (fun '(lb,ub) => (lb + ub)/2) s.
 
@@ -647,30 +626,6 @@ End WellFormedness.
 
 Section bnb.  
 
-(*Fixpoint new_ubs (node : Valuation V) (s : Bounds) (scc : list V) : list Bounds :=
-  match scc with
-  | nil => nil
-  | hd :: tl => if ((s hd).1 == (s hd).2) then new_ubs node s tl
-    else let child := update_ub s hd (node hd) in child :: (new_ubs node s tl)
-  end.
-
-(* 为不满足的Phi1约束生成新搜索点 *)
-Definition new_nodes1 (node : Valuation V) (bounds : Bounds) (c : Constraint1 V) : list Bounds :=
-  let lhs := lhs_var1 c in
-  let rhs_vars := map snd (rhs_terms1 c) in
-  if ((bounds lhs).1 == (bounds lhs).2) then 
-    new_ubs node bounds rhs_vars
-  else 
-    let children := update_lb bounds lhs (node lhs) in
-    children :: (new_ubs node bounds rhs_vars).
-
-(* 为不满足的Phi2约束生成新搜索点 *)
-Definition new_nodes2 (node : Valuation V) (bounds : Bounds) (c : Constraint2 V) : list Bounds :=
-  let rhs_vars := map snd (rhs_terms2 c) in
-  new_ubs node bounds rhs_vars.*)
-
-
-(* 求 option Valuation 的较小值，没有则返回None *)
 Definition smaller_solution (v1 v2 : option Valuation) : option Valuation :=
   match v1, v2 with
   | None, _ => v2
@@ -891,8 +846,7 @@ Lemma product_bounds_ifold_zero l init :
   product_bounds_ifold l init = init.
 Proof.
   elim: l init => [| [v [lb ub]] l IH] init H_all //=.
-  - (* 非空列表 *)
-    assert (forall x, List.In x ((v, (lb, ub)) :: l) -> (fun '(_, y) => let '(lb, ub) := y in ub - lb == 0) x = true) by (apply forallb_forall; done).
+  - assert (forall x, List.In x ((v, (lb, ub)) :: l) -> (fun '(_, y) => let '(lb, ub) := y in ub - lb == 0) x = true) by (apply forallb_forall; done).
     specialize (H (v, (lb, ub))); simpl in H.
     assert ((ub - lb == 0) = true) by (apply H; left; done). move /eqP : H0 => H0.
     rewrite H0 addn0.
@@ -1044,15 +998,15 @@ Function bab_bin (scc : list ProdVar.t) (bounds : Bounds)
   let unsat1 := find (fun c => negb (satisfies_constraint1 current_node c)) cs1 in
   let unsat2 := find (fun c => negb (satisfies_constraint2 current_node c)) cs2 in
   match unsat1, unsat2 with
-  | None, None => (* 约束都满足,是一个解 *)
-      if (product_bounds bounds == 0) (* current_node 是bounds中的唯一取值 *)
+  | None, None => 
+      if (product_bounds bounds == 0) 
       then (Some current_node)
-      else (* 不是唯一取值，缩小上界，继续寻找更优解 *)
+      else 
         bab_bin scc (halve bounds) cs1 cs2
-  | Some c1, _ => (* Phi1 不被满足 *)
-      if (product_bounds bounds == 0) (* current_node 是bounds中的唯一取值 *)
-      then None (* 但不满足约束 *)
-      else (* 不是唯一取值，继续搜索 *)
+  | Some c1, _ => 
+      if (product_bounds bounds == 0) 
+      then None 
+      else 
         match find (fun x => length x bounds != 0) (rhs_vars c1) with
         (* pick a splittable var in rhs *)
         | Some v =>
@@ -1078,10 +1032,10 @@ Function bab_bin (scc : list ProdVar.t) (bounds : Bounds)
               | None => None (* IMPOSSIBLE *)
               end
         end
-  | None, Some c2 => (* Phi2 不被满足 *)
-      if (product_bounds bounds == 0) (* current_node 是bounds中的唯一取值 *)
-      then None (* 但不满足约束 *)
-      else (* 不是唯一取值，继续搜索 *)
+  | None, Some c2 => 
+      if (product_bounds bounds == 0) 
+      then None 
+      else 
         match find (fun x => length x bounds != 0) (map snd (rhs_terms2 c2)) with
         (* pick a splittable var in rhs *)
         | Some v =>
@@ -1447,7 +1401,6 @@ Qed.
 
 (* =================== smaller_valuation =================== *)
 
-(* 求 Valuation 的较小值 *)
 Definition smaller_valuation (v1 v2 : Valuation) : Valuation :=
   PVM.map2 (fun v v' => match v, v' with
                         | Some n , Some n' => Some (minn n n')
@@ -1832,356 +1785,3 @@ Proof.
 Admitted.
 
 End bnb.
-
-Section test_bnb.
-(*Definition c0 : Constraint1 :=
-  {|
-    lhs_var1 := (3%num, N0);
-    rhs_const1 := 4;
-    rhs_terms1 := [(2, (4%num, N0))]
-  |}.
-
-Definition c1 : Constraint1 :=
-  {|
-    lhs_var1 := (5%num, N0);
-    rhs_const1 := -2;
-    rhs_terms1 := [(1, (3%num, N0))]
-  |}.
-
-Definition c2 : Constraint1 :=
-  {|
-    lhs_var1 := (4%num, N0);
-    rhs_const1 := -2;
-    rhs_terms1 := [(1, (5%num, N0))]
-  |}.
-
-Definition ubs := solve_ubs [(3%num, N0);(4%num, N0);(5%num, N0)] [(3%num, N0);(4%num, N0);(5%num, N0)] [c0;c1;c2].
-
-Definition c3 : Constraint1 :=
-  {|
-    lhs_var1 := (2%num, N0);
-    rhs_const1 := 0;
-    rhs_terms1 := [(1, (3%num, N0))]
-  |}.
-
-Definition ubs' := solve_ubs [(3%num, N0);(4%num, N0);(5%num, N0)] [(3%num, N0);(4%num, N0);(5%num, N0)] [c0;c1;c2;c3].
-
-Definition bound0 := add_bound (3%num, N0) (0,4) initial_bounds.
-Definition bound1 := add_bound (4%num, N0) (0,0) bound0.
-Definition bound2 := add_bound (5%num, N0) (0,2) bound1.
-
-Definition nbs := branch_and_bound_natural' [(3%num, N0);(4%num, N0);(5%num, N0)] bound2 [c0;c1;c2] [] None [].
-
-Compute (product_bounds bound2 [(n_V 1); (n_V 2); (n_V 3)]).
-Definition test_b0 := update_ub bound2 (n_V 1) 5.
-Compute (product_bounds test_b0 [(n_V 1); (n_V 2); (n_V 3)]).
-Definition test_b1 := update_lb bound2 (n_V 1) 2.
-Compute (product_bounds test_b1 [(n_V 1); (n_V 2); (n_V 3)]).
-Definition node := key_value bound2.
-Compute (node (n_V 1)).
-Compute (node (n_V 2)).
-Compute (node (n_V 3)).
-Definition unsat1 := find (fun c => negb (satisfies_constraint1 node c)) [c0;c1;c2].
-Compute unsat1.
-Definition unsat2 := find (fun c => negb (satisfies_constraint2 node c)) [c3;c4].
-Compute unsat2.
-Definition children := fold_left (fun s hd => if ((bound2 hd).1 == (bound2 hd).2) then s else
-let nb := update_ub bound2 hd (node hd) in 
-  nb :: s) [(n_V 1); (n_V 2); (n_V 3)] 
-  nil.
-Compute (length children).
-
-Compute (forallb (fun v => node v == (bound2 v).1) [(n_V 1); (n_V 2); (n_V 3)]).
-Definition children' := map (fun v => update_ub bound2 v (node v)) [(n_V 1); (n_V 2); (n_V 3)].
-Definition child0' := List.hd (initial_bounds V) children'.
-Compute (child0' (n_V 1)).
-Compute (child0' (n_V 2)).
-Compute (child0' (n_V 3)).
-Definition new_node := key_value (List.hd (initial_bounds V) children').
-Compute (new_node (n_V 1)).
-Compute (new_node (n_V 2)).
-Compute (new_node (n_V 3)).
-
-Compute (List.length children').
-Compute (product_bounds (List.hd (initial_bounds V) children') [(n_V 1); (n_V 2); (n_V 3)] == 1).
-Definition child1' := List.nth 1 children' (initial_bounds V).
-Compute (child1' (n_V 1)).
-Compute (child1' (n_V 2)).
-Compute (child1' (n_V 3)).
-
-Compute (forallb (fun b => product_bounds b [(n_V 1); (n_V 2); (n_V 3)] == 1) children').
-
-(*Definition children := new_nodes1 V node bound2 c0.
-Definition child0 := List.hd (initial_bounds V) children.
-Compute (child0 (n_V 1)).
-Compute (child0 (n_V 2)).
-Compute (child0 (n_V 3)).
-Definition child1 := List.nth 1 children (initial_bounds V).
-Compute (child1 (n_V 1)).
-Compute (child1 (n_V 2)).
-Compute (child1 (n_V 3)).
-Definition child2 := List.nth 2 children (initial_bounds V).
-Compute (child2 (n_V 1)).
-Compute (child2 (n_V 2)).
-Compute (child2 (n_V 3)).
-Definition new_solution0 := branch_and_bound_natural V [(n_V 1); (n_V 2); (n_V 3)] child0 [c0;c1;c2] [c3;c4].
-Compute (match new_solution0 with
-  | Some v => v (n_V 1)
-  | None => 0
-  end).
-Compute (child2 (n_V 2)).
-Compute (child2 (n_V 3)).
-*)
-Definition res := branch_and_bound_natural [(n_V 1); (n_V 2); (n_V 3)] bound2 [c0;c1;c2] [c3;c4] None nil.
-
-Definition smaller_solution0 := smaller_solution (Some node) None.
-Compute (match smaller_solution0 with
-| Some s0 => s0 (n_V 2)
-| None => 0
-end).
-(*Definition smaller_solution1 := if ((bound2 (n_V 1)).1 == (bound2 (n_V 1)).2) 
-  then smaller_solution0 else
-  let nb := update_ub bound2 (n_V 1) (node (n_V 1)) in 
-    smaller_solution (branch_and_bound_natural [(n_V 1); (n_V 2); (n_V 3)] nb [c0;c1;c2] [c3;c4] smaller_solution0 [::node]) smaller_solution0.
-Definition smaller_solution2 := if ((bound2 (n_V 2)).1 == (bound2 (n_V 2)).2) 
-  then smaller_solution0 else
-  let nb := update_ub bound2 (n_V 2) (node (n_V 2)) in 
-    smaller_solution (branch_and_bound_natural [(n_V 1); (n_V 2); (n_V 3)] nb [c0;c1;c2] [c3;c4] smaller_solution1) smaller_solution1 nil.
-
-Definition smaller_solution2' := Some (add_valuation V (add_valuation V (add_valuation V (initial_valuation V) (n_V 1) 3) (n_V 2) 1) (n_V 3) 1).
-
-Definition smaller_solution3 := if ((bound2 (n_V 3)).1 == (bound2 (n_V 3)).2) 
-  then smaller_solution0 else
-  let nb := update_ub bound2 (n_V 3) (node (n_V 3)) in 
-    smaller_solution (branch_and_bound_natural [(n_V 1); (n_V 2); (n_V 3)] nb [c0;c1;c2] [c3;c4] smaller_solution2) smaller_solution2 nil.
-Definition smaller_solution' := fold_left (fun s hd => if ((bound2 hd).1 == (bound2 hd).2) then s else
-  let nb := update_ub bound2 hd (node hd) in 
-    smaller_solution (branch_and_bound_natural [(n_V 1); (n_V 2); (n_V 3)] nb [c0;c1;c2] [c3;c4] s) s
-    ) [(n_V 1); (n_V 2); (n_V 3)] smaller_solution0. ocaml 10min *)
-*)
-End test_bnb.
-
-Section solve_scc.
-(*Definition solve_scc (scc : list V) (constraints : list (Constraint V)) (values : Valuation V) : option (Valuation V) :=
-  let cs1 := (split_constraints constraints).1 in
-  let cs2 := (split_constraints constraints).2 in
-  let ubs := solve_ubs scc cs1 in
-  let bs := mergeValuations values ubs in
-  branch_and_bound_natural scc bs cs1 cs2 None.*)
-End solve_scc.
-
-(*Fixpoint solve_ubs' (scc : list V) (constraints : list (Constraint1 V)) : (Valuation V) :=
-  match scc with
-  | [] => initial_valuation V 
-  | hd :: tl => let ub := 10 - (nat_of_ord hd) in
-     add_valuation V (solve_ubs' tl constraints) hd ub
-  end.
-
-Definition res1 := solve_ubs' [(n_V 1); (n_V 2); (n_V 3)] [c0; c1; c2'].
-Compute (res1 (n_V 3)).*)
-
-(* 根据不满足的phi1约束生成新的节点 
-Definition expand_node1 (node : Valuation V) (values upper_bounds : Valuation V) (c : Constraint1 V) : list (Valuation V) :=
-  let base_val := node (lhs_var1 V c) in
-  let new_val := (base_val + upper_bounds (lhs_var1 V c)) / 2 in
-  let new_node1 := fun x => if x == lhs_var1 V c then new_val else node x in
-  let new_nodes := map (fun '(_, var) =>
-      let new_val := (node var + values var) / 2 in
-      (fun x => if x == var then new_val else node x)
-      ) (rhs_terms1 V c) in
-  new_node1 :: new_nodes. (* 根据需求，可以添加更多不同的子节点生成策略 *)
-
-(* 根据不满足的phi2约束生成新的节点 *)
-Definition expand_node2 (node : Valuation V) (values upper_bounds : Valuation V) (c : Constraint2 V) : list (Valuation V) :=
-  map (fun '(_, var) =>
-         let new_val := (node var + values var) / 2 in
-         (fun x => if x == var then new_val else node x)
-      ) (rhs_terms2 V c).
-
-(* 主函数，分支定界求解 *)
-Program Fixpoint branch_and_bound_natural (node_queue : list (Valuation V)) (values upper_bounds : Valuation V) 
-         (cs1 : list (Constraint1 V)) (cs2 : list (Constraint2 V)) (solution : option (Valuation V)) {measure } : option (Valuation V) :=
-  match node_queue with
-  | nil => solution
-  | current_node :: rest_queue =>
-    let unsat1 := find (fun c => negb (satisfies_constraint1 V current_node c)) cs1 in
-    let unsat2 := find (fun c => negb (satisfies_constraint2 V current_node c)) cs2 in
-    match unsat1, unsat2, solution with
-    | None, None, None => (* 约束都满足,是一个解.没有已发现的解 *)
-            Some current_node 
-    | None, None, Some s => (* 约束都满足,取已知解和该解中的较小值 *)
-            Some (merge_min current_node s)
-    | Some c1, _, _ => (* Phi1 不被满足 *)
-      let children := expand_node1 current_node values upper_bounds c1 in
-      branch_and_bound_natural (rest_queue ++ children) values upper_bounds cs1 cs2 solution
-    | None, Some c2, _ => (* Phi2 不被满足 *)
-      let children := expand_node2 current_node values upper_bounds c2 in
-      branch_and_bound_natural (rest_queue ++ children) values upper_bounds cs1 cs2 solution
-    end
-  end.*)
-
-(* ========================================================================= *)
-(* ===== old implementation by Keyin, for reference ======================== *)
-(* ========================================================================= *)
-
-(*
-Program Fixpoint branch_and_bound_natural (scc : list ProdVar.t) (bounds : Bounds) (cs1 : list Constraint1) (cs2 : list Constraint2)
-  (solution : option Valuation) {measure (product_bounds bounds)} : option Valuation :=
-  let current_node := key_value bounds in
-  let unsat1 := find (fun c => negb (satisfies_constraint1 current_node c)) cs1 in
-  let unsat2 := find (fun c => negb (satisfies_constraint2 current_node c)) cs2 in
-  match unsat1, unsat2 with
-  | None, None => (* 约束都满足,是一个解 *)
-    if (product_bounds bounds == 0) (* current_node 是bounds中的唯一取值 *)
-      then (Some current_node)
-     else (* 不是唯一取值，缩小上界，继续寻找更优解 *)
-      (*let children := *)
-(*         fold_left (fun ls hd => if ((bounds hd).1 == (bounds hd).2) then ls else  *)
-(*           (update_ub bounds hd (current_node hd)) :: ls) scc nil *)
-(*       in  *)
-(*       fold_left (fun s nb => branch_and_bound_natural scc nb cs1 cs2 s) children (smaller_solution (Some current_node) solution) *)
-(*       *)
-      fold_left (fun s hd =>
-          match PVM.find hd bounds, PVM.find hd current_node with
-            | Some (lb, ub), Some hdv => if (lb == ub) then s else
-                let nb := update_ub bounds hd hdv in
-                branch_and_bound_natural scc nb cs1 cs2 s
-            | _, _ => s
-            end)
-            scc (smaller_solution (Some current_node) solution)
-  | Some c1, _ => (* Phi1 不被满足 *)
-    if (product_bounds bounds == 0) (* current_node 是bounds中的唯一取值 *)
-      then solution (* 但不满足约束 *)
-     else (* 不是唯一取值，继续搜索 *)
-      (*let children := new_nodes1 current_node bounds c1 in *)
-(*       fold_left (fun s nb => branch_and_bound_natural scc nb cs1 cs2 s) children solution*)
-
-      let ns := match PVM.find (lhs_var1 c1) bounds, PVM.find (lhs_var1 c1) current_node with
-        | Some (lb, ub), Some lhsv => if (lb == ub) then solution else
-            branch_and_bound_natural scc (update_lb bounds (lhs_var1 c1) (lhsv+1)) cs1 cs2 solution
-        | _, _ => solution
-        end in
-      fold_left (fun s hd =>
-          match PVM.find hd bounds, PVM.find hd current_node with
-            | Some (lb, ub), Some hdv => if (lb == ub) then s else
-                let nb := update_ub bounds hd hdv in
-                branch_and_bound_natural scc nb cs1 cs2 s
-            | _, _ => s
-            end) (rhs_vars c1) ns
-
-  | None, Some c2 => (* Phi2 不被满足 *)
-    if (product_bounds bounds == 0) (* current_node 是bounds中的唯一取值 *)
-      then solution (* 但不满足约束 *)
-     else (* 不是唯一取值，继续搜索 *)
-      (*let children := new_nodes2 current_node bounds c2 in *)
-(*       fold_left (fun s nb => branch_and_bound_natural scc nb cs1 cs2 s) children solution *)
-
-      fold_left (fun s hd =>
-          match PVM.find hd bounds, PVM.find hd current_node with
-            | Some (lb, ub), Some hdv => if (lb == ub) then s else
-                let nb := update_ub bounds hd hdv in
-                branch_and_bound_natural scc nb cs1 cs2 s
-            | _, _ => s
-            end) (map snd (rhs_terms2 c2)) solution
-  end.
-Next Obligation.
-Admitted.
-Next Obligation.
-Admitted.
-Next Obligation.
-Admitted.
-Next Obligation.
-Admitted.
-Next Obligation.
-Admitted.
-
-
-Lemma branch_and_bound_correctness : forall (solved tbsolved : list ProdVar.t) (cs : list Constraint) (initial ubs : Valuation), 
-  isGoodbound solved tbsolved cs initial ubs ->
-  (*let bound := mergeValuations initial ubs in
-  let cs1 := filter (constraint1_in_set tbsolved) (split_constraints cs).1 in
-  let cs2 := filter (constraint2_in_set tbsolved) (split_constraints cs).2 in*)
-  match branch_and_bound_natural tbsolved (mergeValuations initial ubs) 
-    (filter (constraint1_in_set tbsolved) (split_constraints cs).1)
-    (filter (constraint2_in_set tbsolved) (split_constraints cs).2) None with
-  | Some s => let cs' := List.filter (constraint_in_set (solved ++ tbsolved)) cs in
-              satisfies_all s cs'
-  | _ => true
-  end.
-Proof.
-Admitted.
-
-Lemma branch_and_bound_smallest : forall (solved tbsolved : list ProdVar.t) (cs : list Constraint) (initial ubs : Valuation), 
-  isGoodbound solved tbsolved cs initial ubs ->
-  let bound := mergeValuations initial ubs in
-  let cs1 := filter (constraint1_in_set tbsolved) (split_constraints cs).1 in
-  let cs2 := filter (constraint2_in_set tbsolved) (split_constraints cs).2 in
-  match branch_and_bound_natural tbsolved bound cs1 cs2 None with
-  | Some s => let cs' := List.filter (constraint_in_set (solved ++ tbsolved)) cs in satisfies_all s cs' ->
-    forall temp_s, satisfies_all temp_s cs' -> (*PVM.equal leq*) smaller_valuation s temp_s
-  | _ => true
-  end.
-Proof.
-Admitted.
-
-Program Fixpoint branch_and_bound_natural' (scc : list ProdVar.t) (bounds : Bounds) (cs1 : list Constraint1) (cs2 : list Constraint2)
-  (solution : option Valuation) (searched : list Valuation) {measure (product_bounds bounds)} : (option Valuation) * (list Valuation) :=
-  let current_node := key_value bounds in if valuation_in current_node searched then (solution, searched) else
-  let n_searched := current_node :: searched in
-  let unsat1 := find (fun c => negb (satisfies_constraint1 current_node c)) cs1 in
-  let unsat2 := find (fun c => negb (satisfies_constraint2 current_node c)) cs2 in
-  match unsat1, unsat2 with
-  | None, None => (* 约束都满足,是一个解 *)
-    if (product_bounds bounds == 0) (* current_node 是bounds中的唯一取值 *)
-      then (Some current_node, n_searched)
-     else (* 不是唯一取值，缩小上界，继续寻找更优解 *)
-      fold_left (fun '(s, n_searched') hd => 
-          match PVM.find hd bounds, PVM.find hd current_node with
-            | Some (lb, ub), Some hdv => if (lb == ub) then (s, n_searched') else
-                let nb := update_ub bounds hd hdv in
-                branch_and_bound_natural' scc nb cs1 cs2 s n_searched'
-            | _, _ => (s, n_searched')
-            end)
-            scc (smaller_solution (Some current_node) solution, n_searched)
-  | Some c1, _ => (* Phi1 不被满足 *)
-    if (product_bounds bounds == 0) (* current_node 是bounds中的唯一取值 *)
-      then (solution, n_searched) (* 但不满足约束 *)
-     else (* 不是唯一取值，继续搜索 *)
-      let ns := match PVM.find (lhs_var1 c1) bounds, PVM.find (lhs_var1 c1) current_node with
-        | Some (lb, ub), Some lhsv => if (lb == ub) then (solution, n_searched) else
-            branch_and_bound_natural' scc (update_lb bounds (lhs_var1 c1) (lhsv+1)) cs1 cs2 solution n_searched
-        | _, _ => (solution, n_searched) 
-        end in
-      fold_left (fun '(s, n_searched') hd => 
-          match PVM.find hd bounds, PVM.find hd current_node with
-            | Some (lb, ub), Some hdv => if (lb == ub) then (s, n_searched') else
-                let nb := update_ub bounds hd hdv in
-                branch_and_bound_natural' scc nb cs1 cs2 s n_searched'
-            | _, _ => (s, n_searched')
-            end) (rhs_vars c1) ns
-
-  | None, Some c2 => (* Phi2 不被满足 *)
-    if (product_bounds bounds == 0) (* current_node 是bounds中的唯一取值 *)
-      then (solution, n_searched) (* 但不满足约束 *)
-     else (* 不是唯一取值，继续搜索 *)
-      fold_left (fun '(s, n_searched') hd => 
-          match PVM.find hd bounds, PVM.find hd current_node with
-            | Some (lb, ub), Some hdv => if (lb == ub) then (s, n_searched') else
-                let nb := update_ub bounds hd hdv in
-                branch_and_bound_natural' scc nb cs1 cs2 s n_searched'
-            | _, _ => (s, n_searched')
-            end) (map snd (rhs_terms2 c2)) (solution, n_searched)
-  end.
-Next Obligation.
-Admitted.
-Next Obligation.
-Admitted.
-Next Obligation.
-Admitted.
-Next Obligation.
-Admitted.
-Next Obligation.
-Admitted.
-
-Check branch_and_bound_natural'.
-*)

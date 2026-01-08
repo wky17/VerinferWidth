@@ -1,4 +1,4 @@
-From Coq Require Import FMaps (*FunInd FMapAVL OrderedType*).
+From Coq Require Import FMaps.
 From mathcomp Require Import all_ssreflect.
 From HB Require Import structures.
 
@@ -28,7 +28,6 @@ Definition sizeof_fgtyp (t : fgtyp) : nat :=
 match t with
 | Fuint w | Fuint_implicit w => w
 | Fsint w | Fsint_implicit w => w
-(* | Fanalog w => w *)
 | _ => 1
 end.
 
@@ -38,7 +37,6 @@ Definition fgtyp_eqn (x y : fgtyp) : bool :=
 match x, y with
 | Fuint wx, Fuint wy | Fuint_implicit wx, Fuint_implicit wy => wx == wy
 | Fsint wx, Fsint wy | Fsint_implicit wx, Fsint_implicit wy => wx == wy
-(* | Fanalog wx, Fanalog wy => wx == wy *)
 | Fclock, Fclock => true
 | Freset, Freset => true
 | Fasyncreset, Fasyncreset => true

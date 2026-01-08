@@ -10,10 +10,10 @@ open Min_solver
 
 let fir_to_mlir filename =
   if Filename.check_suffix filename ".fir" then
-    let len = String.length filename - 4 in  (* 4 = ".fir" 的长度 *)
+    let len = String.length filename - 4 in 
     String.sub filename 0 len ^ ".mlir"
   else
-    filename  (* 如果不是 .fir 文件，返回原文件名 *)
+    filename 
 
 let compare_with_mlir in_file hif_ast mfile = 
   let flatten_cir = Inline.inline_cir stdout hif_ast in

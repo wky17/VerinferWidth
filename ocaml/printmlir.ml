@@ -30,7 +30,7 @@ and pp_fbtyp_mlir out btyp =
   | HiEnv.Fflips (fv, HiEnv.Nflip, ft, ff) -> fprintf out "f%d : " fv; pp_ftype_mlir out ft; fprintf out ", "; pp_fbtyp_mlir out ff
   | HiEnv.Fflips (fv, HiEnv.Flipped, ft, ff) -> fprintf out "f%d flip : " fv; pp_ftype_mlir out ft; fprintf out ", "; pp_fbtyp_mlir out ff
 
-let rec pp_ref_mlir out eflag ft ref = (* 返回pair,第一个是该ref的新string,第二个是下一个标号int *)
+let rec pp_ref_mlir out eflag ft ref =
   match ft, ref with
   | _, HiFirrtl.Eid v -> ("%"^Stdlib.Int.to_string (Obj.magic v), eflag)
   | HiEnv.Atyp (f, _), Esubindex (r, n) -> let (eflag0, eflag1) = pp_ref_mlir out eflag ft r in
@@ -74,7 +74,7 @@ let nat_of_bits bv =
 
 let z_of_bits bv = 
   let (v,sign) = (Stdlib.List.tl bv, Stdlib.List.hd bv) in
-  if sign then (sub_big_int (nat_of_bits v) (power_int_positive_int (2) ((Stdlib.List.length bv)-1))) (*最高位true，负数*)
+  if sign then (sub_big_int (nat_of_bits v) (power_int_positive_int (2) ((Stdlib.List.length bv)-1)))
   else
     nat_of_bits v
 

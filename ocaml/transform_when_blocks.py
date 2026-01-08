@@ -37,12 +37,11 @@ def transform_when_blocks(input_file_path):
 
     folder_name = "preprowhen"
 
-    # 检查并创建文件夹（如果不存在）
     if not os.path.exists(folder_name):
         os.makedirs(folder_name)
-        print(f"已创建文件夹: {folder_name}")
+        print(f"Folder has been created : {folder_name}")
     else:
-        print(f"文件夹已存在: {folder_name}")
+        print(f"The folder already exists : {folder_name}")
 
     # Generating output file path with 'pre' prefix
     dir_name, base_name = os.path.split(input_file_path)

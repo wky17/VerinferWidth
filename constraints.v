@@ -35,21 +35,18 @@ Proof.
   destruct (Nat.eq_dec n1 n2) as [Hn | Hn].
   destruct (ProdVar.eq_dec p1 p2) as [Hp | Hp].
   - left.
-    + (* p1 = p2，则 x = y *)
-      apply eq_from_prodvar_eq in Hp.
+    + apply eq_from_prodvar_eq in Hp.
       rewrite Hn.
       rewrite Hp.
       reflexivity.
-    + (* p1 <> p2，证明 d(x,y) 不等 *)
-      right.
+    + right.
       unfold not.
       intros H.
       injection H; intros.
       apply eq_from_prodvar_eq in H0.
       unfold not in Hp; apply Hp in H0.
       done.
-  - (* n1 <> n2，直接得到不等 *)
-    right.
+  - right.
     unfold not.
     intros H.
     injection H; intros; subst.
@@ -86,26 +83,25 @@ Proof.
   unfold Equality.axiom.
   move=> x y.
   elim: x y => [|x xs IHx] y /=.
-  - (* x = nil 的情况 *)
+  - (* x = nil *)
     case: y => [|y ys] /=.
     + (* y = nil *)
       apply ReflectT; reflexivity.
     + (* y = y::ys *)
       apply ReflectF; discriminate.
   
-  - (* x = x::xs 的情况 *)
+  - (* x = x::xs *)
     case: y => [|y ys] /=.
     + (* y = nil *)
       apply ReflectF; discriminate.
     + (* y = y::ys *)
-      (* 比较头部元素 *)
       move: (term_eqP x y) => [Hxy_eq|Hxy_neq].
       * (* x == y *)
         rewrite Hxy_eq /=.
         move: (IHx ys) => [Hxsys_eq|Hxsys_neq].
-        -- (* xs 和 ys 相等 *)
+        -- (* xs 和 ys *)
           rewrite Hxsys_eq eq_refl. apply ReflectT. done.
-        -- (* xs 和 ys 不相等 *)
+        -- (* xs 和 ys *)
           rewrite eq_refl. simpl. apply ReflectF.
           contradict Hxsys_neq. inversion Hxsys_neq. done.
       * (* x != y *)
@@ -124,10 +120,10 @@ e.g. z <= dshl(x,y) indicates lhs_var1_(w_z), rhs_const1_(-1),
 rhs_terms1_(1 * w_x), rhs_power_(w_y) *)
 
 Record Constraint1 : Type := {
-  lhs_var1 : ProdVar.t;  (* 左侧变量 *)
-  rhs_const1 : Z.t;(* 右侧常数项 *)
-  rhs_terms1 : terms; (* 右侧线性组合项，列表形式 (系数, 变量) *)
-  rhs_power : terms (* 右侧2的幂项 *)
+  lhs_var1 : ProdVar.t;  
+  rhs_const1 : Z.t;
+  rhs_terms1 : terms; 
+  rhs_power : terms 
 }.
 
 Definition constraint1_eqn (x y : Constraint1) : bool :=
@@ -144,15 +140,12 @@ Proof.
   destruct (x_lhs == y_lhs) eqn: Hlhs ; move /eqP : Hlhs => Hlhs ;
         last by (apply ReflectF ; contradict Hlhs ; injection Hlhs ; done).
   rewrite Hlhs andTb.
-  (* 比较常数项 *)
   case Hconst: (x_const =? y_const)%Z; [move/Z.eqb_eq in Hconst | move/Z.eqb_neq in Hconst]; simpl; 
         last by (apply ReflectF ; contradict Hlhs ; injection Hlhs ; done).
   rewrite Hconst.
- (* 比较线性组合项 *)
   destruct (x_terms == y_terms) eqn: Hterms ; move /eqP : Hterms => Hterms ;  
         last by (apply ReflectF ; contradict Hterms ; injection Hterms ; done).
   rewrite Hterms andTb.
-  (* 比较2的幂项 *)
   destruct (x_power == y_power) eqn: Hp ; move /eqP : Hp => Hp ;  
         last by (apply ReflectF ; contradict Hp ; injection Hp ; done).
   rewrite Hp.
@@ -167,10 +160,9 @@ Terms rhs_terms2_ is a list of linear Term: coe_0 * var_0 + coe_1 * var_1 +
 limit the condition expressions used in when statement or mux expression:
   they should either have a single bit width or be zero-width.
   e.g. z <= mux(c,x,y) indicates rhs_const2_(1), rhs_terms2_(1 * w_c) *)
-(* 定义ϕ2类型的约束结构 *)
 Record Constraint2 : Type := {
-  lhs_const2 : nat; (* 左侧常数项 *)
-  rhs_terms2 : terms (* 右侧线性组合项，列表形式 (系数, 变量) *)
+  lhs_const2 : nat; 
+  rhs_terms2 : terms 
 }.
 
 Definition constraint2_eqn (x y : Constraint2) : bool :=
@@ -185,7 +177,6 @@ Proof.
   destruct (x_lhs == y_lhs) eqn: Hlhs ; move /eqP : Hlhs => Hlhs ;
         last by (apply ReflectF ; contradict Hlhs ; injection Hlhs ; done).
   rewrite Hlhs andTb.
-  (* 比较线性组合项 *)
   destruct (x_terms == y_terms) eqn: Hterms ; move /eqP : Hterms => Hterms ;  
         last by (apply ReflectF ; contradict Hterms ; injection Hterms ; done).
   rewrite Hterms.
@@ -195,8 +186,8 @@ Qed.
 HB.instance Definition _ := hasDecEq.Build Constraint2 constraint2_eqP.
 
 Inductive Constraint : Type :=
-  | Phi1 : Constraint1 -> Constraint (* ϕ1类型的约束 *)
-  | Phi2 : Constraint2 -> Constraint (* ϕ2类型的约束 *)
+  | Phi1 : Constraint1 -> Constraint 
+  | Phi2 : Constraint2 -> Constraint 
 .
 
 Definition constraint_eqn (x y : Constraint) : bool :=
@@ -229,14 +220,12 @@ Record Constraint2_new : Type := {
 
 Definition combine_term (t1 : term) (t2 : list term) : list term := 
   match List.find (fun p : term => snd p == t1.2) t2 with
-  | None => t1 :: t2  (* 添加新的项 *)
+  | None => t1 :: t2 
   | Some t =>
-      (* 合并项 *)
       (t.1 + t1.1, t1.2) :: (List.remove term_dec t t2)
   end.
 
 Definition combine_terms (t1 t2 : (list term * list term * Z.t)) : list term * list term * Z.t := 
-  (* 不考虑幂项 *)
   let '(terms1, _, cst1) := t1 in
   let '(terms2, _, cst2) := t2 in
   let new_terms := fold_left (fun acc term =>
@@ -247,7 +236,6 @@ Definition Valuation := PVM.t nat.
 Definition initial_valuation := PVM.empty nat.
 Definition add_valuation := PVM.add.
 
-(* 检查ϕ1类型的约束是否满足 *)
 Definition terms_value (v : Valuation) (terms : list (nat * ProdVar.t)) (init : Z.t) : Z.t :=
   fold_left (fun acc ax => 
                             let vi := match PVM.find ax.2 v with
@@ -274,7 +262,6 @@ Definition satisfies_constraint1 (v: Valuation) (c: Constraint1) : bool :=
   | None => false
   end.
 
-(* 检查ϕ2类型的约束是否满足 *)
 Definition satisfies_constraint2 (v: Valuation) (c: Constraint2) : bool :=
   let total := fold_left (fun acc '(bi, xi) => 
                             let vi := match PVM.find xi v with
@@ -285,22 +272,18 @@ Definition satisfies_constraint2 (v: Valuation) (c: Constraint2) : bool :=
                          c.(rhs_terms2) 0
   in total <=? c.(lhs_const2).
 
-(* 检查约束是否满足 *)
 Definition satisfies_constraint (v: Valuation) (c: Constraint) : bool :=
   match c with
   | Phi1 c1 => satisfies_constraint1 v c1
   | Phi2 c2 => satisfies_constraint2 v c2
   end.
 
-(* 检查约束集是否满足 *)
 Definition satisfies_all (v: Valuation) (cs: list Constraint) : bool :=
   forallb (satisfies_constraint v) cs.
 
-(* 判断一个变量是否在集合中 *)
 Definition in_set (s : list ProdVar.t) (v : ProdVar.t) : bool :=
   existsb (eq_op v) s.
 
-(* 判断一个约束是否只涉及集合中的变量 *)
 Definition constraint1_in_set (s : list ProdVar.t) (c : Constraint1) : bool :=
   let vars_in_rhs := map snd (rhs_terms1 c) ++ map snd (rhs_power c) in
   let all_vars := lhs_var1 c :: vars_in_rhs in
@@ -316,7 +299,6 @@ Definition constraint_in_set (s : list ProdVar.t) (c : Constraint) : bool :=
   | Phi2 c1 => constraint2_in_set s c1
   end.
 
-(* 根据集合筛选出相关约束 *)
 Fixpoint filter_constraints1 (s : list ProdVar.t) (constraints : list Constraint) : list Constraint1 :=
   match constraints with
   | nil => nil
@@ -373,7 +355,6 @@ Proof.
     simpl; done.
 Qed.
 
-(* 在约束列表中找到指定左变量的约束 *)
 Definition find_constraint1s (v : ProdVar.t) (constraints : list Constraint1) : list Constraint1 :=
   filter (fun c => (v == (lhs_var1 c))) constraints.
 
@@ -389,7 +370,6 @@ Definition is_good_initialized (var : ProdVar.t) (solved : list ProdVar.t) (cs :
   forallb (satisfies_constraint1 values) tbsolved_cs.
 
 Definition is_good_initialized_smallest (solved tbsolved : list ProdVar.t) (cs : list Constraint) (initial : Valuation) : Prop :=
-  (* 在is_good_smallest的基础上，tbsolved被正确地初始化，是满足条件的最小 *)
   let solved_cs := filter (constraint_in_set solved) cs in 
   (satisfies_all initial solved_cs) /\ 
   (forall (var : ProdVar.t), var \in tbsolved -> is_good_initialized var solved cs initial) /\
@@ -397,7 +377,6 @@ Definition is_good_initialized_smallest (solved tbsolved : list ProdVar.t) (cs :
     (forall (var : ProdVar.t), var \in tbsolved -> is_good_initialized var solved cs temp_s) 
     -> (*PVM.equal leq*) smaller_valuation0 initial temp_s).
 
-(* 提取一个 Constraint1 中的所有变量 *)
 Definition constraint1_vars (c : Constraint1) : list ProdVar.t :=
   lhs_var1 c :: map snd (rhs_terms1 c) ++ map snd (rhs_power c).
 
@@ -411,11 +390,11 @@ Lemma filter_empty : forall [A : Type] (f : A -> bool) (nl : list A),
 (forall n : A, In n nl -> f n = false) -> 
 List.filter f nl = [].
 Proof.
-intros A f nl H.                   (* 引入函数f、列表nl和前提H *)
-induction nl as [|n nl' IHnl].     (* 对列表进行归纳 *)
-- (* 基本情况：空列表 *)
-  simpl. reflexivity.              (* filter f [] 自动化简为 [] *)
-- (* 归纳步骤：n :: nl *)
+intros A f nl H.                  
+induction nl as [|n nl' IHnl].    
+- 
+  simpl. reflexivity.            
+- 
   simpl. rewrite H. apply IHnl.
   intros; apply H. move : H0; apply List.in_cons.
   apply in_eq.
@@ -427,9 +406,9 @@ List.filter f nl = nl.
 Proof.
 intros A f nl H.                 
 induction nl as [|n nl' IHnl].   
-- (* 基本情况：空列表 *)
+- 
   simpl. reflexivity.         
-- (* 归纳步骤：n :: nl *)
+- 
   simpl. rewrite H. rewrite IHnl //.
   intros; apply H. move : H0; apply List.in_cons.
   apply in_eq.
@@ -492,36 +471,26 @@ Qed.
 Lemma partition_as_filter [A : Type] (f : A -> bool) (l : list A) : List.partition f l = (filter f l, filter (fun x => negb (f x)) l).
 Proof.
   induction l as [|x xs IH].
-  - (* 基础情况: 空列表 *)
-    simpl. reflexivity.
-  - (* 归纳步骤: x::xs *)
-    simpl. (* 展开 partition 和 filter 定义 *)
+  - simpl. reflexivity.
+  - simpl. 
     destruct (List.partition f xs) as [trues falses] eqn:Hpart.
-    (* 根据 f x 的值分情况证明 *)
     case (f x) eqn:Hfx.
-    + (* f x = true 的情况 *)
-      simpl. inversion IH. done.
-    + (* f x = false 的情况 *)
-      simpl. inversion IH. done.
+    + simpl. inversion IH. done.
+    + simpl. inversion IH. done.
 Qed.
 
 Lemma in_split_r_exists_in [A B : Type] (b : B) (l : list (A * B)) : List.In b (List.split l).2 -> exists a, List.In (a, b) l.
 Proof.
   intros HIn.
-  (* 对列表 l 进行归纳 *)
   induction l as [| (a', b') l IH]; simpl in *.
-  - (* 基本情况：空列表 *)
-    contradiction.  (* 空列表的 split 返回空列表 *)
-  - (* 归纳步骤：非空列表 *)
-    destruct (List.split l) as [xs ys] eqn:HSplit.
+  - contradiction. 
+  - destruct (List.split l) as [xs ys] eqn:HSplit.
     simpl in HIn.
     destruct HIn as [Heq | HIn'].
-    + (* 情况1: b 等于当前元素的第二个分量 *)
-      exists a'.
+    + exists a'.
       left.
-      congruence.  (* 自动处理等式 *)
-    + (* 情况2: b 在尾部分量列表中 *)
-      apply IH in HIn'.
+      congruence.  
+    + apply IH in HIn'.
       destruct HIn' as [a'' HIn''].
       exists a''.
       right; assumption.
@@ -639,32 +608,19 @@ Lemma In_in_bool : forall a l, in_bool a l <-> In a l.
 Proof.
   intros a l.
   split.
-  (* 证明左到右: in_bool a l -> In a l *)
-  - (* 进行归纳法 *)
-    induction l as [| hd tl IH].
-    + (* 基础情况: l = [] *)
-      simpl. intros H. discriminate H.
-    + (* 递归情况: l = hd :: tl *)
-      simpl. intros H.
-      (* 通过布尔运算的定义进行分析 *)
+  - induction l as [| hd tl IH].
+    + simpl. intros H. discriminate H.
+    + simpl. intros H.
       destruct (hd == a) eqn:Heq.
-      * (* 如果 hd == a 为真 *)
-        move /eqP : Heq => Heq. subst. left. reflexivity.
-      * (* 如果 hd == a 为假 *)
-        right. apply IH. rewrite orb_false_l in H. done.
+      * move /eqP : Heq => Heq. subst. left. reflexivity.
+      * right. apply IH. rewrite orb_false_l in H. done.
 
-  (* 证明右到左: In a l -> in_bool a l *)
-  - (* 进行归纳法 *)
-    induction l as [| hd tl IH].
-    + (* 基础情况: l = [] *)
-      simpl. intros H. contradiction.
-    + (* 递归情况: l = hd :: tl *)
-      simpl. intros H.
+  - induction l as [| hd tl IH].
+    + simpl. intros H. contradiction.
+    + simpl. intros H.
       destruct H as [H1 | H2].
-      * (* H1: a = hd *)
-        rewrite H1 eq_refl orb_true_l //.
-      * (* H2: In a tl *)
-        apply IH in H2. rewrite H2 orb_true_r //.
+      * rewrite H1 eq_refl orb_true_l //.
+      * apply IH in H2. rewrite H2 orb_true_r //.
 Qed.
 
 (************************     Lemmas on constraints       *************************)
@@ -878,15 +834,11 @@ Proof.
     rewrite forallb_forall.
     intro H; apply H in Hin.
     congruence.
-  - (* 右推左：非全真 → 存在反例 *)
-    intros Hnot. induction x as [|a x' IH].
-    + (* 空列表情况 *)
-      exfalso. apply Hnot. reflexivity.             (* forallb [] = true *)
-    + (* 非空列表情况 *)
-      simpl in *. apply not_true_iff_false in Hnot. apply andb_false_iff in Hnot.          (* 分解合取式 *)
+  - intros Hnot. induction x as [|a x' IH].
+    + exfalso. apply Hnot. reflexivity.             (* forallb [] = true *)
+    + simpl in *. apply not_true_iff_false in Hnot. apply andb_false_iff in Hnot.          (* 分解合取式 *)
       destruct Hnot as [Hf|Hforall].
-      * (* 头部元素为假 *)
-        exists a. split; auto.
+      * exists a. split; auto.
       * (* 尾部存在假元素 *)
         apply not_true_iff_false in Hforall. destruct (IH Hforall) as [y [Hin Hfalse]].
         exists y. split; auto.
@@ -995,27 +947,21 @@ Qed.
 Lemma constraint1_vars2constraints1_vars : forall cs x var, In x cs -> In var (constraint1_vars x) -> In var (constraints1_vars cs).
 Proof.
   intros cs. induction cs as [|c1 tl IHcs]; intros x var HIn1 HIn2.
-  - (* 基础情况：cs = nil *)
-    inversion HIn1. (* HIn1 不成立，因为 nil 中没有元素 *)
-  - (* 归纳步骤：cs = c1 :: tl *)
-    simpl in *. (* 展开 constraints1_vars 的定义 *)
+  - inversion HIn1. 
+  - simpl in *. 
     destruct HIn1 as [Hc1 | HIn_tl].
-    + (* 情况1：x = c1 *)
-      subst x. (* 替换 x 为 c1 *)
+    + subst x. 
       destruct HIn2. left; done.
       right; apply in_or_app. left. assumption.
-    + (* 情况2：x 在 tl 中 *)
-      right; apply in_or_app.
+    + right; apply in_or_app.
       right; apply IHcs with (x := x); assumption.
 Qed.
 
 Lemma constraints1_vars_app : forall l0 l1, constraints1_vars (l0 ++ l1) = constraints1_vars l0 ++ constraints1_vars l1.
 Proof.
   induction l0 as [| c1 tl IH].
-  - (* 基础情况：l0 = nil *)
-    simpl. reflexivity.
-  - (* 归纳步骤：假设 l0 = c1 :: tl *)
-    intros; simpl.
+  - simpl. reflexivity.
+  - intros; simpl.
     rewrite IH.
     rewrite -{1}cat1s. rewrite -(cat1s (lhs_var1 c1) ((((map snd (rhs_terms1 c1) ++ map snd (rhs_power c1)) ++ constraints1_vars tl)%SEQ ++ constraints1_vars l1)%list)).
     apply app_inv_head_iff.

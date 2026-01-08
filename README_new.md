@@ -195,6 +195,24 @@ Place your example.fir and example.mlir in [ocaml/demo/firrtl program] and [ocam
 - `ocaml/src/optimizer.ml`: Main optimization implementation
 - `ocaml/src/verifier.ml`: Semantic equivalence checker
 
+- `branch_and_bound.v`: Formalizes ...(), prove ...()
+Theorem smaller_sol_is_sol : Section 2.2 , Proposition 2.
+Function bab_bin : Section 3.3, Section 4.1(BaB).
+Theorem bab_bin_correct1, Theorem bab_bin_correct2 : Section 4.2(P_BaB).
+
+- `scc.v` : 
+Definition solve_ubs_aux : Section 3.2, Proposition 3.
+
+- `floyd_sc.v` : 
+Function solve_simple_cycle : Section 3.4, Section 4.1(inferSCC: nontrivial-maxfw).
+Lemma scc_smallest, Lemma solve_simple_cycle_correctness : Section 4.2(P_maxFW).
+
+- `inferWidths.v` : 
+Definition solve_scc : Section 4.1(inferSCC)
+Fixpoint solve_alg : Section 4.1(inferWidth)
+Lemma solve_scc_correctness, Lemma solve_scc_smallest, Lemma solve_scc_unsat : Section 4.2(P_inferSCC)
+Lemma solve_alg_correctness, Lemma solve_alg_smallest, Lemma solve_alg_return_unsat : Section 4.2(P_inferWidth)
+
 ## 🛠️ Troubleshooting
 
 **Common Issues:**

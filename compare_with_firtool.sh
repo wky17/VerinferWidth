@@ -1,25 +1,27 @@
 #!/bin/bash
 
-# 在遇到错误时退出脚本
 set -e
 
-# 步骤1: 生成Makefile
+# Step1: generate Makefile
 coq_makefile -f _CoqProject -o Makefile
 
-# 步骤2: 初始化Dune项目
+# Step2: init Dune project
 dune init proj ocaml_try
 
-# 步骤3: 拷贝OCaml相关文件
+# Step3: Copy OCaml related files
 cp -r ./ocaml/{extraction,hiparser,mlirparser} ./ocaml_try/
 cp ./ocaml/{dune,inline.ml,min_solver.ml,nodehelper.ml,printfir.ml,run_solver.ml,transhiast.ml,useocamlscc.ml} ./ocaml_try/
 cp ./ocaml/{against_firtool.ml,against_gurobi.ml,compare_with_gurobi.py,run_compare_firtool.ml,run_store_res.ml,printmlir.ml,./process_mlir.sh} ./ocaml_try/
 
-# 步骤4: 编译Coq项目
+# Step4: compile Coq project
 make
+echo -e "✅ Coq formalization compiled successfully"
 
-# 步骤5: 进入项目目录并构建
+# Step5: build OCaml project
 cd ocaml_try
 dune build
+echo -e "✅ OCaml implementation built"
+echo -e "🚀 Running demo on sample circuit..."
 
-# 步骤6: 运行测试程序
+# Step6: run test
 ./_build/default/run_compare_firtool.exe ../ocaml/demo/firrtl\ program/AddNot.fir ../ocaml/demo/mlir/AddNot.mlir

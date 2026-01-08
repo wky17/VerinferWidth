@@ -17,7 +17,7 @@ Section LoFirrtl.
   (****** Expressions ******)
 
   Inductive ucast : Set :=
-  | AsUInt | AsSInt (*| AsFixed*) | AsClock | AsAsync .
+  | AsUInt | AsSInt | AsClock | AsAsync .
 
   Definition ucast_eqn (x y : ucast) : bool :=
   match x, y with
@@ -106,8 +106,6 @@ Compute (Upad 1 == Upad 2).
   | Bmul
   | Bdiv
   | Brem
-  (* | Bsdiv *)
-  (* | Bsrem *)
   | Bcomp: bcmp -> ebinop
   | Bdshl
   | Bdshr
@@ -146,7 +144,6 @@ Compute (Badd == Bsub).
   | Eprim_unop : eunop -> fexpr -> fexpr
   | Eprim_binop : ebinop -> fexpr -> fexpr -> fexpr
   | Emux : fexpr -> fexpr -> fexpr -> fexpr
-  (*| Evalidif : fexpr -> fexpr -> fexpr*)
   | Eref : var -> fexpr
   .
 
@@ -157,7 +154,6 @@ Compute (Badd == Bsub).
   | Eprim_unop ux ex, Eprim_unop uy ey => (ux == uy) && fexpr_eqn ex ey
   | Eprim_binop ox ex fx, Eprim_binop oy ey fy => (ox == oy) && fexpr_eqn ex ey && fexpr_eqn fx fy
   | Emux ex fx gx, Emux ey fy gy => fexpr_eqn ex ey && fexpr_eqn fx fy && fexpr_eqn gx gy
-  (*| Evalidif ex fx, Evalidif ey fy => fexpr_eqn ex ey && fexpr_eqn fx fy*)
   | Eref vx, Eref vy => vx == vy
   | _, _ => false
   end.
@@ -239,22 +235,6 @@ Compute (Badd == Bsub).
     destruct IHx3 as [_ IHx3] ; specialize (IHx3 Logic.eq_refl).
     rewrite IHx3.
     apply ReflectT ; reflexivity.
-  (** fold fexpr_eqn in IHx1 ; fold fexpr_eqn in IHx2 ; fold fexpr_eqn.
-    specialize (IHx1 y1) ; apply reflect_iff in IHx1.
-    destruct (fexpr_eqn x1 y1) ;
-          last by (apply ReflectF ; injection ; intros _ H0 ;
-                   destruct IHx1 as [IHx1 _] ;
-                   apply IHx1 in H0 ; done).
-    destruct IHx1 as [_ IHx1] ; specialize (IHx1 Logic.eq_refl).
-    rewrite IHx1 andTb.
-    specialize (IHx2 y2) ; apply reflect_iff in IHx2.
-    destruct (fexpr_eqn x2 y2) ;
-          last by (apply ReflectF ; injection ; intros H0 ;
-                   destruct IHx2 as [IHx2 _] ;
-                   apply IHx2 in H0 ; done).
-    destruct IHx2 as [_ IHx2] ; specialize (IHx2 Logic.eq_refl).
-    rewrite IHx2.
-    apply ReflectT ; reflexivity.*)
   * destruct (s == s0) eqn: Hs ; move /eqP : Hs => Hs ;
           last by (apply ReflectF ; contradict Hs ; injection Hs ; done).
     rewrite Hs.

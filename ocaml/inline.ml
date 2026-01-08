@@ -76,7 +76,7 @@ and flatstmt fmodmap st insts instmap current_pre res =
   | Ast.Smem _ -> Qcons (Ast.Sskip, res) (* ignore *)
   | Ast.Sinst (v1, e) -> let new_pre = if current_pre = "" then v1^"." else current_pre^v1^"." in
                         (match StringMap.find e fmodmap, StringMap.find e instmap with
-                        | Ast.FInmod (_, pl, sl), ninsts -> (* expand inst 内部语句 *)
+                        | Ast.FInmod (_, pl, sl), ninsts ->
                           let instpl = List.fold_left (fun templ p -> match p with
                                                         | Ast.Finput (v, ty) -> Ast.Qcons (Ast.Swire ((new_pre^v), ty), templ)
                                                         | Ast.Foutput (v, ty) -> Qcons (Ast.Swire ((new_pre^v), ty), templ)) pl res in 

@@ -7,7 +7,6 @@ From Coq Require Import ZArith Arith List Ascii String Lia FMaps.
 Import ListNotations.
 
 Set Implicit Arguments.
-(*Unset Strict Implicit.*) 
 Import Prenex Implicits.
 
 Definition substitute_constraint (c : Constraint1) (v : ProdVar.t) (terms : list (nat * ProdVar.t)) (cst : Z.t) : Constraint1 :=
@@ -15,15 +14,12 @@ Definition substitute_constraint (c : Constraint1) (v : ProdVar.t) (terms : list
   | Some (coe, _) =>
     let new_terms := 
         fold_right (fun '(coe', var) (acc : list term) =>
-            (* 检查 acc 是否已经包含 var *)
             match find (fun p : term => snd p == var) acc with
-            | None => (coe * coe', var) :: acc  (* 添加新的项 *)
+            | None => (coe * coe', var) :: acc 
             | Some (existing_coef, _) =>
-                (* 合并项 *)
                 (existing_coef + coe * coe', var) :: (List.remove term_dec (existing_coef, var) acc)
             end
         ) (List.remove term_dec (coe, v) (rhs_terms1 c)) terms in
-      (* 返回替换的约束 *)
       {| lhs_var1 := lhs_var1 c;
         rhs_const1 := Z.add (rhs_const1 c) ((Z.of_nat coe) * cst);
         rhs_power := nil;
@@ -35,22 +31,20 @@ Section SccCorrectness.
 
 Definition good_terms (terms : list term) : Prop :=
   (forall coe var, List.In (coe, var) terms -> coe <> 0)
-  /\ NoDup (List.split terms).2
-  (* terms中没有相同的两项var *).
+  /\ NoDup (List.split terms).2.
 
 Lemma good_terms_NoDup : forall (terms : list term),
   good_terms terms -> NoDup terms.
 Proof.
-  intros terms [H1 H2].  (* 分解good_terms为两个假设H1和H2 *)
-  induction terms as [|[coe var] ts IH].  (* 对terms进行结构归纳 *)
-  - apply NoDup_nil.  (* 空列表的情况，直接应用NoDup_nil *)
-  - apply NoDup_cons.  (* 非空列表的情况，应用NoDup_cons构造子 *)
-    + intro H.  (* 假设t在ts中出现，导出矛盾 *)
-      (* 分解H2：split (t::ts).2是NoDup的 *)
+  intros terms [H1 H2]. 
+  induction terms as [|[coe var] ts IH].  
+  - apply NoDup_nil. 
+  - apply NoDup_cons. 
+    + intro H.  
       destruct (List.split ts) as [coes vars] eqn : Hsplit.
       simpl in H2. rewrite Hsplit in H2; simpl in H2.
       apply in_split_r in H; rewrite Hsplit in H; simpl in H. apply NoDup_cons_iff in H2. intuition.
-    + apply IH.  (* 应用归纳假设，需证明good_terms ts *)
+    + apply IH. 
       * intros; apply (H1 _ var0). right; done.
       * destruct (List.split ts) as [coes vars] eqn : Hsplit.
         simpl in H2. rewrite Hsplit in H2; simpl in H2. simpl. apply (NoDup_remove_1 nil vars var); simpl; done.
@@ -238,7 +232,7 @@ Proof.
     rewrite subn1 Nat.succ_pred_pos.
     apply (elimT leP); done.
     apply Nat.le_lt_trans with (m := 1).
-    - apply le_0_n.  (* 证明0 <= 1 *)
+    - apply le_0_n.
     - apply (elimT leP); done.
 
   rewrite Hfindhd Z2Nat.id; try done.
@@ -469,10 +463,7 @@ Proof.
       end) (remove term_dec (coe, hd) terms_tl) terms_hd') as combined_hd'.
     rewrite -Heqcombined_hd'.
     case Hfind : (List.find (fun p : term => p.2 == var_hd) combined_hd') => [[existing_coef var_hd']|]; try done.
-    - (* 代入hd'后，存在var_hd *)
-      (* 整理右 *)
-      rewrite Z.mul_add_distr_l Z.add_assoc.
-      (* 整理左 *)
+    - rewrite Z.mul_add_distr_l Z.add_assoc.
       assert ((existing_coef + coe * coe_hd, var_hd) :: remove term_dec (existing_coef, var_hd) combined_hd' 
         = [(existing_coef + coe * coe_hd, var_hd)] ++ remove term_dec (existing_coef, var_hd) combined_hd') by (simpl; done).
       rewrite H2. rewrite (terms_value_app (cst_tl + Z.of_nat coe * cst_hd)%Z valuation [(existing_coef + coe * coe_hd, var_hd)] 
@@ -480,7 +471,6 @@ Proof.
       rewrite Z.add_comm. 
       rewrite -> mult_plus_distr_r.
       rewrite Nat2Z.inj_add.
-      (* 化简消去 *)
       rewrite (Nat2Z.inj_mul (coe * coe_hd) (match PVM.find (elt:=nat) var_hd valuation with
         | Some val => val
         | None => 0
@@ -491,7 +481,6 @@ Proof.
         | None => 0
         end)) Z.mul_assoc.
       rewrite Z.add_assoc.
-      (* 化简 *)
       apply Z.add_cancel_r.
       specialize terms_value_remove with (hd_val := (match PVM.find (elt:=nat) var_hd valuation with
         | Some val => val
@@ -511,12 +500,9 @@ Proof.
       rewrite /good_terms in Hnodup_tl. apply (Hnodup_tl.1 _ hd). apply find_some in H0. exact H0.1.
       generalize Hfind; apply find_some in Hfind; simpl in Hfind; intros. move : Hfind => [Hin Heq]; move /eqP : Heq => Heq. rewrite Heq in Hfind0; done.
 
-    - (* 不存在var_hd *)
-      (* 整理左 *)
-      assert ((coe * coe_hd, var_hd) :: combined_hd' = [(coe * coe_hd, var_hd)] ++ combined_hd') by (simpl; done).
+    - assert ((coe * coe_hd, var_hd) :: combined_hd' = [(coe * coe_hd, var_hd)] ++ combined_hd') by (simpl; done).
       rewrite H2. rewrite (terms_value_app (cst_tl + Z.of_nat coe * cst_hd)%Z valuation [(coe * coe_hd, var_hd)] (combined_hd')). clear H2; simpl.
       rewrite Z.add_comm.
-      (* 整理右 *)
       rewrite Z.mul_add_distr_l Z.add_assoc.
       rewrite Nat2Z.inj_mul.
       rewrite Nat2Z.inj_mul.
@@ -524,7 +510,6 @@ Proof.
         | Some val => val
         | None => 0
         end)) Z.mul_assoc.
-      (* 化简 *)
       apply Z.add_cancel_r.
       rewrite Heqcombined_hd'; apply H; try done.
       (* NoDup start *)
@@ -561,7 +546,7 @@ Fixpoint build_graph (constraints : list Constraint1) : G * Adj :=
       fold_left (fun '(graph, adj_matrix) (xi : ProdVar.t) =>
                    add_edge graph adj_matrix xi (lhs_var1 c0) c0)
                 (List.split (rhs_terms1 c0)).2 (build_graph cs)
-  end. (* from 为rhs, to lhs *)
+  end. 
 
 Fixpoint find_path (g : G) (y : ProdVar.t) n (v : list ProdVar.t) (x : ProdVar.t) res : option (list ProdVar.t) :=
   match res with
@@ -576,7 +561,7 @@ Fixpoint find_path (g : G) (y : ProdVar.t) n (v : list ProdVar.t) (x : ProdVar.t
       end) res children
     | None => None
     end else None
-  end. (* from x to y, res 为 y, ..., x *)
+  end.
 
 Fixpoint find_constraints_of_path (adj : Adj) (p_hd : ProdVar.t) (p_tl : list ProdVar.t) : option (list Constraint1) :=
   match p_tl with
@@ -606,8 +591,6 @@ Definition compute_ub (c : Constraint1) : option nat :=
   end.
 
 Definition solve_ub_case1 (x : ProdVar.t) (c : Constraint1) (var : ProdVar.t) (g : G) (adj : Adj) (n : nat) : option nat :=
-  (* c : lhs >= coe * var + ... + cst c *) 
-  (* 找 x >= ? * lhs + ... 和 var >= ? * x + ... *)
   match find_path g x n nil (lhs_var1 c) None, find_path g var n nil x None with
   | Some (p0_hd :: p0_tl), Some (p1_hd :: p1_tl) => 
           match find_constraints_of_path adj p0_hd p0_tl, find_constraints_of_path adj p1_hd p1_tl with
@@ -632,8 +615,6 @@ Fixpoint solve_ubs_case1 (tbsolved : list ProdVar.t) (c : Constraint1) (var : Pr
   end.
 
 Definition solve_ub_case2 (x : ProdVar.t) (c : Constraint1) (var0 var1 : ProdVar.t) (g : G) (adj : Adj) (n : nat) : option nat :=
-  (* c : lhs >= coe0 * var0 + coe1 * var1 + ... + cst c *) 
-  (* 找 x >= ? * lhs + ... 和 var0 >= ? * x + ... 和 var1 >= ? * x + ... *)
   match find_path g x n nil (lhs_var1 c) None, find_path g var0 n nil x None, find_path g var1 n nil x None with
   | Some (p0_hd :: p0_tl), Some (p1_hd :: p1_tl), Some (p2_hd :: p2_tl) => 
         match find_constraints_of_path adj p0_hd p0_tl, find_constraints_of_path adj p1_hd p1_tl, find_constraints_of_path adj p2_hd p2_tl with

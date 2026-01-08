@@ -49,7 +49,7 @@ let nat_of_bits_rev bv =
 
 let z_of_bits bv = 
   let (v,sign) = (Stdlib.List.tl bv, Stdlib.List.hd bv) in
-  if sign then (sub_big_int (nat_of_bits_rev v) (power_int_positive_int (2) ((Stdlib.List.length bv)-1))) (*最高位true，负数*)
+  if sign then (sub_big_int (nat_of_bits_rev v) (power_int_positive_int (2) ((Stdlib.List.length bv)-1)))
   else
     nat_of_bits_rev v
 
