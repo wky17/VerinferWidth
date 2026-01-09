@@ -19,7 +19,7 @@ Choose one of the following two approaches:
 - 8GB RAM, 5GB disk space
 
 #### Option B: Native Installation
-- macOS 12+ or Linux (Ubuntu 22.04+)
+- macOS 12+ or Linux (Ubuntu 22.04+/Debian 11+)
 * [OPAM](https://opam.ocaml.org) 2.1+
 * [Coq](https://coq.inria.fr) 8.16.0 
 * [MathComp](https://github.com/math-comp/math-comp) 2.2.0
