@@ -1,4 +1,4 @@
-# Artifact for **A Formally Verified Procedure for Width Inference in FIRRTL**
+# Artifact for *A Formally Verified Procedure for Width Inference in FIRRTL*
 
 This artifact contains the implementation and formalization accompanying the paper **A Formally Verified Procedure for Width Inference in FIRRTL** by *Wang, Shi, Liu, Wu, Song, Chen, Jansen*. It includes:
 - A Coq formalization of **a width inference algorithm and its correctness proofs**
@@ -14,13 +14,13 @@ FIRRTL is an intermediate representation language for Register Transfer Level (R
 
 Choose one of the following two approaches:
 
-#### Option A: Docker (Recommended - 5 minutes)
+#### Option A: Docker (Recommended - 20 minutes)
 - Docker Engine 20.10+ 
 - 8GB RAM, 5GB disk space
 
-#### Option B: Native Installation (15-20 minutes)
+#### Option B: Native Installation
 - macOS 12+ or Linux (Ubuntu 22.04+)
-- OPAM 2.1+
+* [OPAM](https://opam.ocaml.org) 2.1+
 * [Coq](https://coq.inria.fr) 8.16.0 
 * [MathComp](https://github.com/math-comp/math-comp) 2.2.0
 * [MathComp-tarjan](https://github.com/coq-community/tarjan) 1.0.2
@@ -48,7 +48,7 @@ docker run --rm esop-artifact ./build_and_run.sh
 
 #### Local Approach:
 ```bash
-# 1. Install dependencies (see REQUIREMENTS.txt for detailed versions, the following are only suggestions for macOS)
+# 1. Install dependencies (see REQUIREMENTS.txt for detailed versions)
 opam pin add coq 8.16.0
 opam pin add ocaml 4.14.2
 opam install -y \
@@ -58,6 +58,7 @@ opam install -y \
     coq-mathcomp-tarjan=1.0.2
 opam install -y \
     ocamlgraph=2.1.0 
+pip install gurobipy
 
 # 2. Run the smoke test
 ./build_and_run.sh
@@ -95,7 +96,7 @@ python transform_when_blocks.py ./your/path/to/example.fir
 ```
 The preprocessed file will be located in a folder named "preprowhen" under the same directory as the input file.Because FIRRTL uses indentation to determine nested levels of `when...else...` blocks, which complicates parsing. 
 
-In fact, if you run the test locally, you will find a new firrtl file named `AddNot_iw.fir` in the same directory as `AddNot.fir`. This is the new firrtl circuit obtained through our width inference process(it cannot be seen through "docker run"). The output file can be processed by downstream tools like `firtool`.
+In fact, if you run the test locally, you will find a new firrtl file named `AddNot_iw.fir` in the same directory as `AddNot.fir`. This is the new firrtl circuit obtained through our width inference process(it cannot be seen through `docker run`). The output file can be processed by downstream tools like `firtool`.
 
 ## 🔬 Reproducing Paper Results
 
