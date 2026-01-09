@@ -36,7 +36,5 @@ We apply for the **Available** badge because:
 
 1.  **Archival Repository:** The artifact relevant to the paper **A Formally Verified Procedure for Width Inference in FIRRTL** has been deposited in the **[Repository Name - e.g., Zenodo, FigShare, Dryad]** public archival repository.
 2.  **Permanent Accessibility:** This repository guarantees long-term preservation and permanent accessibility through its stated policies and infrastructure.
-3.  **DOI Provided:** The artifact has been assigned the following permanent Digital Object Identifier (DOI):
-    *   **DOI:** `[Your Assigned DOI Here - e.g., 10.5281/zenodo.1234567]`
-    *   **Permalink:** `[The full URL to your artifact on the repository]`
+3.  **DOI Provided:** The artifact has been assigned the permanent Digital Object Identifier (DOI) and is submitted as a link for AE.
 4.  **CR Paper Inclusion:** This DOI will be included in the Camera-Ready version of our paper.

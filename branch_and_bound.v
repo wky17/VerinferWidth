@@ -8,7 +8,6 @@ Require Import Program.
 Require Import Recdef.
 Import ListNotations.
 
-
 Set Implicit Arguments.
 Import Prenex Implicits.
 
@@ -1774,12 +1773,35 @@ Proof.
   exact: bab_bin_smallest_aux.
 Qed.
 
-Lemma bab_bin_mem_in cs1 cs2 : forall ls bs sol, bab_bin ls bs cs1 cs2 = Some sol -> forall var, PVM.mem var sol -> PVM.mem var bs.
+Definition bab_bin_unsat_P (bounds : Bounds) cs1 cs2 (ret : option Valuation) :=
+  well_formed bounds cs1 cs2 -> ret = None ->
+  forall (v : Valuation), In v bounds ->
+                          ~~ satisfies_all_constraint1 v cs1 \/ ~~ satisfies_all_constraint2 v cs2.
+  
+
+Lemma bab_bin_unsat_aux :
+  forall (vars : list ProdVar.t) (bounds : Bounds)
+         (cs1 : list Constraint1) (cs2 : list Constraint2),
+    bab_bin_unsat_P bounds cs1 cs2 (bab_bin vars bounds cs1 cs2).
 Proof.
-(* Added by KY *)
 Admitted.
 
-Lemma bab_bin_none_unsat cs1 cs2 : forall ls bs, bab_bin ls bs cs1 cs2 = None -> forall v : Valuation, In v bs -> forallb (satisfies_constraint1 v) cs1 = false.
+
+Theorem bab_bin_unsat :
+  forall (vars : list ProdVar.t) (bounds : Bounds)
+         (cs1 : list Constraint1) (cs2 : list Constraint2),
+    well_formed bounds cs1 cs2 ->
+    bab_bin vars bounds cs1 cs2 = None ->
+    forall (v : Valuation), In v bounds ->
+                            andb (satisfies_all_constraint1 v cs1) (satisfies_all_constraint2 v cs2) = false.
+Proof.
+  move => vars bds cs1 cs2 Hwf Hbab v Hin. rewrite andb_false_iff.
+  move: (bab_bin_unsat_aux vars Hwf Hbab Hin) => [Hcs1 | Hcs2].
+  - left; exact: negbTE.
+  - right; exact: negbTE.
+Qed.
+
+Lemma bab_bin_mem_in cs1 cs2 : forall ls bs sol, bab_bin ls bs cs1 cs2 = Some sol -> forall var, PVM.mem var sol -> PVM.mem var bs.
 Proof.
 (* Added by KY *)
 Admitted.

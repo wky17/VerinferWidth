@@ -15,10 +15,13 @@ cp ./ocaml/{against_firtool.ml,against_gurobi.ml,compare_with_gurobi.py,run_comp
 
 # Step4: compile Coq project
 make
+echo -e "✅ Coq formalization compiled successfully"
 
 # Step5: build OCaml project
 cd ocaml_try
 dune build
+echo -e "✅ OCaml implementation built"
+echo -e "🚀 Running demo on sample circuit..."
 
 # Step6: run test
 ./_build/default/run_store_res.exe ../ocaml/demo/AddNot.fir

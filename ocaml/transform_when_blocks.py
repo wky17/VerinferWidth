@@ -35,7 +35,7 @@ def transform_when_blocks(input_file_path):
     while indent_stack:
         transformed_lines.append(' ' * indent_stack.pop() + '}\n')
 
-    folder_name = "preprowhen"
+    folder_name = "demo/preprowhen"
 
     if not os.path.exists(folder_name):
         os.makedirs(folder_name)
@@ -45,7 +45,7 @@ def transform_when_blocks(input_file_path):
 
     # Generating output file path with 'pre' prefix
     dir_name, base_name = os.path.split(input_file_path)
-    new_base_name = 'preprowhen/' + base_name
+    new_base_name = 'demo/preprowhen/' + base_name
     output_file_path = os.path.join("./", new_base_name)
 
     # Write the transformed lines to the output file

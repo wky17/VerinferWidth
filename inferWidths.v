@@ -2911,7 +2911,18 @@ Proof.
     * (* bab *)
       case Hubs : (solve_ubs_aux hd (List.filter (fun c : Constraint1 => Datatypes.length (rhs_terms1 c) != 0) cs1)) => [ubs|]; rewrite Hubs in Hsolve; try discriminate.
       intro. case Hin : (In_bool v (PVM.elements (mergeBounds ubs))).
-      + apply In_In_bool in Hin. apply bab_bin_none_unsat with (v := v) in Hsolve; try done. 
+      + apply In_In_bool in Hin. apply bab_bin_unsat with (v := v) in Hsolve; try done. simpl in Hsolve. rewrite andb_true_r in Hsolve.
+        apply not_true_iff_false. intro. apply forallb2satisfies_all_constraint1 in H. rewrite H in Hsolve. discriminate.
+        { unfold branch_and_bound.well_formed. split.
+        + unfold well_defined. intros. apply mergeBounds_find_lb in H. rewrite H. done.
+        + split. unfold conform1. split. 
+          specialize (Hvars_in_hd _ H (lhs_var1 c)); specialize (solve_ubs_aux_in_mem _ _ _ Hubs (lhs_var1 c)); intro.
+            apply mergeBounds_key_eq in H0. apply find_mem in H0. destruct H0 as [[val0 val1] H1]. exists val0; exists val1; done.
+            apply Hvars_in_hd. unfold constraint1_vars. simpl; left; done.
+          intros x Hrhs; specialize (Hvars_in_hd _ H x); specialize (solve_ubs_aux_in_mem _ _ _ Hubs x); intro.
+            apply mergeBounds_key_eq in H0. apply find_mem in H0. destruct H0 as [[val0 val1] H1]. exists val0; exists val1; done.
+            apply Hvars_in_hd. unfold constraint1_vars. unfold rhs_vars in Hrhs. simpl; right; done.
+        + unfold conform2. intros; done. }
       + assert (~In v (mergeBounds ubs)) by (intro; apply In_In_bool in H; rewrite H in Hin; discriminate).
         apply solve_ubs_aux_notin_unsat with (v := v) in Hubs; try done. 
         move : Hubs Hterms Hpowers; clear; intros. apply not_true_iff_false; apply forallb_neg_neg. apply not_true_iff_false in Hubs; apply forallb_neg_neg in Hubs. destruct Hubs as [x [Hin Hunsat]].

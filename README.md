@@ -89,11 +89,11 @@ We are using the simple FIRRTL program `AddNot.fir` in `ocaml/demo`, in fact, th
 ```bash
 ./_build/default/run_solver.exe ../ocaml/demo/firrtl\ program/GCD.fir
 ```
-Furthermore, we also support any FIRRTL test cases provided by any user. All that is required is a simple preprocessing step:
+Furthermore, we also support any FIRRTL test cases provided by any user. All that is required is a simple preprocessing step (under the `ocaml` directory) :
 ```bash
 python transform_when_blocks.py ./your/path/to/example.fir
 ```
-Because FIRRTL uses indentation to determine nested levels of `when...else...` blocks, which complicates parsing. 
+The preprocessed file will be located in a folder named "preprowhen" under the same directory as the input file.Because FIRRTL uses indentation to determine nested levels of `when...else...` blocks, which complicates parsing. 
 
 In fact, if you run the test locally, you will find a new firrtl file named `AddNot_iw.fir` in the same directory as `AddNot.fir`. This is the new firrtl circuit obtained through our width inference process(it cannot be seen through "docker run"). The output file can be processed by downstream tools like `firtool`.
 
@@ -165,9 +165,9 @@ We also support checking any other firrtl program. Before conducting the test, p
 
 ```bash
 # generate MLIR of your own FIRRTL proram
-firtool --mlir-print-ir-after=firrtl-infer-widths ./your/path/to/example.fir &> example.mlir
-# Ignore connection statements, retain definitions
-./process_mlir.sh example.mlir
+firtool --mlir-print-ir-after=firrtl-infer-widths ./your/path/to/example.fir &> ./where/you/want/to/put/example.mlir
+# Ignore connection statements, retain definitions (under the `ocaml/ocaml_try` directory)
+./process_mlir.sh ./where/you/want/to/put/example.mlir
 ```
 
 Place your `example.fir` and `example.mlir` in `ocaml/demo/firrtl program` and `ocaml/demo/mlir` respectively, modify the corresponding file names in the script, and then execute `./compare_with_firtool.sh`.
