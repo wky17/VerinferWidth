@@ -1,12 +1,12 @@
 # Artifact for **A Formally Verified Procedure for Width Inference in FIRRTL**
 
-This artifact contains the implementation and formalization accompanying the paper **A Formally Verified Procedure for Width Inference in FIRRTL** by Wang, Shi, Liu, Wu, Song, Chen, Jansen. It includes:
+This artifact contains the implementation and formalization accompanying the paper **A Formally Verified Procedure for Width Inference in FIRRTL** by *Wang, Shi, Liu, Wu, Song, Chen, Jansen*. It includes:
 - A Coq formalization of **a width inference algorithm and its correctness proofs**
 - An OCaml implementation of **a complete procedure for solving the width inference problem in FIRRTL**
 - Evaluation datasets and scripts to reproduce the experiments from the paper
 
 ## Abstract
-FIRRTL is an intermediate representation language for Register Transfer Level (RTL) hardware designs. In FIRRTL programs, the bit widths of some components may not be given explicitly, thus they must be inferred during compilation. In mainstream FIRRTL compilers such as firtool, the width inference is conducted by a compilation pass called InferWidths, which may fail even for simple FIRRTL programs. In this paper, we investigate the width inference problem for FIRRTL programs. We show that if the constraint obtained from a FIRRTL program is satisfiable, there must exist a unique least solution. Based on this result, we propose a complete procedure for solving the width inference problem, which can handle programs while firtool may fail. We implement the procedure in Rocq and prove its correctness. From the Rocq implementation, we extract an OCaml implementation, which is the first formally verified InferWidths pass. Extensive experiments demonstrate that it can solve more instances than the official InferWidths pass in firtool using less time.
+FIRRTL is an intermediate representation language for Register Transfer Level (RTL) hardware designs. In FIRRTL programs, the bit widths of some components may not be given explicitly, thus they must be inferred during compilation. In mainstream FIRRTL compilers such as firtool, the width inference is conducted by a compilation pass called InferWidths, which may fail even for simple FIRRTL programs. In this paper, we investigate the width inference problem for FIRRTL programs. We show that if the constraint obtained from a FIRRTL program is satisfiable, there must exist a unique least solution. Based on this result, we propose **a complete procedure** for solving the width inference problem, which can handle programs while firtool may fail. We implement the procedure in Rocq and **prove its correctness**. From the Rocq implementation, we extract **an OCaml implementation**, which is the first formally verified InferWidths pass. Extensive experiments demonstrate that it can solve more instances than the official InferWidths pass in firtool using less time.
 
 ## 🚀 Getting Started Guide
 
@@ -28,7 +28,7 @@ Choose one of the following two approaches:
 * [Ocamgraph](https://github.com/backtracking/ocamlgraph/) 2.1.0
 * [dune](https://github.com/ocaml/dune) 3.16.0
 * [Gurobi](https://www.gurobi.com) 12.0.1(academic license)
-* [circt](https://github.com/llvm/circt/)
+* [firtool](https://github.com/llvm/circt/) latest version
 
 ### Installation & Smoke Test
 
@@ -50,7 +50,7 @@ docker run --rm esop-artifact ./build_and_run.sh
 ```bash
 # 1. Install dependencies (see REQUIREMENTS.txt for detailed versions, the following are only suggestions for macOS)
 opam pin add coq 8.16.0
-opam pin add ocaml 4.14+
+opam pin add ocaml 4.14.2
 opam install -y \
     coq-mathcomp-algebra=2.2.0 \
     coq-mathcomp-fingroup=2.2.0 \
@@ -63,7 +63,7 @@ opam install -y \
 ./build_and_run.sh
 ```
 
-### Expected Smoke Test Output
+#### Expected Smoke Test Output
 ```bash
 ✅ Coq formalization compiled successfully
 ✅ OCaml implementation built
@@ -83,10 +83,9 @@ circuit Foo : (the inferred FIRRTL circuit as a result)
 ../ocaml/demo/AddNot.fir width inference is finished
 🎉 Smoke test completed successfully!
 ```
-In fact, if you run the test locally, when it's completed, you will find a new firrtl file named AddNot_iw.fir in the same directory as AddNot.fir. This is the new firrtl circuit obtained through our width inference process(it canot seen through "docker run"). The output file can be processed by downstream tools like `firtool`.
 
 ### Note
-We are using the simple FIRRTL program AddNot.fir in ocaml/demo/AddNot.fir, in fact, the benchmarks mentioned in the article are all included in `ocaml/demo/firrtl program`. You can replace the test file in build_and_run.sh with any of the test cases provided by us, for example:
+We are using the simple FIRRTL program `AddNot.fir` in `ocaml/demo`, in fact, the benchmarks mentioned in the article are all included in `ocaml/demo/firrtl program`. You can replace the test file path in `build_and_run.sh` with any of the test cases provided by us, for example:
 ```bash
 ./_build/default/run_solver.exe ../ocaml/demo/firrtl\ program/GCD.fir
 ```
@@ -96,10 +95,13 @@ python transform_when_blocks.py ./your/path/to/example.fir
 ```
 Because FIRRTL uses indentation to determine nested levels of `when...else...` blocks, which complicates parsing. 
 
+In fact, if you run the test locally, you will find a new firrtl file named `AddNot_iw.fir` in the same directory as `AddNot.fir`. This is the new firrtl circuit obtained through our width inference process(it cannot be seen through "docker run"). The output file can be processed by downstream tools like `firtool`.
+
 ## 🔬 Reproducing Paper Results
 
 ### Part 1: Compare with Gurobi
 Before conducting the test, please make sure that you have installed the Gurobi 12.0.1(python API) with an academic license.
+
 Change the file content of `ocaml/dune` to
 ```
 (env
@@ -111,7 +113,7 @@ Change the file content of `ocaml/dune` to
  (libraries unix extraction hifirrtl_lang ocamlgraph mlir_lang)
  )
 ```
-Then do this :
+run :
 ```bash
 docker run --rm esop-artifact ./compare_with_gurobi.sh # Docker
 or
@@ -145,7 +147,7 @@ docker run --rm esop-artifact ./compare_with_firtool.sh # Docker
 or
 ./compare_with_firtool.sh # local
 ```
-This is just a demonstration on the simple FIRRTL program AddNot.fir in ocaml/demo/AddNot.fir. Similarly, you can replace the test files in the script with any of the test cases provided in `ocaml/demo/firrtl program` and `ocaml/demo/mlir`. (The files start with `designed` cannot be tested in this part, because these cannot be inferred by `firtool`.)
+This is just a demonstration on the simple FIRRTL program `AddNot.fir` in `ocaml/demo/AddNot.fir`. Similarly, you can replace the test files in the script with any of the test cases provided in `ocaml/demo/firrtl program` and `ocaml/demo/mlir`. (The files start with `designed` cannot be tested in this part, because these cannot be inferred by `firtool`.)
 
 #### Expected Output
 ```bash
@@ -168,7 +170,7 @@ firtool --mlir-print-ir-after=firrtl-infer-widths ./your/path/to/example.fir &> 
 ./process_mlir.sh example.mlir
 ```
 
-Place your example.fir and example.mlir in `ocaml/demo/firrtl program` and `ocaml/demo/mlir` respectively, modify the corresponding file names in the script, and then execute `./compare_with_firtool.sh`.
+Place your `example.fir` and `example.mlir` in `ocaml/demo/firrtl program` and `ocaml/demo/mlir` respectively, modify the corresponding file names in the script, and then execute `./compare_with_firtool.sh`.
 
 ## Artifact Structure & Code Guide
 
@@ -194,23 +196,23 @@ Place your example.fir and example.mlir in `ocaml/demo/firrtl program` and `ocam
 ```
 
 **Key Files:**
-- `branch_and_bound.v`: Contains Proposition 2 proof, Formalizes the BaB algorithm and its correctness proof.
-Theorem smaller_sol_is_sol : Section 2.2 , Proposition 2.
-Function bab_bin : Section 3.3, Section 4.1(BaB).
-Theorem bab_bin_correct1, Theorem bab_bin_correct2 : Section 4.2(P_BaB).
+- `branch_and_bound.v`: Contains `Proposition 2` proof, Formalizes the `BaB` algorithm and its correctness proof.
+Theorem `smaller_sol_is_sol` : Section 2.2 , `Proposition 2`.
+Function `bab_bin` : Section 3.3, Section 4.1(`BaB`).
+Theorem `bab_bin_correct1`, Theorem `bab_bin_correct2` : Section 4.2(`P_BaB`).
 
-- `scc.v` : Formalizes Proposition 3.
-Definition solve_ubs_aux : Section 3.2, Proposition 3.
+- `scc.v` : Formalizes `Proposition 3`.
+Definition `solve_ubs_aux` : Section 3.2, `Proposition 3`.
 
-- `floyd_sc.v` : Formalizes the maximum Floys-Warshall algorithm and its correctness proof.
-Function solve_simple_cycle : Section 3.4, Section 4.1(inferSCC: nontrivial-maxfw).
-Lemma scc_smallest, Lemma solve_simple_cycle_correctness : Section 4.2(P_maxFW).
+- `floyd_sc.v` : Formalizes the `maximum Floys-Warshall` algorithm and its correctness proof.
+Function `solve_simple_cycle` : Section 3.4, Section 4.1(`inferSCC: nontrivial-maxfw`).
+Lemma `scc_smallest`, Lemma `solve_simple_cycle_correctness` : Section 4.2(`P_maxFW`).
 
 - `inferWidths.v` : Formalizes the complete width inference procedure and its correctness proof.
-Definition solve_scc : Section 4.1(inferSCC)
-Fixpoint solve_alg : Section 4.1(inferWidth)
-Lemma solve_scc_correctness, Lemma solve_scc_smallest, Lemma solve_scc_unsat : Section 4.2(P_inferSCC)
-Lemma solve_alg_correctness, Lemma solve_alg_smallest, Lemma solve_alg_return_unsat : Section 4.2(P_inferWidth)
+Definition `solve_scc` : Section 4.1(`inferSCC`)
+Fixpoint `solve_alg` : Section 4.1(`inferWidth`)
+Lemma `solve_scc_correctness`, Lemma `solve_scc_smallest`, Lemma `solve_scc_unsat` : Section 4.2(`P_inferSCC`)
+Lemma `solve_alg_correctness`, Lemma `solve_alg_smallest`, Lemma `solve_alg_return_unsat` : Section 4.2(`P_inferWidth`)
 
 ## 🛠️ Troubleshooting
 
@@ -219,7 +221,6 @@ Lemma solve_alg_correctness, Lemma solve_alg_smallest, Lemma solve_alg_return_un
 - **Permission denied**: Try `chmod -R 777 your/file`
 - **Gurobi license errors**: Ensure academic network connection or configure license file
 - **Coq compilation errors**: Check Coq version is exactly 8.16.0
-- **Performance differences**: ARM vs x86 may show slight variation 
 
 **Getting Help:**
-- Contact: `wangky@ios.cn.cn`
+- Contact: `wangky@ios.ac.cn`
