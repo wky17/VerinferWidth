@@ -216,6 +216,33 @@ Definition update_lb (s : Bounds) (x : ProdVar.t) (v : nat) :=
   end.
 
 
+Lemma find_update_ub_some :
+  forall (bds : Bounds) (v : ProdVar.t) (n : nat),
+  forall x lb ub, PVM.find x (update_ub bds v n) = Some (lb, ub) ->
+                  exists lb' ub', PVM.find x bds = Some (lb', ub').
+Proof.
+  rewrite /update_ub => bds v n x lb ub.
+  case Hfvbds : (PVM.find v bds) => [[lbv ubv]|].
+  - move: (eq_dec x v) => [-> | Hneq].
+    + move => _. by exists lbv, ubv.
+    + rewrite (HiFirrtl.find_add_neq Hneq) => ->. by exists lb, ub.
+  - move => ->; by exists lb, ub.
+Qed.
+
+Lemma find_update_lb_some :
+  forall (bds : Bounds) (v : ProdVar.t) (n : nat),
+  forall x lb ub, PVM.find x (update_lb bds v n) = Some (lb, ub) ->
+                  exists lb' ub', PVM.find x bds = Some (lb', ub').
+Proof.
+  rewrite /update_lb => bds v n x lb ub.
+  case Hfvbds : (PVM.find v bds) => [[lbv ubv]|].
+  - move: (eq_dec x v) => [-> | Hneq].
+    + move => _. by exists lbv, ubv.
+    + rewrite (HiFirrtl.find_add_neq Hneq) => ->. by exists lb, ub.
+  - move => ->; by exists lb, ub.
+Qed.
+
+
 (* =================== well_defined =================== *)
 
 Definition well_defined (bds : Bounds) : Prop :=
@@ -989,6 +1016,12 @@ Definition prioritize_fst (v v' : option Valuation) : option Valuation :=
   | None => v'
   | Some s => Some s
   end.
+
+Lemma prioritize_fst_none : forall v v', prioritize_fst v v' = None -> v = None /\ v' = None.
+Proof.
+  move => [v | ] [] //=.
+Qed.
+
 
 Function bab_bin (scc : list ProdVar.t) (bounds : Bounds)
                  (cs1 : list Constraint1) (cs2 : list Constraint2)
@@ -1773,6 +1806,9 @@ Proof.
   exact: bab_bin_smallest_aux.
 Qed.
 
+
+(* =================== bab_bin completeness =================== *)
+
 Definition bab_bin_unsat_P (bounds : Bounds) cs1 cs2 (ret : option Valuation) :=
   well_formed bounds cs1 cs2 -> ret = None ->
   forall (v : Valuation), In v bounds ->
@@ -1784,8 +1820,105 @@ Lemma bab_bin_unsat_aux :
          (cs1 : list Constraint1) (cs2 : list Constraint2),
     bab_bin_unsat_P bounds cs1 cs2 (bab_bin vars bounds cs1 cs2).
 Proof.
-Admitted.
-
+  move => vars. apply bab_bin_ind; rewrite /bab_bin_unsat_P /=; try done.
+  - move => bds cs1 cs2 Hcs1 Hcs2 _ _ _ _ Hwf Hbab.
+    have H : (exists v, In v (halve bds) /\ satisfies_all_constraint1 v cs1 /\ satisfies_all_constraint2 v cs2).
+    {
+      exists (key_value bds); repeat split.
+      + apply key_value_in_halve. exact (wf_wd Hwf).
+      + exact: find_none_sat_all_ctr1.
+      + exact: find_none_sat_all_ctr2.
+    }
+    apply wf_halve in Hwf.
+    move: (bab_bin_correct2 vars Hwf H) => [s [Hs [_ _]]]. by rewrite Hs in Hbab.
+  - move => bds cs1 cs2 c1 Hc1 _ _ /eqP Hbds Hwf _ v Hv.
+    move: (find_some_in_ctr1 (key_value bds) cs1 Hc1) => Hc1cs1.
+    apply find_some_sat_ctr1 in Hc1.
+    move: (in_product0_ctr1_eq_kv Hwf Hv Hbds c1 Hc1cs1) => <- in Hc1.
+    left. apply negbTE in Hc1. by rewrite (sat_ctr1_F_sat_all v c1 cs1 Hc1cs1 Hc1).
+  - move => bds cs1 cs2 c1 Hc1 _ _ []; first done.
+    move => /eqP Hbds _ rv Hrv lb ub Hlbub.
+    rewrite -/((lb+ub)/2) => IHl IHu Hwf Hbab v Hvbds.
+    apply prioritize_fst_none in Hbab. move: Hbab => [Hbabl Hbabu].
+    move: (find_some_length_not0_neq _ _ Hrv Hlbub) => Hneq.
+    move: (wf_wd Hwf) => Hwd.
+    move: (in_bounds_dec _ Hwd Hvbds Hlbub Hneq) => [Hvl | Hvu].
+    + apply IHl; try done. by apply wf_update_ub.
+    + apply IHu; try done. by apply wf_update_lb.
+  - move => bds cs1 cs2 c1 Hc1 _ _ []; first done. 
+    move => /eqP Hbds _ rv Hrv Hrvbds Hwf _.
+    move: (find_some_length_not0_ex _ _ Hrv) => [lb [ub H]].
+    rewrite H in Hrvbds. done.
+  - move => bds cs1 cs2 c1 Hc1 _ _ []; first done.
+    move => /eqP Hbds _ Hrvs /eqP Hlenlv Hwf _ v Hvbds.
+    move: (find_some_in_ctr1 _ _ Hc1) => Hc1cs1.
+    apply find_some_sat_ctr1 in Hc1.
+    move: (find_none_length_not0_all0 _ _ Hrvs) => Hlenrvs.
+    move: Hwf => [Hwd [Hcf1 _]].
+    move: (key_value_in_bounds Hwd) => Hkvbds.
+    have Hsateq : satisfies_constraint1 v c1 = satisfies_constraint1 (key_value bds) c1.
+    {
+      apply sat_ctr1_eq.
+      + move: (Hcf1 _ Hc1cs1) => [[lb [ub Hlbub]] _].
+        by apply (length0_in_bounds_eq _ Hlbub).
+      + move => x Hxrvs. move: (Hcf1 _ Hc1cs1) => [_ H].
+        move: (H x Hxrvs) => [lb [ub Hlbub]].
+        apply (length0_in_bounds_eq _ Hlbub); try done.
+        by apply Hlenrvs.
+    }
+    rewrite -Hsateq in Hc1.
+    left. apply negbTE in Hc1. by rewrite (sat_ctr1_F_sat_all _ _ _ Hc1cs1 Hc1).
+  - move => bds cs1 cs2 c1 Hc1 _ _ []; first done.
+    move => /eqP Hbds _ _  []; first done.
+    move => /eqP/eqP Hlenlv _ lb ub Hlbub.
+    rewrite -/((lb+ub)/2) => IHu IHl Hwf Hbab v Hvbds.
+    apply prioritize_fst_none in Hbab. move: Hbab => [Hbabl Hbabu].
+    move: (length_not0_neq _ _ Hlenlv Hlbub) => Hneq.
+    move: (wf_wd Hwf) => Hwd.
+    move: (in_bounds_dec _ Hwd Hvbds Hlbub Hneq) => [Hvl | Hvu].
+    + apply IHl; try done. by apply wf_update_ub.
+    + apply IHu; try done. by apply wf_update_lb.
+  - move => bds cs1 cs2 c1 Hc1 _ _ []; first done. 
+    move => /eqP Hbds _ _ []; first done.
+    move => /eqP/eqP Hlenlv _ Hlvbds.
+    move: (length_not0_ex _ _ Hlenlv) => [lb [ub H]].
+    rewrite H in Hlvbds. done.
+  - move => bds cs1 cs2 _ c2 Hc2 /eqP Hbds Hwf _ v Hv.
+    move: (find_some_in_ctr2 (key_value bds) cs2 Hc2) => Hc2cs2.
+    apply find_some_sat_ctr2 in Hc2.
+    move: (in_product0_ctr2_eq_kv Hwf Hv Hbds c2 Hc2cs2) => <- in Hc2.
+    right. apply negbTE in Hc2. by rewrite (sat_ctr2_F_sat_all v c2 cs2 Hc2cs2 Hc2).
+  - move => bds cs1 cs2 _ c2 Hc2 []; first done.
+    move => /eqP Hbds _ rv Hrv lb ub Hlbub.
+    rewrite -/((lb+ub)/2) => IHl IHu Hwf Hbab v Hvbds.
+    apply prioritize_fst_none in Hbab. move: Hbab => [Hbabl Hbabu].
+    move: (find_some_length_not0_neq _ _ Hrv Hlbub) => Hneq.
+    move: (wf_wd Hwf) => Hwd.
+    move: (in_bounds_dec _ Hwd Hvbds Hlbub Hneq) => [Hvl | Hvu].
+    + apply IHl; try done. by apply wf_update_ub.
+    + apply IHu; try done. by apply wf_update_lb.
+  - move => bds cs1 cs2 _ c2 Hc2 []; first done. 
+    move => /eqP Hbds _ rv Hrv Hrvbds Hwf _.
+    move: (find_some_length_not0_ex _ _ Hrv) => [lb [ub H]].
+    rewrite H in Hrvbds. done.
+  - move => bds cs1 cs2 _ c2 Hc2 []; first done.
+    move => /eqP Hbds _ Hrvs Hwf _ v Hvbds.
+    move: (find_some_in_ctr2 _ _ Hc2) => Hc2cs2.
+    apply find_some_sat_ctr2 in Hc2.
+    move: (find_none_length_not0_all0 _ _ Hrvs) => Hlenrvs.
+    move: Hwf => [Hwd [_ Hcf2]].
+    move: (key_value_in_bounds Hwd) => Hkvbds.
+    have Hsateq : satisfies_constraint2 v c2 = satisfies_constraint2 (key_value bds) c2.
+    {
+      apply sat_ctr2_eq.
+      move => x Hxrvs. move: (Hcf2 _ Hc2cs2) => H.
+      move: (H x Hxrvs) => [lb [ub Hlbub]].
+      apply (length0_in_bounds_eq _ Hlbub); try done.
+      by apply Hlenrvs.
+    }
+    rewrite -Hsateq in Hc2.
+    right. apply negbTE in Hc2. by rewrite (sat_ctr2_F_sat_all _ _ _ Hc2cs2 Hc2).
+Qed.
 
 Theorem bab_bin_unsat :
   forall (vars : list ProdVar.t) (bounds : Bounds)
@@ -1801,9 +1934,70 @@ Proof.
   - right; exact: negbTE.
 Qed.
 
-Lemma bab_bin_mem_in cs1 cs2 : forall ls bs sol, bab_bin ls bs cs1 cs2 = Some sol -> forall var, PVM.mem var sol -> PVM.mem var bs.
+(* =================== bab_bin solution's domain is a subset of dom(bds) =================== *)
+
+Definition bab_bin_var_subset_P (bounds : Bounds)
+  (cs1 : list Constraint1) (cs2 : list Constraint2) (ret : option Valuation) :=
+  forall (sol : Valuation), ret = Some sol ->
+  forall x n, PVM.find x sol = Some n -> (exists lb ub, PVM.find x bounds = Some (lb, ub)).
+
+Lemma bab_bin_var_subset_aux :
+  forall (vars : list ProdVar.t) (bounds : Bounds)
+         (cs1 : list Constraint1) (cs2 : list Constraint2),
+    bab_bin_var_subset_P bounds cs1 cs2 (bab_bin vars bounds cs1 cs2).
 Proof.
-(* Added by KY *)
-Admitted.
+  move => vars. apply bab_bin_ind; rewrite /bab_bin_var_subset_P /=; try done.
+  - move => bds cs1 cs2 Hcs1 Hcs2 /eqP Hbds sol [<-].
+    move => x n Hfxkv. move: (find_key_value_some _ _ Hfxkv) => [lb [ub [_ Hfxbds]]].
+    by exists lb, ub.
+  - move => bds cs1 cs2 Hcs1 Hcs2 []; first done.
+    move => /eqP Hbds _ IH sol Hbab.
+    move => x n Hfxs. move: (IH _ Hbab _ _ Hfxs) => [lb [ub Hfxh]].
+    move: (find_halve_some _ _ Hfxh) => [ub' [_ Hfxbds]].
+    by exists lb, ub'.
+  - move => bds cs1 cs2 c1 Hc1 _ _ []; first done.
+    move => /eqP Hbds _ rv Hrv lb ub Hlbub.
+    rewrite -/((lb+ub)/2) => IHl IHu sol.
+    rewrite /prioritize_fst.
+    case Hbabl : (bab_bin vars (update_ub bds rv ((lb + ub) / 2)) cs1 cs2) => [lsol|].
+    + move => [<-] x n Hfxs.
+      move: (IHl _ Hbabl x n Hfxs) => [lbx [ubx Hfxupd]].
+      by apply (find_update_ub_some _ _ _ _ Hfxupd).
+    + move => Hbabu x n Hfxs.
+      move: (IHu _ Hbabu x n Hfxs) => [lbx [ubx Hfxupd]].
+      by apply (find_update_lb_some _ _ _ _ Hfxupd).
+  - move => bds cs1 cs2 c1 Hc1 _ _ []; first done.
+    move => /eqP Hbds _ Hrvs []; first done.
+    move => /eqP/eqP Hlenlv _ lb ub Hlbub.
+    rewrite -/((lb+ub)/2) => IHu IHl sol.
+    rewrite /prioritize_fst.
+    case Hbabu : (bab_bin vars (update_lb bds (lhs_var1 c1) ((lb + ub) / 2).+1) cs1 cs2) => [usol|].
+    + move => [<-] x n Hfxs.
+      move: (IHu _ Hbabu x n Hfxs) => [lbx [ubx Hfxupd]].
+      by apply (find_update_lb_some _ _ _ _ Hfxupd).
+    + move => Hbabl x n Hfxs.
+      move: (IHl _ Hbabl x n Hfxs) => [lbx [ubx Hfxupd]].
+      by apply (find_update_ub_some _ _ _ _ Hfxupd).
+  - move => bds cs1 cs2 Hcs1 c2 Hc2 []; first done.
+    move => /eqP Hbds _ rv Hrv lb ub Hlbub.
+    rewrite -/((lb+ub)/2) => IHl IHu sol.
+    rewrite /prioritize_fst.
+    case Hbabl : (bab_bin vars (update_ub bds rv ((lb + ub) / 2)) cs1 cs2) => [lsol|].
+    + move => [<-] x n Hfxs.
+      move: (IHl _ Hbabl x n Hfxs) => [lbx [ubx Hfxupd]].
+      by apply (find_update_ub_some _ _ _ _ Hfxupd).
+    + move => Hbabu x n Hfxs.
+      move: (IHu _ Hbabu x n Hfxs) => [lbx [ubx Hfxupd]].
+      by apply (find_update_lb_some _ _ _ _ Hfxupd).
+Qed.
+
+Theorem bab_bin_var_subset:
+  forall (vars : list ProdVar.t) (bounds : Bounds)
+         (cs1 : list Constraint1) (cs2 : list Constraint2) (sol : Valuation),
+    bab_bin vars bounds cs1 cs2 = Some sol ->
+    forall x n, PVM.find x sol = Some n -> (exists lb ub, PVM.find x bounds = Some (lb, ub)).
+Proof.
+  exact: bab_bin_var_subset_aux.
+Qed.
 
 End bnb.

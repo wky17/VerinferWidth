@@ -64,6 +64,22 @@ pip install gurobipy
 ./build_and_run.sh
 ```
 
+#### VM Approach:(added)
+1. Download from https://doi.org/10.5281/zenodo.18322746
+import OVA images and start a new machine(tested by Oracle VirtualBox, Windows system under x64)
+2. login with `vagrant/vagrant`(bullseye login/password)
+3. 
+```bash
+chmod -R 777 VerinferWidth/ # Obtain executable permission(not neccessary)
+cd Verinferwidth
+
+# activate opam envionment 
+eval $(opam env)
+
+# Run the smoke test
+./build_and_run.sh
+```
+
 #### Expected Smoke Test Output
 ```bash
 ✅ Coq formalization compiled successfully
@@ -118,7 +134,7 @@ run :
 ```bash
 docker run --rm esop-artifact ./compare_with_gurobi.sh # Docker
 or
-./compare_with_gurobi.sh # local
+./compare_with_gurobi.sh # local and VM
 ```
 
 #### Expected Output
@@ -146,7 +162,7 @@ For quick inference consistency check and efficiency comparison of the test case
 ```bash
 docker run --rm esop-artifact ./compare_with_firtool.sh # Docker
 or
-./compare_with_firtool.sh # local
+./compare_with_firtool.sh # local and VM
 ```
 This is just a demonstration on the simple FIRRTL program `AddNot.fir` in `ocaml/demo/AddNot.fir`. Similarly, you can replace the test files in the script with any of the test cases provided in `ocaml/demo/firrtl program` and `ocaml/demo/mlir`. (The files start with `designed` cannot be tested in this part, because these cannot be inferred by `firtool`.)
 

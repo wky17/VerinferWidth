@@ -3216,6 +3216,12 @@ Proof.
   apply H0 in H. destruct H; try done.
 Qed.
 
+Lemma bab_bin_mem_in cs1 cs2 : forall ls bs nv, bab_bin ls bs cs1 cs2 = Some nv -> (forall v, PVM.mem v bs -> List.In v ls) -> forall var, PVM.mem var nv -> List.In var ls.
+Proof.
+  intros. apply find_mem in H1. destruct H1 as [val H1]. specialize (bab_bin_var_subset _ _ _ _ H); intro.
+  specialize (H2 _ _ H1). apply H0. apply find_mem. destruct H2 as [lb [ub H2]]. exists (lb,ub); done. 
+Qed.
+
 Lemma solve_scc_mem_in a cs nv : solve_scc a cs = Some nv -> forall var, PVM.mem var nv -> List.In var a.
 Proof.
   unfold solve_scc. destruct a. 2 : destruct a. 
@@ -3224,9 +3230,10 @@ Proof.
     cs_have_v); intros; try discriminate. 2:inversion H; remember (max_nl (List.map [eta rhs_const1] cs0) 0) as n; rewrite -H2 in H0; apply mem_add_or in H0; destruct H0.
   2 : rewrite /initial_valuation in H0; apply find_mem in H0; destruct H0 as [val H0]; rewrite find_empty_None in H0; discriminate. 2: move /eqP : H0 => H0; subst t; simpl; left; done.
   1,2 : intros; destruct (is_simple_cycle cs). 1,3 : apply (solve_simple_cycle_mem_in _ _ _ H) in H0; done.
-  destruct (solve_ubs_aux [] (List.filter (fun c : Constraint1 => Datatypes.length (rhs_terms1 c) != 0) cs)) eqn : Hbs; try discriminate. 
+  destruct (solve_ubs_aux [] (List.filter (fun c : Constraint1 => Datatypes.length (rhs_terms1 c) != 0) cs)) eqn : Hbs; try discriminate.
   2 : destruct (solve_ubs_aux [:: t, t0 & a] (List.filter (fun c : Constraint1 => Datatypes.length (rhs_terms1 c) != 0) cs)) eqn : Hbs; try discriminate. 
-  1,2 : apply (bab_bin_mem_in _ _ _ _ H) in H0. 1,2 : apply mergeBounds_key_eq' in H0. 1,2 : apply (solve_ubs_aux_mem_in _ _ _ Hbs _ H0).
+  1,2 : apply (bab_bin_mem_in _ _ _ _ _ H) in H0; try done. 1,2 : specialize (solve_ubs_aux_mem_in _ _ _ Hbs) as Hhelper.
+  1,2 : intros; apply Hhelper; apply mergeBounds_key_eq'; done.
 Qed.
 
 Lemma merge_solution_find_none nv: forall tbsolved new_values initial, merge_solution tbsolved initial nv = Some new_values -> 

@@ -1138,7 +1138,27 @@ Proof.
   rewrite /= => H. apply /andP; split.
   - apply H. left; done.
   - apply IH. move => c Hin. apply H. by right.
-Qed.    
+Qed.
+
+Lemma sat_ctr1_F_sat_all :
+  forall v c cs, List.In c cs -> satisfies_constraint1 v c = false ->
+                 satisfies_all_constraint1 v cs = false.
+Proof.
+  move => v c. elim => [| hd tl IH /=]; first done.
+  move => [-> | Hctl].
+  - move => ->; done.
+  - move => Hvc. rewrite (IH Hctl Hvc) andb_false_r //=.
+Qed.
+
+Lemma sat_ctr2_F_sat_all :
+  forall v c cs, List.In c cs -> satisfies_constraint2 v c = false ->
+                 satisfies_all_constraint2 v cs = false.
+Proof.
+  move => v c. elim => [| hd tl IH /=]; first done.
+  move => [-> | Hctl].
+  - move => ->; done.
+  - move => Hvc. rewrite (IH Hctl Hvc) andb_false_r //=.
+Qed.
 
 Lemma find_none_sat_all_ctr1 : forall (v : Valuation) (cs : list Constraint1),
     find (fun c : Constraint1 => negb (satisfies_constraint1 v c)) cs = None ->
