@@ -65,7 +65,7 @@ pip install gurobipy
 ```
 
 #### VM Approach:(added)
-1. Download from https://doi.org/10.5281/zenodo.18322746
+1. Download from https://pan.ios.ac.cn:10006/sharing/PWN9oXO9P (password : 12345) or https://drive.google.com/file/d/14dcYocUZyOjgFRrA_cmq5BBMqYQaBUM6/view?usp=drive_link (google drive)
 import OVA images and start a new machine(tested by Oracle VirtualBox, Windows system under x64)
 2. login with `vagrant/vagrant`(bullseye login/password)
 3. 
