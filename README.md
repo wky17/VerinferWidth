@@ -35,7 +35,7 @@ Choose one of the following two approaches:
 #### Docker Approach:
 ```bash
 # 1. Clone this repository
-git clone [GitHub link will be placed here after AE is completed]
+git clone https://github.com/wky17/VerinferWidth.git
 chmod -R 777 VerinferWidth/ # Obtain executable permission(not neccessary)
 cd Verinferwidth
 
