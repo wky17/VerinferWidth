@@ -9,21 +9,19 @@ open Extraction.Extract_cswithmin
 open Min_solver
 
 let store_cons_res in_file hif_ast = 
-  let flatten_cir = Inline.inline_cir stdout hif_ast in 
+  Ast.pp_fcircuit stdout hif_ast;
+  let ((modmap, _), map) = Transhiast_without_inline.mapcir hif_ast in
+  let fcir = Transhiast_without_inline.trans_cir hif_ast modmap map in 
   let oc_cons = open_out (process_string in_file "_cons.txt") in
   let oc_res_num = open_out (process_string in_file "_res_num.txt") in
-  match flatten_cir with
-  | Ast.Fcircuit (v, ml) ->
-    let ((map0, flag), tmap_ast) = mapcir flatten_cir in 
-    let c = trans_cir flatten_cir map0 flag tmap_ast in 
 
-    (match HiFirrtl.circuit_tmap c, c with
-    | Some tmap, HiFirrtl.Fcircuit (_, [m]) -> 
-      (match Extract_cswithmin.extract_constraint_m m tmap with
+  (match Extract_cs_multimod.circuit_tmap fcir, fcir with
+    | Some tmap, HiFirrtl.Fcircuit (_, ml) -> 
+      (match Extract_cs_multimod.extract_constraint_ml ml tmap HiFirrtl.PVM.empty [] [] with
       | Some ((c1map, cs2), cs_min) -> 
         let cs1 = split2_tailrec (HiFirrtl.PVM.elements c1map) in
 
-        (match my_solve_fun c tmap with
+        (match my_solve_fun fcir tmap with
         | Some solution ->
           Stdlib.List.iter (fun c -> pp_cstrt1 oc_cons (remove_power1 solution c)) cs1;
           Stdlib.List.iter (fun c -> pp_cstrt_min oc_cons (remove_power_min solution c)) cs_min;

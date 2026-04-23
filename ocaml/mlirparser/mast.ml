@@ -127,60 +127,13 @@ let mapmod m =
                               mapstmts map0 sl 
   | _ -> initmap_s
 
+let rec mapmodl ml tmap = 
+  match ml with
+  | [] -> tmap
+  | (FInmod (mv, pl, sl)) :: tl -> mapmodl tl (StringMap.add mv (mapmod (FInmod (mv, pl, sl))) tmap)
+  | _ -> output_string stdout "There is a extmodule\n"; tmap
+
+
 let mapcir cir = 
   match cir with
-  | Fcircuit (_, ml) -> mapmod (Stdlib.List.hd ml)
-
-
-let rec qcat s1 s2 =
-  match s1 with
-  | Qnil -> s2
-  | Qcons (h1, tl1) -> Qcons (h1, (qcat tl1 s2))
-
-let rec collect_insts sts = 
-  match sts with
-  | Qnil -> []
-  | Qcons (s, st) -> Stdlib.List.append (collect_inst s) (collect_insts st)
-and collect_inst s =
-  match s with
-  | Sinst (v, _) -> [v]
-  | _ -> []
-
-let generate_fmodmap a_cir = 
-  match a_cir with
-  | Fcircuit (cv, fml) -> let modmap = Stdlib.List.fold_left (fun map fm -> match fm with 
-                                | FInmod (mv, _, _) -> StringMap.add mv fm map
-                                | _ -> map) initmap_s fml in
-                          let instmap = Stdlib.List.fold_left (fun map fm -> match fm with 
-                                | FInmod (mv, _, sl) -> let insts = collect_insts sl in StringMap.add mv insts map
-                                | _ -> map) initmap_s fml in
-    (modmap, cv, instmap)
-
-let rec flatstmts fmodmap sts insts instmap current_pre = 
-  match sts with 
-  | Qnil -> Qnil
-  | Qcons (h, tl) -> let sts0 = flatstmt fmodmap h insts instmap current_pre in
-                         let sts1 = flatstmts fmodmap tl insts instmap current_pre in
-                         qcat sts0 sts1
-    
-and flatstmt fmodmap st insts instmap current_pre =
-  match st with
-  | Swire (v, ty) -> Qcons (Swire ((current_pre^v), ty), Qnil)
-  | Sreg (v, r) -> Qcons (Sreg (current_pre^v, r), Qnil)
-  | Sinst (v1, e) -> let new_pre = if current_pre = "" then v1^"." else current_pre^v1^"." in
-                        (match StringMap.find e fmodmap, StringMap.find e instmap with
-                        | FInmod (_, pl, sl), ninsts -> (* expand inst 内部语句 *)
-                          let instpl = Stdlib.List.fold_left (fun templ p -> match p with
-                                                        | Finput (v, ty) -> Qcons (Swire ((new_pre^v), ty), templ)
-                                                        | Foutput (v, ty) -> Qcons (Swire ((new_pre^v), ty), templ)) Qnil pl in 
-                          let instsl = flatstmts fmodmap sl ninsts instmap new_pre in
-                          qcat instpl instsl
-                        | _, _ -> Qnil)
-  | Snode (v, e) -> Qcons (Snode ((current_pre^v), e), Qnil)
-  
-let inline_cir hif_ast = 
-  let (fmodmap ,cv, instmap) = generate_fmodmap hif_ast in (* string -> fmod, circuit string name, module string name -> inst string names *)
-  match StringMap.find cv fmodmap, StringMap.find cv instmap with (* find main module *)
-  | FInmod (_, pl, sl), insts -> let flattensl = flatstmts fmodmap sl insts instmap "" in
-                              let flattenmain = FInmod (cv, pl, flattensl) in
-                              Fcircuit (cv, [flattenmain])
+  | Fcircuit (_, ml) -> mapmodl ml initmap_s

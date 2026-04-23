@@ -392,7 +392,7 @@ open Str
 let convert_path path =
   Str.global_replace (Str.regexp "\\(.*/\\)preprowhen/\\(.*\\)\\.fir$") "\\1mlir/\\2.mlir" path
 
-let try_mlir_parse f =
+(*let try_mlir_parse f =
   let mlirf = Mparser.mlirparse f in 
   let inlined = Mast.inline_cir mlirf in 
   let mlirmap = Mast.mapcir inlined in
@@ -402,4 +402,4 @@ let try_mlir_parse f =
 let try_fir_parse f =
   output_string stdout f; output_string stdout "\n";
   let firf = Parser.hiparse f in 
-  Ast.pp_fcircuit stdout firf
+  Ast.pp_fcircuit stdout firf*)

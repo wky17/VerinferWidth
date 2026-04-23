@@ -133,19 +133,21 @@ and pp_statement_fir out indent s =
     | Rst (e1, e2) ->
       fprintf out "regreset _%d : " (Obj.magic v); pp_ftype_fir out (r.coq_type); output_string out ", "; pp_expr_fir out r.clock; output_string out ", "; pp_expr_fir out e1; output_string out ", "; pp_expr_fir out e2; output_string out "\n")
   | Snode (v, e) -> fprintf out "node _%d = " (Obj.magic v); pp_expr_fir out e; output_string out "\n"
-  | Sinst (v, e) -> output_string out "inst of \n"
+  | Sinst (v, mv) -> fprintf out "inst _%d of module %d " (Obj.magic v) (Obj.magic mv); output_string out "\n"
   | Swhen (c, s1, s2) -> 
     (match s2 with
     | Qnil -> output_string out "when "; pp_expr_fir out c; output_string out " : \n"; pp_statements_fir out (indent +1) s1
     | _ -> output_string out "when "; pp_expr_fir out c; output_string out " : \n"; pp_statements_fir out (indent +1) s1; pp_indent_fir out indent; output_string out "else : \n"; pp_statements_fir out (indent +1) s2)
-           
-let pp_module_fir out v fmod =
+
+let pp_module_fir out fmod =
   match fmod with
-  | HiFirrtl.FInmod (_, pl, sl) -> fprintf out "  module %s : \n" v; pp_ports_fir out pl; pp_statements_fir out 2 sl
+  | HiFirrtl.FInmod (mv, pl, sl) -> fprintf out "  module %d : \n" mv; pp_ports_fir out pl; pp_statements_fir out 2 sl
   | FExmod _ -> output_string out "extmodule\n"
            
-let pp_modules_fir out v fmod = Stdlib.List.iter (pp_module_fir out v) fmod
+let pp_modules_fir out fmod = Stdlib.List.iter (pp_module_fir out) fmod
  
-let pp_fcircuit_fir out v fc =
+let pp_fcircuit_fir out fc =
   match fc with
-  | HiFirrtl.Fcircuit (_, fmod) -> fprintf out "circuit %s : \n" v; pp_modules_fir out v fmod
+  | HiFirrtl.Fcircuit (cv, fmod) -> fprintf out "circuit %d : \n" cv; pp_modules_fir out fmod
+
+ 

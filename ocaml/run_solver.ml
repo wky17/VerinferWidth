@@ -7,7 +7,7 @@ let args = [
 let usage = "Usage: OCaml inferWidths FILE\n"
 
 let anon file =
-  let f = (Parser.hiparse file) in 
+  let f = Parser.hiparse file in 
   let _ = Min_solver.print_iw_fir file f in
   ()
 

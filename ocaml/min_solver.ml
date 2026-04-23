@@ -5,7 +5,7 @@ open Printf
 open Transhiast
 open Mlir_lang
 open Extraction.Constraints
-open Extraction.Extract_cswithmin
+open Extraction.Extract_cs_multimod
 
 let split2_tailrec l =
   let rec aux acc = function
@@ -101,40 +101,37 @@ and my_coq_InferWidths_transss sts tmap res =
     | None -> None)
 
 let my_coq_InferWidths_fun c =
-  match HiFirrtl.circuit_tmap c with
+  match circuit_tmap c with
   | Some tmap ->
-    let Fcircuit (cv, l) = c in
-    let h = Stdlib.List.hd l in
-      (match h with
-        | FInmod (mv, ps, ss) ->
-          let ut0 = (Unix.times()).tms_utime in 
-             (match my_solve_fun c tmap with
-              | Some solution ->
-                let ut1 = (Unix.times()).tms_utime in 
-                let elements = HiFirrtl.PVM.elements solution in
-                printf "total time : %f\n" (Float.sub ut1 ut0);
-                (match InferWidths.update_tmap tmap elements with
-                 | Some newtm -> printf "components amount : %d\n" (Stdlib.List.length elements);
-                   (match my_coq_InferWidths_transps ps newtm with
-                    | Some nps ->
-                      (match my_coq_InferWidths_transss ss newtm HiFirrtl.Qnil with
-                       | Some nss ->
-                         Some (HiFirrtl.Fcircuit (cv, ((FInmod (mv, nps, revhfstmts nss HiFirrtl.Qnil)) :: [])), newtm)
-                       | None -> None)
-                    | None -> None) 
-                 | None -> None)
+      let ut0 = (Unix.times()).tms_utime in 
+      (match my_solve_fun c tmap with
+      | Some solution ->
+          let ut1 = (Unix.times()).tms_utime in 
+          let elements = HiFirrtl.PVM.elements solution in
+          printf "total time : %f\n" (Float.sub ut1 ut0);
+          (match update_tmap tmap elements with
+          | Some newtm -> printf "components amount : %d\n" (Stdlib.List.length elements);
+              (*match my_coq_InferWidths_transps ps newtm with
+              | Some nps ->
+                  (match my_coq_InferWidths_transss ss newtm HiFirrtl.Qnil with
+                  | Some nss ->
+                    Some (HiFirrtl.Fcircuit (cv, ((FInmod (mv, nps, revhfstmts nss HiFirrtl.Qnil)) :: [])), newtm)
+                  | None -> None)
+              | None -> None*)
+              (match coq_InferWidths_trans_c c newtm with
+              | Some newc -> Some (newc, newtm)
               | None -> None)
-        | FExmod (_, _, _) -> None)
+          | None -> None)
+      | None -> None)
   | None -> None
 
 let print_iw_fir in_file hif_ast = 
-  let flatten_cir = Inline.inline_cir stdout hif_ast in
-  let oc_fir = open_out (process_string in_file "_iw.fir") in
-  match flatten_cir with
-  | Ast.Fcircuit (v, ml) ->
-    let ((map0, flag), tmap_ast) = mapcir flatten_cir in 
-    let fcir = trans_cir flatten_cir map0 flag tmap_ast in 
-    (match my_coq_InferWidths_fun fcir with
-    | Some (newc, newtm) -> Printfir.pp_fcircuit_fir oc_fir v newc; Printfir.pp_fcircuit_fir stdout v newc; close_out oc_fir;
-      printf "%s width inference is finished\n" in_file
-    | _ -> output_string stdout ("cannot be inferred\n"))
+  (*let oc_fir = open_out (process_string in_file "_iw.fir") in*)
+  Ast.pp_fcircuit stdout hif_ast;
+  let ((modmap, _), map) = Transhiast_without_inline.mapcir hif_ast in
+  let fcir = Transhiast_without_inline.trans_cir hif_ast modmap map in 
+
+  (match my_coq_InferWidths_fun fcir with
+  | Some (newc, _) -> (*Printfir.pp_fcircuit_fir oc_fir newc;*) Printfir.pp_fcircuit_fir stdout newc; (*close_out oc_fir;*)
+    printf "%s width inference is finished\n" in_file
+  | _ -> output_string stdout ("cannot be inferred\n"))
