@@ -3,6 +3,6 @@
     (flags    (:standard -w -a))))
 
 (executable
- (name run_store_res ) ; run_solver run_compare_firtool
+ (name run_solver) ; run_compare_firtool run_store_res 
  (libraries unix extraction hifirrtl_lang ocamlgraph mlir_lang)
  )

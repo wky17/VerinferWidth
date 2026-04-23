@@ -26,7 +26,7 @@ let my_solve_helper c1map cs2 =
   let dpdcg = build_graph_from_constraints cs1 in
   let res = SCC.scc_list dpdcg in
   let res' = tr_map (fun l -> tr_map (fun v-> nat_to_pair (G.V.label v)) l) res in
-  InferWidths.solve_alg_check res' c1map cs2
+  InferWidths_exp.solve_alg_check res' c1map cs2
 
 let my_solve_fun c tmap =
   let ut0 = (Unix.times()).tms_utime in 

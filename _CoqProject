@@ -12,5 +12,6 @@ TopoSort.v
 extract_cs.v
 extract_cswithmin.v
 inferWidths.v
+inferWidths_exp.v
 extract_cs_multimod.v
 Extract.v
