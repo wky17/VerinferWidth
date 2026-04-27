@@ -407,13 +407,11 @@ Fixpoint extract_constraint_expr_mod (mv : VM.key) (e : hfexpr) (tmap : VM.t (VM
                             end (* condition c 只能是 0/1位宽 *)
 end.*)
 
-Fixpoint extract_constraint_expr_mod (mv : VM.key) (e : hfexpr) (tmap : VM.t (VM.t (ftype * forient))) (instmap : VM.t VM.key) 
+Fixpoint extract_constraint_expr_mod (mv : VM.key) (e : hfexpr) (mod_tmap : VM.t (ftype * forient)) (tmap : VM.t (VM.t (ftype * forient))) (instmap : VM.t VM.key) 
   : option ((list min_rhs) * (list min_rhs)) :=
   (* min_rhs 的 Expr case 是一条phi1约束的一次项，指数项和常数项。rem产生min_rhs 中的 Min case
      mux 直接生成 list of min_rhs
      constraint2 来自 mux的condition*)
-match VM.find mv tmap with
-| Some mod_tmap => 
   match e with
   | Eref r => match type_of_ref r mod_tmap, ref2pv_mod r mv instmap tmap with
                             | Some (Gtyp (Fuint_implicit _)), Some pv 
@@ -427,7 +425,7 @@ match VM.find mv tmap with
                             | t => Some ([Expr (make_rhs nil nil (Z.of_nat (sizeof_fgtyp t)))], nil)
                             end
   | Eprim_binop Brem e1 e2 => match type_of_hfexpr e1 mod_tmap, type_of_hfexpr e2 mod_tmap,
-                            extract_constraint_expr_mod mv e1 tmap instmap, extract_constraint_expr_mod mv e2 tmap instmap with
+                            extract_constraint_expr_mod mv e1 mod_tmap tmap instmap, extract_constraint_expr_mod mv e2 mod_tmap tmap instmap with
                             | Some (exist (Gtyp (Fuint w1)) _), Some (exist (Gtyp (Fuint w2)) _), Some (el1, cs1), Some (el2, cs2) 
                             | Some (exist (Gtyp (Fsint w1)) _), Some (exist (Gtyp (Fsint w2)) _), Some (el1, cs1), Some (el2, cs2) => 
                               Some (map (fun '(a,b) => Min a b) (cartesian el1 el2), cs1 ++ cs2)
@@ -435,30 +433,30 @@ match VM.find mv tmap with
                             end
   | Ecast AsUInt e1 
   | Ecast AsSInt e1 => match type_of_hfexpr e1 mod_tmap with
-                            | Some (exist (Gtyp _) _) => extract_constraint_expr_mod mv e1 tmap instmap
+                            | Some (exist (Gtyp _) _) => extract_constraint_expr_mod mv e1 mod_tmap tmap instmap
                             | _ => None
                             end
   | Eprim_unop Unot e1 => match type_of_hfexpr e1 mod_tmap with
                             | Some (exist (Gtyp (Fsint w)) _)
-                            | Some (exist (Gtyp (Fuint w)) _) => extract_constraint_expr_mod mv e1 tmap instmap
+                            | Some (exist (Gtyp (Fuint w)) _) => extract_constraint_expr_mod mv e1 mod_tmap tmap instmap
                             | _ => None
                             end
   | Ecast AsClock e1 
-  | Ecast AsAsync e1 => match type_of_hfexpr e1 mod_tmap, extract_constraint_expr_mod mv e1 tmap instmap with
+  | Ecast AsAsync e1 => match type_of_hfexpr e1 mod_tmap, extract_constraint_expr_mod mv e1 mod_tmap tmap instmap with
                             | Some (exist (Gtyp _) _), Some (_, cs) => Some ([Expr (make_rhs nil nil 1%Z)], cs)
                             | _, _ => None
                             end
-  | Eprim_unop (Upad n) e1 => match type_of_hfexpr e1 mod_tmap, extract_constraint_expr_mod mv e1 tmap instmap with
+  | Eprim_unop (Upad n) e1 => match type_of_hfexpr e1 mod_tmap, extract_constraint_expr_mod mv e1 mod_tmap tmap instmap with
                             | Some (exist (Gtyp (Fsint w)) _), Some (el, cs)
                             | Some (exist (Gtyp (Fuint w)) _), Some (el, cs) => Some (Expr (make_rhs nil nil (Z.of_nat n)) :: el, cs)
                             | _, _ => None
                             end
-  | Eprim_unop (Ushl n) e1 => match type_of_hfexpr e1 mod_tmap, extract_constraint_expr_mod mv e1 tmap instmap with
+  | Eprim_unop (Ushl n) e1 => match type_of_hfexpr e1 mod_tmap, extract_constraint_expr_mod mv e1 mod_tmap tmap instmap with
                             | Some (exist (Gtyp (Fsint w)) _), Some (el, cs) 
                             | Some (exist (Gtyp (Fuint w)) _), Some (el, cs) => Some (map (fun temp_e => min_rhs_add_cst temp_e (Z.of_nat n)) el, cs)
                             | _, _ => None
                             end
-  | Eprim_unop (Ushr n) e1 => match type_of_hfexpr e1 mod_tmap, extract_constraint_expr_mod mv e1 tmap instmap with
+  | Eprim_unop (Ushr n) e1 => match type_of_hfexpr e1 mod_tmap, extract_constraint_expr_mod mv e1 mod_tmap tmap instmap with
                             | Some (exist (Gtyp (Fsint w)) _), Some (el, cs) => 
                               let nexp := map (fun temp_e => min_rhs_add_cst temp_e (Z.opp (Z.of_nat n))) el in
                                 Some (Expr (make_rhs nil nil 1%Z) :: nexp, cs) 
@@ -466,45 +464,45 @@ match VM.find mv tmap with
                                 Some (map (fun temp_e => min_rhs_add_cst temp_e (Z.opp (Z.of_nat n))) el, cs)
                             | _, _ => None
                             end
-  | Eprim_unop Ucvt e1 => match type_of_hfexpr e1 mod_tmap, extract_constraint_expr_mod mv e1 tmap instmap with
+  | Eprim_unop Ucvt e1 => match type_of_hfexpr e1 mod_tmap, extract_constraint_expr_mod mv e1 mod_tmap tmap instmap with
                             | Some (exist (Gtyp (Fsint _)) _), Some (el, cs) => Some (el, cs)
                             | Some (exist (Gtyp (Fuint _)) _), Some (el, cs) => 
                                 Some (map (fun temp_e => min_rhs_add_cst temp_e 1%Z) el, cs)
                             | _, _ => None
                             end
-  | Eprim_unop Uneg e1 => match type_of_hfexpr e1 mod_tmap, extract_constraint_expr_mod mv e1 tmap instmap with
+  | Eprim_unop Uneg e1 => match type_of_hfexpr e1 mod_tmap, extract_constraint_expr_mod mv e1 mod_tmap tmap instmap with
                             | Some (exist (Gtyp (Fsint _)) _), Some (el, cs) 
                             | Some (exist (Gtyp (Fuint _)) _), Some (el, cs) => 
                                 Some (map (fun temp_e => min_rhs_add_cst temp_e 1%Z) el, cs)
                             | _, _ => None
                             end
-  | Eprim_unop (Uextr n1 n2) e1 => match type_of_hfexpr e1 mod_tmap, extract_constraint_expr_mod mv e1 tmap instmap with
+  | Eprim_unop (Uextr n1 n2) e1 => match type_of_hfexpr e1 mod_tmap, extract_constraint_expr_mod mv e1 mod_tmap tmap instmap with
                             | Some (exist (Gtyp (Fsint w)) _), Some (el, cs)
                             | Some (exist (Gtyp (Fuint w)) _), Some (el, cs) => (*if (n2 <= n1) && (n1 < w) then *)
                                 Some ([Expr (make_rhs nil nil (Z.of_nat (n1 - n2 + 1)))], cs) (*else None*)
                             | _, _ => None
                             end
-  | Eprim_unop (Uhead n) e1 => match type_of_hfexpr e1 mod_tmap, extract_constraint_expr_mod mv e1 tmap instmap with
+  | Eprim_unop (Uhead n) e1 => match type_of_hfexpr e1 mod_tmap, extract_constraint_expr_mod mv e1 mod_tmap tmap instmap with
                             | Some (exist (Gtyp (Fsint w)) _), Some (el, cs)
                             | Some (exist (Gtyp (Fuint w)) _), Some (el, cs) => (*if n <= w then *)
                                 Some ([Expr (make_rhs nil nil (Z.of_nat n))], cs) (*else None*)
                             | _, _ => None
                             end
-  | Eprim_unop (Utail n) e1 => match type_of_hfexpr e1 mod_tmap, extract_constraint_expr_mod mv e1 tmap instmap with
+  | Eprim_unop (Utail n) e1 => match type_of_hfexpr e1 mod_tmap, extract_constraint_expr_mod mv e1 mod_tmap tmap instmap with
                             | Some (exist (Gtyp (Fsint w)) _), Some (el, cs)
                             | Some (exist (Gtyp (Fuint w)) _), Some (el, cs) => (*if n <= w then *)
                                 Some (map (fun temp_e => min_rhs_add_cst temp_e (Z.opp (Z.of_nat n))) el, cs)
                               (*else None*)
                             | _, _ => None
                             end
-  | Eprim_unop _ e1 => match type_of_hfexpr e1 mod_tmap, extract_constraint_expr_mod mv e1 tmap instmap with
+  | Eprim_unop _ e1 => match type_of_hfexpr e1 mod_tmap, extract_constraint_expr_mod mv e1 mod_tmap tmap instmap with
                             | Some (exist (Gtyp (Fsint _)) _), Some (el, cs)
                             | Some (exist (Gtyp (Fuint _)) _), Some (el, cs) => 
                               Some ([Expr (make_rhs nil nil 1%Z)], cs)
                             | _, _ => None
                             end
   | Eprim_binop (Bcomp _) e1 e2 => match type_of_hfexpr e1 mod_tmap, type_of_hfexpr e2 mod_tmap,
-                                    extract_constraint_expr_mod mv e1 tmap instmap, extract_constraint_expr_mod mv e2 tmap instmap with
+                                    extract_constraint_expr_mod mv e1 mod_tmap tmap instmap, extract_constraint_expr_mod mv e2 mod_tmap tmap instmap with
                             | Some (exist (Gtyp (Fsint _)) _), Some (exist (Gtyp (Fsint _)) _), Some (el1, cs1), Some (el2, cs2)
                             | Some (exist (Gtyp (Fuint _)) _), Some (exist (Gtyp (Fuint _)) _), Some (el1, cs1), Some (el2, cs2) => 
                                 Some ([Expr (make_rhs nil nil 1%Z)], cs1 ++ cs2)
@@ -512,7 +510,7 @@ match VM.find mv tmap with
                             end
   | Eprim_binop Badd e1 e2
   | Eprim_binop Bsub e1 e2 => match type_of_hfexpr e1 mod_tmap, type_of_hfexpr e2 mod_tmap,
-                                    extract_constraint_expr_mod mv e1 tmap instmap, extract_constraint_expr_mod mv e2 tmap instmap with
+                                    extract_constraint_expr_mod mv e1 mod_tmap tmap instmap, extract_constraint_expr_mod mv e2 mod_tmap tmap instmap with
                             | Some (exist (Gtyp (Fuint w1)) _), Some (exist (Gtyp (Fuint w2)) _), Some (el1, cs1), Some (el2, cs2) 
                             | Some (exist (Gtyp (Fsint w1)) _), Some (exist (Gtyp (Fsint w2)) _), Some (el1, cs1), Some (el2, cs2) => 
                                 let nexp1 := map (fun temp_e => min_rhs_add_cst temp_e 1%Z) el1 in
@@ -521,14 +519,14 @@ match VM.find mv tmap with
                             | _, _, _, _ => None
                             end
   | Eprim_binop Bmul e1 e2 => match type_of_hfexpr e1 mod_tmap, type_of_hfexpr e2 mod_tmap,
-                                    extract_constraint_expr_mod mv e1 tmap instmap, extract_constraint_expr_mod mv e2 tmap instmap with
+                                    extract_constraint_expr_mod mv e1 mod_tmap tmap instmap, extract_constraint_expr_mod mv e2 mod_tmap tmap instmap with
                             | Some (exist (Gtyp (Fuint w1)) _), Some (exist (Gtyp (Fuint w2)) _), Some (el1, cs1), Some (el2, cs2) 
                             | Some (exist (Gtyp (Fsint w1)) _), Some (exist (Gtyp (Fsint w2)) _), Some (el1, cs1), Some (el2, cs2) => 
                               Some (map (fun '(e1, e2) => combine_min_rhs e1 e2) (cartesian el1 el2), cs1 ++ cs2)
                             | _, _, _, _ => None
                             end
   | Eprim_binop Bdiv e1 e2  => match type_of_hfexpr e1 mod_tmap, type_of_hfexpr e2 mod_tmap,
-                                    extract_constraint_expr_mod mv e1 tmap instmap, extract_constraint_expr_mod mv e2 tmap instmap with
+                                    extract_constraint_expr_mod mv e1 mod_tmap tmap instmap, extract_constraint_expr_mod mv e2 mod_tmap tmap instmap with
                             | Some (exist (Gtyp (Fuint w1)) _), Some (exist (Gtyp (Fuint w2)) _), Some (el1, cs1), Some (el2, cs2) => 
                               Some (el1, cs1 ++ cs2)
                             | Some (exist (Gtyp (Fsint w1)) _), Some (exist (Gtyp (Fsint w2)) _), Some (el1, cs1), Some (el2, cs2) => 
@@ -536,7 +534,7 @@ match VM.find mv tmap with
                             | _, _, _, _ => None
                             end
   | Eprim_binop Bdshl e1 e2 => match type_of_hfexpr e1 mod_tmap, type_of_hfexpr e2 mod_tmap,
-                                    extract_constraint_expr_mod mv e1 tmap instmap with
+                                    extract_constraint_expr_mod mv e1 mod_tmap tmap instmap with
                             | Some (exist (Gtyp (Fuint w1)) _), Some (exist (Gtyp (Fuint w2)) _), Some (el1, cs1) 
                             | Some (exist (Gtyp (Fsint w1)) _), Some (exist (Gtyp (Fuint w2)) _), Some (el1, cs1) =>
                                 match e2 with
@@ -556,14 +554,14 @@ match VM.find mv tmap with
                             | _, _, _ => None
                             end
   | Eprim_binop Bdshr e1 e2 => match type_of_hfexpr e1 mod_tmap, type_of_hfexpr e2 mod_tmap,
-                                    extract_constraint_expr_mod mv e1 tmap instmap, extract_constraint_expr_mod mv e2 tmap instmap with
+                                    extract_constraint_expr_mod mv e1 mod_tmap tmap instmap, extract_constraint_expr_mod mv e2 mod_tmap tmap instmap with
                             | Some (exist (Gtyp (Fuint w1)) _), Some (exist (Gtyp (Fuint w2)) _), Some (el1, cs1), Some (el2, cs2)
                             | Some (exist (Gtyp (Fsint w1)) _), Some (exist (Gtyp (Fuint w2)) _), Some (el1, cs1), Some (el2, cs2) => 
                               Some (el1, cs1 ++ cs2)
                             | _, _, _, _ => None
                             end
   | Eprim_binop Bcat e1 e2 => match type_of_hfexpr e1 mod_tmap, type_of_hfexpr e2 mod_tmap,
-                                    extract_constraint_expr_mod mv e1 tmap instmap, extract_constraint_expr_mod mv e2 tmap instmap with
+                                    extract_constraint_expr_mod mv e1 mod_tmap tmap instmap, extract_constraint_expr_mod mv e2 mod_tmap tmap instmap with
                             | Some (exist (Gtyp (Fuint w1)) _), Some (exist (Gtyp (Fuint w2)) _), Some (el1, cs1), Some (el2, cs2) 
                             | Some (exist (Gtyp (Fsint w1)) _), Some (exist (Gtyp (Fsint w2)) _), Some (el1, cs1), Some (el2, cs2) => 
                                 Some (map (fun '(e1, e2) => combine_min_rhs e1 e2) (cartesian el1 el2), cs1 ++ cs2)
@@ -572,29 +570,27 @@ match VM.find mv tmap with
   | Eprim_binop Band e1 e2
   | Eprim_binop Bor e1 e2
   | Eprim_binop Bxor e1 e2 => match type_of_hfexpr e1 mod_tmap, type_of_hfexpr e2 mod_tmap,
-                                    extract_constraint_expr_mod mv e1 tmap instmap, extract_constraint_expr_mod mv e2 tmap instmap with
+                                    extract_constraint_expr_mod mv e1 mod_tmap tmap instmap, extract_constraint_expr_mod mv e2 mod_tmap tmap instmap with
                             | Some (exist (Gtyp (Fuint w1)) _), Some (exist (Gtyp (Fuint w2)) _), Some (el1, cs1), Some (el2, cs2) 
                             | Some (exist (Gtyp (Fsint w1)) _), Some (exist (Gtyp (Fsint w2)) _), Some (el1, cs1), Some (el2, cs2) => 
                               Some (el1 ++ el2, cs1 ++ cs2)
                             | _, _, _, _ => None
                             end
-  | Emux c e1 e2 => match type_of_hfexpr c mod_tmap, extract_constraint_expr_mod mv c tmap instmap,
-                                    extract_constraint_expr_mod mv e1 tmap instmap, extract_constraint_expr_mod mv e2 tmap instmap with
+  | Emux c e1 e2 => match type_of_hfexpr c mod_tmap, extract_constraint_expr_mod mv c mod_tmap tmap instmap,
+                                    extract_constraint_expr_mod mv e1 mod_tmap tmap instmap, extract_constraint_expr_mod mv e2 mod_tmap tmap instmap with
                             | Some (exist (Gtyp (Fuint _)) _), Some (ec, cs0), Some (el1, cs1), Some (el2, cs2) => 
                               Some (el1 ++ el2, ec ++ cs0 ++ cs1 ++ cs2)
                             | _, _, _, _ => None
                             end (* condition c 只能是 0/1位宽 *)
-  end
-| None => None
 end.
 
-Fixpoint extract_mux_mod (mv : VM.key) (instmap : VM.t VM.key) (e : hfexpr) (tmap : VM.t (VM.t (ftype * forient))) : option (list href * list min_rhs) := 
+Fixpoint extract_mux_mod (mv : VM.key) (instmap : VM.t VM.key) (e : hfexpr) (mod_tmap : VM.t (ftype * forient)) (tmap : VM.t (VM.t (ftype * forient))) : option (list href * list min_rhs) := 
 match VM.find mv tmap with
 | Some mod_tmap => 
   match e with
   | Eref r => Some ([r], nil)
-  | Emux c e1 e2 => match type_of_hfexpr c mod_tmap, extract_constraint_expr_mod mv c tmap instmap, 
-                          extract_mux_mod mv instmap e1 tmap, extract_mux_mod mv instmap e2 tmap with
+  | Emux c e1 e2 => match type_of_hfexpr c mod_tmap, extract_constraint_expr_mod mv c mod_tmap tmap instmap, 
+                          extract_mux_mod mv instmap e1 mod_tmap tmap, extract_mux_mod mv instmap e2 mod_tmap tmap with
                   | Some (exist (Gtyp (Fuint _)) _), Some (ec, cs0), Some (r1, cs1), Some (r2, cs2) => 
                     Some (r1 ++ r2, ec ++ cs0 ++ cs1 ++ cs2)
                   | _, _, _, _ => None
@@ -604,27 +600,25 @@ match VM.find mv tmap with
 | _ => None
 end.
 
-Fixpoint extract_constraint_ss (mv : VM.key) (ss : hfstmt_seq) (tmap : VM.t (VM.t (ftype * forient))) (c1map : PVM.t (list Constraint1)) 
+Fixpoint extract_constraint_ss (mv : VM.key) (ss : hfstmt_seq) (mod_tmap : VM.t (ftype * forient)) (tmap : VM.t (VM.t (ftype * forient))) (c1map : PVM.t (list Constraint1)) 
   (cs2 : list min_rhs) (cs_min : list Constraint_Min) (instmap : VM.t VM.key) 
   : option (PVM.t (list Constraint1) * list min_rhs * list Constraint_Min * VM.t VM.key) :=
   match ss with
   | Qnil => Some (c1map, cs2, cs_min, instmap)
   | Qcons s st => 
-    match extract_constraint_s mv s tmap c1map cs2 cs_min instmap with
-    | Some (c1map', cs2', cs_min', instmap') => extract_constraint_ss mv st tmap c1map' cs2' cs_min' instmap'
+    match extract_constraint_s mv s mod_tmap tmap c1map cs2 cs_min instmap with
+    | Some (c1map', cs2', cs_min', instmap') => extract_constraint_ss mv st mod_tmap tmap c1map' cs2' cs_min' instmap'
     | _ => None
     end
   end
-with extract_constraint_s (mv : VM.key) (s : hfstmt) (tmap : VM.t (VM.t (ftype * forient))) (c1map : PVM.t (list Constraint1)) 
+with extract_constraint_s (mv : VM.key) (s : hfstmt) (mod_tmap : VM.t (ftype * forient)) (tmap : VM.t (VM.t (ftype * forient))) (c1map : PVM.t (list Constraint1)) 
   (cs2 : list min_rhs) (cs_min : list Constraint_Min) (instmap : VM.t VM.key) 
   : option (PVM.t (list Constraint1) * list min_rhs * list Constraint_Min * VM.t VM.key) :=
-match VM.find mv tmap with
-| Some mod_tmap => 
   match s with
   | Sinst inst_v inst_mv => Some (c1map, cs2, cs_min, VM.add inst_v inst_mv instmap)
   | Sfcnct r expr => match type_of_ref r mod_tmap with
                     | Some (Gtyp gt) => if not_implicit gt then Some (c1map, cs2, cs_min, instmap)
-                        else match ref2pv_mod r mv instmap tmap, extract_constraint_expr_mod mv expr tmap instmap with
+                        else match ref2pv_mod r mv instmap tmap, extract_constraint_expr_mod mv expr mod_tmap tmap instmap with
                             | Some pv, Some (exprs, cs2') =>
                               let (regular_cs, cs_min') := seperate_min pv exprs (nil, nil) in
                               let nmap := match PVM.find pv c1map with
@@ -642,7 +636,7 @@ match VM.find mv tmap with
                                           Some (nmap, cs2, cs_min, instmap)
                                         | _, _, _ => None
                                         end
-                            | Emux c e0 e1 => match ref2pv_mod r mv instmap tmap, extract_mux_mod mv instmap expr tmap with
+                            | Emux c e0 e1 => match ref2pv_mod r mv instmap tmap, extract_mux_mod mv instmap expr mod_tmap tmap with
                                         | Some pv, Some (rhsl, cs2') => 
                                             let nmap := fold_left (fun temp_map ref0 => 
                                                 match ref2pv_mod ref0 mv instmap tmap, type_of_ref ref0 mod_tmap with
@@ -660,7 +654,7 @@ match VM.find mv tmap with
                 | Gtyp gt => if not_implicit gt then Some (c1map, cs2, cs_min, instmap)
                     else match reset reg with
                     | NRst => Some (c1map, cs2, cs_min, instmap)
-                    | Rst _ rst_val => match extract_constraint_expr_mod mv rst_val tmap instmap with
+                    | Rst _ rst_val => match extract_constraint_expr_mod mv rst_val mod_tmap tmap instmap with
                                       | Some (exprs, cs2') => 
                                         let (regular_cs, cs_min') := seperate_min pv_reg exprs (nil, nil) in
                                         let nmap := match PVM.find pv_reg c1map with
@@ -681,7 +675,7 @@ match VM.find mv tmap with
                                                     Some (nmap, cs2, cs_min, instmap)
                                                   | _, _ => None
                                                   end
-                                      | Emux c e0 e1 => match extract_mux_mod mv instmap rst_val tmap with
+                                      | Emux c e0 e1 => match extract_mux_mod mv instmap rst_val mod_tmap tmap with
                                                   | Some (rhsl, cs2') => 
                                                       let nmap := fold_left (fun temp_map ref0 => 
                                                           match ref2pv_mod ref0 mv instmap tmap, type_of_ref ref0 mod_tmap with
@@ -697,7 +691,7 @@ match VM.find mv tmap with
   | Snode v e => let pv_node := (mv, N.of_nat (cantor_pairing (N.to_nat v, 0))) in 
                 match VM.find mv tmap with
                 | Some mod_tmap => match VM.find v mod_tmap with
-                    | Some (Gtyp gt, _) => match extract_constraint_expr_mod mv e tmap instmap with
+                    | Some (Gtyp gt, _) => match extract_constraint_expr_mod mv e mod_tmap tmap instmap with
                                   | Some (exprs, cs2') => 
                                       let (regular_cs, cs_min') := seperate_min pv_node exprs (nil, nil) in
                                       let nmap := match PVM.find pv_node c1map with
@@ -714,7 +708,7 @@ match VM.find mv tmap with
                                           Some (nmap, cs2, cs_min, instmap)
                                         | _, _ => None
                                         end
-                            | Emux c e0 e1 => match extract_mux_mod mv instmap e tmap with
+                            | Emux c e0 e1 => match extract_mux_mod mv instmap e mod_tmap tmap with
                                         | Some (rhsl, cs2') => 
                                             let nmap := fold_left (fun temp_map ref0 => 
                                                         match ref2pv_mod ref0 mv instmap tmap, type_of_ref ref0 mod_tmap with
@@ -733,25 +727,26 @@ match VM.find mv tmap with
   | Sinvalid _ 
   | Swire _ _ 
   | Sskip => Some (c1map, cs2, cs_min, instmap)
-  | Swhen c ss_true ss_false => match extract_constraint_expr_mod mv c tmap instmap with
-                | Some (ce0, ce1) => match extract_constraint_ss mv ss_true tmap c1map (cs2 ++ ce0 ++ ce1) cs_min instmap with
-                    | Some (c1map', cs2', cs_min', instmap') => extract_constraint_ss mv ss_false tmap c1map' cs2' cs_min' instmap'
+  | Swhen c ss_true ss_false => match extract_constraint_expr_mod mv c mod_tmap tmap instmap with
+                | Some (ce0, ce1) => match extract_constraint_ss mv ss_true mod_tmap tmap c1map (cs2 ++ ce0 ++ ce1) cs_min instmap with
+                    | Some (c1map', cs2', cs_min', instmap') => extract_constraint_ss mv ss_false mod_tmap tmap c1map' cs2' cs_min' instmap'
                     | _ => None
                     end
                 | _ => None
                 end
-  end
-| _ => None
 end.
 
 Fixpoint extract_constraint_ml ml (tmap : VM.t (VM.t (ftype * forient))) (c1map : PVM.t (list Constraint1)) (cs2 : list min_rhs) 
   (cs_min : list Constraint_Min) : option (PVM.t (list Constraint1) * list min_rhs * list Constraint_Min) :=
   match ml with
   | nil => Some (c1map, cs2, cs_min)
-  | FInmod mv _ ss :: tl => match extract_constraint_ss mv ss tmap c1map cs2 cs_min (VM.empty VM.key) with
+  | FInmod mv _ ss :: tl => match VM.find mv tmap with
+    | Some mod_tmap => match extract_constraint_ss mv ss mod_tmap tmap c1map cs2 cs_min (VM.empty VM.key) with
       | Some (c1map', cs2', cs_min', _) => extract_constraint_ml tl tmap c1map' cs2' cs_min'
       | _ => None
       end
+    | _ => None
+    end
   | _ :: tl => extract_constraint_ml tl tmap c1map cs2 cs_min
   end.
 
