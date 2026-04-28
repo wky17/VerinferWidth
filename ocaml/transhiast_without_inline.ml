@@ -26,9 +26,9 @@ let rec mapstmt modplmap ((map, flag), tmap) stmt =
   | Ast.Sinst (v, mv) -> let pl = StringMap.find mv modplmap in
     let ty = Ast.Btyp (pl2btyp pl) in 
     (Transhiast.mapftype v (map, flag) ty, StringMap.add v ty tmap)
-  (*| Ast.Sinferport (v, r, _) -> (match type_of_ref r tmap with
-                      | Some ty -> (mapftype v (map, flag) ty, StringMap.add v ty tmap)
-                      | None -> ((map, flag), tmap)*)
+  | Ast.Sinferport (v, r, _) -> (match type_of_ref r tmap with
+                      | Some ty -> (Transhiast.mapftype v (map, flag) ty, StringMap.add v ty tmap)
+                      | None -> printf "%s wrong ref type\n" v; Ast.pp_ref stdout r;((map, flag), tmap))
   | Ast.Swhen (_, s1, s2) -> mapstmts modplmap (mapstmts modplmap ((map, flag), tmap) s1) s2
   | _ -> ((map,flag), tmap)
 
@@ -82,13 +82,13 @@ let rec trans_stmt s map res tmap modmap =
                 let ns = HiFirrtl.Sreg (Obj.magic (Stdlib.List.hd (StringMap.find v map)), 
                     Transhiast.mk_freg (Transhiast.trans_ftype v r.coq_type map) (Transhiast.trans_expr r.clock map) (Transhiast.trans_rst r.reset map)) in
                 HiFirrtl.Qcons (ns, res)
-  (*| Ast.Sinferport (v, r, e_clock) -> (match type_of_ref r tmap with
+  | Ast.Sinferport (v, r, e_clock) -> (match type_of_ref r tmap with
                   | Some ty -> let fv = Obj.magic (Stdlib.List.hd (StringMap.find v map)) in
                                let s1 = HiFirrtl.Sreg (fv, Transhiast.mk_freg (Transhiast.trans_ftype v ty map) (Transhiast.trans_expr e_clock map) HiFirrtl.NRst) in
                                let s2 = HiFirrtl.Sfcnct(Eid fv, Eref (Transhiast.trans_ref r map)) in
                                let s3 = HiFirrtl.Sfcnct(Transhiast.trans_ref r map, HiFirrtl.Eref (Eid fv)) in
                     HiFirrtl.Qcons (s3, Qcons (s2, Qcons (s1, res)))
-                  | None -> res*)
+                  | None -> res)
   | Ast.Smem _ -> res
   | Ast.Sinst (v, modv) -> 
                 let ns = HiFirrtl.Sinst (Obj.magic (Stdlib.List.hd (StringMap.find v map)), Obj.magic (StringMap.find modv modmap)) in
