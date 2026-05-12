@@ -15,5 +15,6 @@ Separate Extraction
          extract_cswithmin.collect_power1_vars extract_cswithmin.collect_power2_vars extract_cswithmin.remove_power1 extract_cswithmin.remove_power2 extract_cswithmin.remove_power_min
          constraints.split_constraints' inferWidths.solve_alg_check
          extract_cs_multimod.extract_constraints_c extract_cs_multimod.update_tmap extract_cs_multimod.InferWidths_trans_c extract_cs_multimod.circuit_tmap
-         inferWidths_multimod.extract_constraints_c inferWidths_multimod.solve_alg_check inferWidths_multimod.smaller_valuation inferWidths_multimod.update_tmap inferWidths_multimod.InferWidths_trans_c.
+         inferWidths_multimod.extract_constraints_c inferWidths_multimod.solve_alg_check inferWidths_multimod.smaller_valuation inferWidths_multimod.update_tmap inferWidths_multimod.InferWidths_trans_c
+         inferWidths_multimod.remove_power1 inferWidths_multimod.remove_power_min.
 Cd "../..".

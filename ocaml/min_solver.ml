@@ -22,10 +22,20 @@ let tr_map f lst =
   in
   aux [] lst
 
+let vertex_to_string (id, (x, y)) = sprintf "(%d, (%d, %d))" id x y
+
+let print_scc_list sccs =
+  Stdlib.List.iteri (fun idx comp ->
+    printf "SCC %d (size %d): [" idx (Stdlib.List.length comp);
+    let vs = Stdlib.List.map vertex_to_string comp |> String.concat "; " in
+    printf "%s]\n" vs
+  ) sccs
+
 let my_solve_helper c1map cs2 =
   let cs1 = split2_tailrec (TVM.elements c1map) in
   let dpdcg = build_graph_from_constraints cs1 in
   let res = SCC.scc_list dpdcg in
+  (*print_scc_list res;*)
   solve_alg_check res c1map cs2
 
 let my_solve_fun c tmap =

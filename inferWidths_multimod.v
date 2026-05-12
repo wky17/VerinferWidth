@@ -391,6 +391,33 @@ Definition satisfies_constraint2 (v: TVM.t nat) (c: Constraint2) : bool :=
 Definition rhs_vars (c : Constraint1) : list TripVar.t :=
   map snd (rhs_terms1 c) ++ map snd (rhs_power c).
 
+Definition remove_power1 (value : TVM.t nat) (c : Constraint1) : Constraint1 :=
+  {|
+    lhs_var1 := lhs_var1 c;
+    rhs_terms1 := rhs_terms1 c;
+    rhs_power := nil;
+    rhs_const1 := Z.add (rhs_const1 c) (power_value value (rhs_power c))
+  |}.
+
+Definition remove_power_regular (value : TVM.t nat) (r : regular_rhs) : regular_rhs :=
+  {|
+    regular_terms := regular_terms r;
+    regular_power := nil;
+    regular_const := Z.add (regular_const r) (power_value value (regular_power r))
+  |}.
+
+Fixpoint remove_power_min_rhs (value : TVM.t nat) (rhs : min_rhs) : min_rhs :=
+  match rhs with
+  | Expr r => Expr (remove_power_regular value r)
+  | Min min1 min2 => Min (remove_power_min_rhs value min1) (remove_power_min_rhs value min2)
+  end.
+
+Definition remove_power_min (value : TVM.t nat) (c : Constraint_Min) : Constraint_Min :=
+  {|
+    lhs_var_min := lhs_var_min c;
+    rhs_expr_min := remove_power_min_rhs value (rhs_expr_min c)
+  |}.
+
 End constraint.
 
 Section Extract_Constraints_for_multimod.
@@ -1194,7 +1221,7 @@ Fixpoint find_path (g : G) (y : TripVar.t) n (v : list TripVar.t) (x : TripVar.t
   if n is n'.+1 then match TVM.find x g with
     | Some children =>
     foldl (fun r child => match r with
-      | Some p => res 
+      | Some p => r
       | None => find_path g y n' (x :: v) child None
       end) res children
     | None => None

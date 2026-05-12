@@ -27,7 +27,7 @@ let build_graph_from_constraints constraints =
 
   List.iter (fun c ->
     let lhs_node = get_node c.lhs_var1 in
-    
+    G.add_vertex g lhs_node;
     List.iter (fun (_, rhs_var) ->
       let rhs_node = get_node rhs_var in
       G.add_edge g lhs_node rhs_node
