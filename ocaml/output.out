@@ -1,52 +1,52 @@
 正在处理: ./demo/firrtl program/1088.fir ...
-extraction time : 0.000006
-computation time : 0.000021
-total time : 0.000042
+extraction time : 0.000003
+computation time : 0.000006
+total time : 0.000017
 components amount : 1
 ./demo/firrtl program/1088.fir width inference is finished
 
 ------------------------------------------
 
 正在处理: ./demo/firrtl program/1089.fir ...
-extraction time : 0.000008
-computation time : 0.000019
-total time : 0.000040
+extraction time : 0.000009
+computation time : 0.000013
+total time : 0.000033
 components amount : 1
 ./demo/firrtl program/1089.fir width inference is finished
 
 ------------------------------------------
 
 正在处理: ./demo/firrtl program/1090_1.fir ...
-extraction time : 0.000005
-computation time : 0.000019
-total time : 0.000037
+extraction time : 0.000004
+computation time : 0.000011
+total time : 0.000023
 components amount : 1
 ./demo/firrtl program/1090_1.fir width inference is finished
 
 ------------------------------------------
 
 正在处理: ./demo/firrtl program/1090_2.fir ...
-extraction time : 0.000005
-computation time : 0.000015
-total time : 0.000030
+extraction time : 0.000004
+computation time : 0.000009
+total time : 0.000021
 components amount : 1
 ./demo/firrtl program/1090_2.fir width inference is finished
 
 ------------------------------------------
 
 正在处理: ./demo/firrtl program/1091.fir ...
-extraction time : 0.000006
-computation time : 0.000012
-total time : 0.000025
+extraction time : 0.000005
+computation time : 0.000008
+total time : 0.000020
 components amount : 1
 ./demo/firrtl program/1091.fir width inference is finished
 
 ------------------------------------------
 
 正在处理: ./demo/firrtl program/1092.fir ...
-extraction time : 0.000005
-computation time : 0.000010
-total time : 0.000022
+extraction time : 0.000007
+computation time : 0.000012
+total time : 0.000030
 components amount : 1
 ./demo/firrtl program/1092.fir width inference is finished
 
@@ -54,17 +54,17 @@ components amount : 1
 
 正在处理: ./demo/firrtl program/1093.fir ...
 extraction time : 0.000005
-computation time : 0.000011
-total time : 0.000024
+computation time : 0.000008
+total time : 0.000019
 components amount : 1
 ./demo/firrtl program/1093.fir width inference is finished
 
 ------------------------------------------
 
 正在处理: ./demo/firrtl program/1094.fir ...
-extraction time : 0.000006
-computation time : 0.000017
-total time : 0.000031
+extraction time : 0.000004
+computation time : 0.000009
+total time : 0.000020
 components amount : 1
 ./demo/firrtl program/1094.fir width inference is finished
 
@@ -72,35 +72,35 @@ components amount : 1
 
 正在处理: ./demo/firrtl program/1095.fir ...
 extraction time : 0.000004
-computation time : 0.000010
-total time : 0.000020
+computation time : 0.000008
+total time : 0.000019
 components amount : 1
 ./demo/firrtl program/1095.fir width inference is finished
 
 ------------------------------------------
 
 正在处理: ./demo/firrtl program/1096.fir ...
-extraction time : 0.000005
-computation time : 0.000010
-total time : 0.000022
+extraction time : 0.000004
+computation time : 0.000009
+total time : 0.000021
 components amount : 1
 ./demo/firrtl program/1096.fir width inference is finished
 
 ------------------------------------------
 
 正在处理: ./demo/firrtl program/1097.fir ...
-extraction time : 0.000004
-computation time : 0.000009
-total time : 0.000020
+extraction time : 0.000005
+computation time : 0.000011
+total time : 0.000027
 components amount : 1
 ./demo/firrtl program/1097.fir width inference is finished
 
 ------------------------------------------
 
 正在处理: ./demo/firrtl program/1098.fir ...
-extraction time : 0.000004
+extraction time : 0.000005
 computation time : 0.000009
-total time : 0.000019
+total time : 0.000024
 components amount : 1
 ./demo/firrtl program/1098.fir width inference is finished
 
@@ -108,35 +108,35 @@ components amount : 1
 
 正在处理: ./demo/firrtl program/1099.fir ...
 extraction time : 0.000005
-computation time : 0.000011
-total time : 0.000023
+computation time : 0.000010
+total time : 0.000026
 components amount : 1
 ./demo/firrtl program/1099.fir width inference is finished
 
 ------------------------------------------
 
 正在处理: ./demo/firrtl program/1108.fir ...
-extraction time : 0.000003
-computation time : 0.000009
-total time : 0.000019
+extraction time : 0.000004
+computation time : 0.000010
+total time : 0.000024
 components amount : 1
 ./demo/firrtl program/1108.fir width inference is finished
 
 ------------------------------------------
 
 正在处理: ./demo/firrtl program/1110.fir ...
-extraction time : 0.000003
-computation time : 0.000009
-total time : 0.000019
+extraction time : 0.000006
+computation time : 0.000010
+total time : 0.000024
 components amount : 1
 ./demo/firrtl program/1110.fir width inference is finished
 
 ------------------------------------------
 
 正在处理: ./demo/firrtl program/1112.fir ...
-extraction time : 0.000004
-computation time : 0.000008
-total time : 0.000018
+extraction time : 0.000005
+computation time : 0.000010
+total time : 0.000025
 components amount : 1
 ./demo/firrtl program/1112.fir width inference is finished
 
@@ -144,8 +144,8 @@ components amount : 1
 
 正在处理: ./demo/firrtl program/1113.fir ...
 extraction time : 0.000005
-computation time : 0.000008
-total time : 0.000019
+computation time : 0.000009
+total time : 0.000023
 components amount : 1
 ./demo/firrtl program/1113.fir width inference is finished
 
@@ -153,7 +153,7 @@ components amount : 1
 
 正在处理: ./demo/firrtl program/1115.fir ...
 extraction time : 0.000005
-computation time : 0.000009
+computation time : 0.000010
 total time : 0.000022
 components amount : 1
 ./demo/firrtl program/1115.fir width inference is finished
@@ -161,44 +161,44 @@ components amount : 1
 ------------------------------------------
 
 正在处理: ./demo/firrtl program/1116.fir ...
-extraction time : 0.000004
-computation time : 0.000009
-total time : 0.000019
+extraction time : 0.000006
+computation time : 0.000013
+total time : 0.000030
 components amount : 1
 ./demo/firrtl program/1116.fir width inference is finished
 
 ------------------------------------------
 
 正在处理: ./demo/firrtl program/1118_1.fir ...
-extraction time : 0.000004
-computation time : 0.000009
-total time : 0.000019
+extraction time : 0.000005
+computation time : 0.000010
+total time : 0.000024
 components amount : 1
 ./demo/firrtl program/1118_1.fir width inference is finished
 
 ------------------------------------------
 
 正在处理: ./demo/firrtl program/1118_2.fir ...
-extraction time : 0.000003
-computation time : 0.000009
-total time : 0.000019
+extraction time : 0.000005
+computation time : 0.000011
+total time : 0.000027
 components amount : 1
 ./demo/firrtl program/1118_2.fir width inference is finished
 
 ------------------------------------------
 
 正在处理: ./demo/firrtl program/1271.fir ...
-extraction time : 0.000006
-computation time : 0.000035
-total time : 0.000047
+extraction time : 0.000007
+computation time : 0.000033
+total time : 0.000049
 components amount : 3
 ./demo/firrtl program/1271.fir width inference is finished
 
 ------------------------------------------
 
 正在处理: ./demo/firrtl program/1491.fir ...
-extraction time : 0.000006
-computation time : 0.000010
+extraction time : 0.000005
+computation time : 0.000009
 total time : 0.000023
 components amount : 1
 ./demo/firrtl program/1491.fir width inference is finished
@@ -206,17 +206,17 @@ components amount : 1
 ------------------------------------------
 
 正在处理: ./demo/firrtl program/2538.fir ...
-extraction time : 0.000006
+extraction time : 0.000005
 computation time : 0.000010
-total time : 0.000021
+total time : 0.000024
 components amount : 2
 ./demo/firrtl program/2538.fir width inference is finished
 
 ------------------------------------------
 
 正在处理: ./demo/firrtl program/5391.fir ...
-extraction time : 0.000005
-computation time : 0.000013
+extraction time : 0.000006
+computation time : 0.000012
 total time : 0.000025
 components amount : 4
 ./demo/firrtl program/5391.fir width inference is finished
@@ -224,18 +224,18 @@ components amount : 4
 ------------------------------------------
 
 正在处理: ./demo/firrtl program/6742.fir ...
-extraction time : 0.000263
-computation time : 0.000482
-total time : 0.000753
+extraction time : 0.000347
+computation time : 0.000566
+total time : 0.000923
 components amount : 192
 ./demo/firrtl program/6742.fir width inference is finished
 
 ------------------------------------------
 
 正在处理: ./demo/firrtl program/AddNot.fir ...
-extraction time : 0.000004
-computation time : 0.000008
-total time : 0.000018
+extraction time : 0.000005
+computation time : 0.000010
+total time : 0.000025
 components amount : 1
 ./demo/firrtl program/AddNot.fir width inference is finished
 
@@ -244,7 +244,7 @@ components amount : 1
 正在处理: ./demo/firrtl program/CombElseWhen.fir ...
 extraction time : 0.000005
 computation time : 0.000009
-total time : 0.000020
+total time : 0.000021
 components amount : 1
 ./demo/firrtl program/CombElseWhen.fir width inference is finished
 
@@ -252,17 +252,17 @@ components amount : 1
 
 正在处理: ./demo/firrtl program/CombOther.fir ...
 extraction time : 0.000005
-computation time : 0.000009
-total time : 0.000020
+computation time : 0.000010
+total time : 0.000024
 components amount : 1
 ./demo/firrtl program/CombOther.fir width inference is finished
 
 ------------------------------------------
 
 正在处理: ./demo/firrtl program/CombWhen.fir ...
-extraction time : 0.000004
-computation time : 0.000010
-total time : 0.000020
+extraction time : 0.000005
+computation time : 0.000009
+total time : 0.000022
 components amount : 1
 ./demo/firrtl program/CombWhen.fir width inference is finished
 
@@ -270,8 +270,8 @@ components amount : 1
 
 正在处理: ./demo/firrtl program/CombWireDefault.fir ...
 extraction time : 0.000005
-computation time : 0.000010
-total time : 0.000022
+computation time : 0.000009
+total time : 0.000023
 components amount : 1
 ./demo/firrtl program/CombWireDefault.fir width inference is finished
 
@@ -279,7 +279,7 @@ components amount : 1
 
 正在处理: ./demo/firrtl program/Conditional.fir ...
 extraction time : 0.000009
-computation time : 0.000012
+computation time : 0.000011
 total time : 0.000028
 components amount : 3
 ./demo/firrtl program/Conditional.fir width inference is finished
@@ -287,36 +287,36 @@ components amount : 3
 ------------------------------------------
 
 正在处理: ./demo/firrtl program/CoreSoc.fir ...
-extraction time : 0.019972
-computation time : 0.043558
-total time : 0.063543
+extraction time : 0.009070
+computation time : 0.044964
+total time : 0.054046
 components amount : 3315
 ./demo/firrtl program/CoreSoc.fir width inference is finished
 
 ------------------------------------------
 
 正在处理: ./demo/firrtl program/CoreTester.fir ...
-extraction time : 0.009794
-computation time : 0.006567
-total time : 0.016375
+extraction time : 0.005228
+computation time : 0.006964
+total time : 0.012203
 components amount : 1984
 ./demo/firrtl program/CoreTester.fir width inference is finished
 
 ------------------------------------------
 
 正在处理: ./demo/firrtl program/designed.fir ...
-extraction time : 0.000009
-computation time : 0.000042
-total time : 0.000057
+extraction time : 0.000011
+computation time : 0.000044
+total time : 0.000064
 components amount : 5
 ./demo/firrtl program/designed.fir width inference is finished
 
 ------------------------------------------
 
 正在处理: ./demo/firrtl program/designed10.fir ...
-extraction time : 0.000012
-computation time : 0.000104
-total time : 0.000122
+extraction time : 0.000014
+computation time : 0.000060
+total time : 0.000082
 components amount : 5
 ./demo/firrtl program/designed10.fir width inference is finished
 
@@ -325,24 +325,24 @@ components amount : 5
 正在处理: ./demo/firrtl program/designed11.fir ...
 extraction time : 0.000012
 computation time : 0.000045
-total time : 0.000063
+total time : 0.000066
 components amount : 6
 ./demo/firrtl program/designed11.fir width inference is finished
 
 ------------------------------------------
 
 正在处理: ./demo/firrtl program/designed2.fir ...
-extraction time : 0.000008
-computation time : 0.000037
-total time : 0.000052
+extraction time : 0.000009
+computation time : 0.000038
+total time : 0.000057
 components amount : 4
 ./demo/firrtl program/designed2.fir width inference is finished
 
 ------------------------------------------
 
 正在处理: ./demo/firrtl program/designed3.fir ...
-extraction time : 0.000017
-computation time : 0.000137
+extraction time : 0.000016
+computation time : 0.000136
 total time : 0.000160
 components amount : 4
 ./demo/firrtl program/designed3.fir width inference is finished
@@ -350,26 +350,26 @@ components amount : 4
 ------------------------------------------
 
 正在处理: ./demo/firrtl program/designed4.fir ...
-extraction time : 0.000010
-computation time : 0.000038
-total time : 0.000054
+extraction time : 0.000011
+computation time : 0.000037
+total time : 0.000055
 components amount : 3
 ./demo/firrtl program/designed4.fir width inference is finished
 
 ------------------------------------------
 
 正在处理: ./demo/firrtl program/designed5.fir ...
-extraction time : 0.000007
-computation time : 0.000039
-total time : 0.000052
+extraction time : 0.000009
+computation time : 0.000042
+total time : 0.000060
 components amount : 3
 ./demo/firrtl program/designed5.fir width inference is finished
 
 ------------------------------------------
 
 正在处理: ./demo/firrtl program/designed6.fir ...
-extraction time : 0.000011
-computation time : 0.000062
+extraction time : 0.000012
+computation time : 0.000061
 total time : 0.000079
 components amount : 3
 ./demo/firrtl program/designed6.fir width inference is finished
@@ -377,18 +377,18 @@ components amount : 3
 ------------------------------------------
 
 正在处理: ./demo/firrtl program/designed7.fir ...
-extraction time : 0.000013
-computation time : 0.000187
-total time : 0.000206
+extraction time : 0.000014
+computation time : 0.000189
+total time : 0.000210
 components amount : 4
 ./demo/firrtl program/designed7.fir width inference is finished
 
 ------------------------------------------
 
 正在处理: ./demo/firrtl program/designed8.fir ...
-extraction time : 0.000012
-computation time : 0.000040
-total time : 0.000058
+extraction time : 0.000014
+computation time : 0.000041
+total time : 0.000063
 components amount : 4
 ./demo/firrtl program/designed8.fir width inference is finished
 
@@ -396,188 +396,188 @@ components amount : 4
 
 正在处理: ./demo/firrtl program/designed9.fir ...
 extraction time : 0.000012
-computation time : 0.000962
-total time : 0.000982
+computation time : 0.000973
+total time : 0.000998
 components amount : 5
 ./demo/firrtl program/designed9.fir width inference is finished
 
 ------------------------------------------
 
 正在处理: ./demo/firrtl program/DownCounter.fir ...
-extraction time : 0.000003
-computation time : 0.000008
-total time : 0.000016
+extraction time : 0.000002
+computation time : 0.000009
+total time : 0.000022
 components amount : 1
 ./demo/firrtl program/DownCounter.fir width inference is finished
 
 ------------------------------------------
 
 正在处理: ./demo/firrtl program/DownTicker.fir ...
-extraction time : 0.000008
-computation time : 0.000034
-total time : 0.000047
+extraction time : 0.000009
+computation time : 0.000036
+total time : 0.000051
 components amount : 5
 ./demo/firrtl program/DownTicker.fir width inference is finished
 
 ------------------------------------------
 
 正在处理: ./demo/firrtl program/DrawMux6.fir ...
-extraction time : 0.000010
-computation time : 0.000014
-total time : 0.000030
+extraction time : 0.000012
+computation time : 0.000016
+total time : 0.000034
 components amount : 7
 ./demo/firrtl program/DrawMux6.fir width inference is finished
 
 ------------------------------------------
 
 正在处理: ./demo/firrtl program/Flasher.fir ...
-extraction time : 0.000029
-computation time : 0.000053
-total time : 0.000087
+extraction time : 0.000038
+computation time : 0.000060
+total time : 0.000106
 components amount : 24
 ./demo/firrtl program/Flasher.fir width inference is finished
 
 ------------------------------------------
 
 正在处理: ./demo/firrtl program/Flasher2.fir ...
-extraction time : 0.000051
-computation time : 0.000087
-total time : 0.000148
+extraction time : 0.000037
+computation time : 0.000079
+total time : 0.000123
 components amount : 22
 ./demo/firrtl program/Flasher2.fir width inference is finished
 
 ------------------------------------------
 
 正在处理: ./demo/firrtl program/ForwardingMemory.fir ...
-extraction time : 0.000013
-computation time : 0.000022
-total time : 0.000044
+extraction time : 0.000014
+computation time : 0.000020
+total time : 0.000041
 components amount : 9
 ./demo/firrtl program/ForwardingMemory.fir width inference is finished
 
 ------------------------------------------
 
 正在处理: ./demo/firrtl program/GCD_2.fir ...
-extraction time : 0.000015
-computation time : 0.000137
-total time : 0.000160
+extraction time : 0.000017
+computation time : 0.000144
+total time : 0.000171
 components amount : 10
 ./demo/firrtl program/GCD_2.fir width inference is finished
 
 ------------------------------------------
 
 正在处理: ./demo/firrtl program/GCD.fir ...
-extraction time : 0.000015
-computation time : 0.000127
-total time : 0.000147
+extraction time : 0.000018
+computation time : 0.000146
+total time : 0.000174
 components amount : 10
 ./demo/firrtl program/GCD.fir width inference is finished
 
 ------------------------------------------
 
 正在处理: ./demo/firrtl program/Logic.fir ...
-extraction time : 0.000032
-computation time : 0.000067
-total time : 0.000104
+extraction time : 0.000043
+computation time : 0.000080
+total time : 0.000133
 components amount : 25
 ./demo/firrtl program/Logic.fir width inference is finished
 
 ------------------------------------------
 
 正在处理: ./demo/firrtl program/lower-memories.fir ...
-extraction time : 0.000011
-computation time : 0.000012
-total time : 0.000028
+extraction time : 0.000012
+computation time : 0.000015
+total time : 0.000036
 components amount : 6
 ./demo/firrtl program/lower-memories.fir width inference is finished
 
 ------------------------------------------
 
 正在处理: ./demo/firrtl program/MultiClockSubModuleTest.fir ...
-extraction time : 0.000021
-computation time : 0.000027
-total time : 0.000054
+extraction time : 0.000026
+computation time : 0.000032
+total time : 0.000066
 components amount : 18
 ./demo/firrtl program/MultiClockSubModuleTest.fir width inference is finished
 
 ------------------------------------------
 
 正在处理: ./demo/firrtl program/NutCore.fir ...
-extraction time : 0.093845
-computation time : 0.191662
-total time : 0.285518
+extraction time : 0.022612
+computation time : 0.209832
+total time : 0.232457
 components amount : 7152
 ./demo/firrtl program/NutCore.fir width inference is finished
 
 ------------------------------------------
 
 正在处理: ./demo/firrtl program/OverflowTypeCircuit.fir ...
-extraction time : 0.000014
+extraction time : 0.000017
 computation time : 0.000023
-total time : 0.000042
+total time : 0.000048
 components amount : 12
 ./demo/firrtl program/OverflowTypeCircuit.fir width inference is finished
 
 ------------------------------------------
 
 正在处理: ./demo/firrtl program/ParamFunc.fir ...
-extraction time : 0.000006
+extraction time : 0.000007
 computation time : 0.000008
-total time : 0.000019
+total time : 0.000021
 components amount : 1
 ./demo/firrtl program/ParamFunc.fir width inference is finished
 
 ------------------------------------------
 
 正在处理: ./demo/firrtl program/Registers.fir ...
-extraction time : 0.000004
-computation time : 0.000009
-total time : 0.000019
+extraction time : 0.000005
+computation time : 0.000010
+total time : 0.000023
 components amount : 2
 ./demo/firrtl program/Registers.fir width inference is finished
 
 ------------------------------------------
 
 正在处理: ./demo/firrtl program/Rob.fir ...
-extraction time : 0.014150
-computation time : 0.007594
-total time : 0.021754
+extraction time : 0.010164
+computation time : 0.009773
+total time : 0.019947
 components amount : 2775
 ./demo/firrtl program/Rob.fir width inference is finished
 
 ------------------------------------------
 
 正在处理: ./demo/firrtl program/RocketCore.fir ...
-extraction time : 0.022564
-computation time : 0.015304
-total time : 0.037877
+extraction time : 0.015467
+computation time : 0.018780
+total time : 0.034257
 components amount : 4882
 ./demo/firrtl program/RocketCore.fir width inference is finished
 
 ------------------------------------------
 
 正在处理: ./demo/firrtl program/Sequential.fir ...
-extraction time : 0.000011
-computation time : 0.000015
-total time : 0.000032
+extraction time : 0.000013
+computation time : 0.000016
+total time : 0.000039
 components amount : 4
 ./demo/firrtl program/Sequential.fir width inference is finished
 
 ------------------------------------------
 
 正在处理: ./demo/firrtl program/ShouldBeBadUIntSubtractWithGrow.fir ...
-extraction time : 0.000007
-computation time : 0.000014
-total time : 0.000027
+extraction time : 0.000008
+computation time : 0.000013
+total time : 0.000029
 components amount : 4
 ./demo/firrtl program/ShouldBeBadUIntSubtractWithGrow.fir width inference is finished
 
 ------------------------------------------
 
 正在处理: ./demo/firrtl program/spec.md-code-example-019.fir ...
-extraction time : 0.000004
-computation time : 0.000010
-total time : 0.000019
+extraction time : 0.000007
+computation time : 0.000011
+total time : 0.000026
 components amount : 1
 ./demo/firrtl program/spec.md-code-example-019.fir width inference is finished
 
@@ -585,7 +585,7 @@ components amount : 1
 
 正在处理: ./demo/firrtl program/spec.md-code-example-020.fir ...
 extraction time : 0.000006
-computation time : 0.000011
+computation time : 0.000009
 total time : 0.000023
 components amount : 1
 ./demo/firrtl program/spec.md-code-example-020.fir width inference is finished
@@ -595,79 +595,79 @@ components amount : 1
 正在处理: ./demo/firrtl program/spec.md-code-example-104.fir ...
 extraction time : 0.000005
 computation time : 0.000012
-total time : 0.000025
+total time : 0.000026
 components amount : 5
 ./demo/firrtl program/spec.md-code-example-104.fir width inference is finished
 
 ------------------------------------------
 
 正在处理: ./demo/firrtl program/spec.md-code-example-106.fir ...
-extraction time : 0.000004
+extraction time : 0.000005
 computation time : 0.000013
-total time : 0.000024
+total time : 0.000026
 components amount : 5
 ./demo/firrtl program/spec.md-code-example-106.fir width inference is finished
 
 ------------------------------------------
 
 正在处理: ./demo/firrtl program/SyncReset.fir ...
-extraction time : 0.000009
-computation time : 0.000015
-total time : 0.000030
+extraction time : 0.000010
+computation time : 0.000013
+total time : 0.000031
 components amount : 5
 ./demo/firrtl program/SyncReset.fir width inference is finished
 
 ------------------------------------------
 
 正在处理: ./demo/firrtl program/test.fir ...
-extraction time : 0.000006
+extraction time : 0.000005
 computation time : 0.000010
-total time : 0.000021
+total time : 0.000023
 components amount : 1
 ./demo/firrtl program/test.fir width inference is finished
 
 ------------------------------------------
 
 正在处理: ./demo/firrtl program/TestHarness.SmallBoomConfig.fir ...
-extraction time : 45.325281
-computation time : 2.610533
-total time : 47.935826
+extraction time : 1.074046
+computation time : 2.781370
+total time : 3.855435
 components amount : 205608
 ./demo/firrtl program/TestHarness.SmallBoomConfig.fir width inference is finished
 
 ------------------------------------------
 
 正在处理: ./demo/firrtl program/Timer.fir ...
-extraction time : 0.000008
-computation time : 0.000014
-total time : 0.000029
+extraction time : 0.000011
+computation time : 0.000015
+total time : 0.000035
 components amount : 5
 ./demo/firrtl program/Timer.fir width inference is finished
 
 ------------------------------------------
 
 正在处理: ./demo/firrtl program/TrueDualPortMemory.fir ...
-extraction time : 0.000014
-computation time : 0.000019
-total time : 0.000041
+extraction time : 0.000016
+computation time : 0.000018
+total time : 0.000040
 components amount : 10
 ./demo/firrtl program/TrueDualPortMemory.fir width inference is finished
 
 ------------------------------------------
 
 正在处理: ./demo/firrtl program/VcdAdder.fir ...
-extraction time : 0.000004
-computation time : 0.000010
-total time : 0.000021
+extraction time : 0.000006
+computation time : 0.000009
+total time : 0.000023
 components amount : 1
 ./demo/firrtl program/VcdAdder.fir width inference is finished
 
 ------------------------------------------
 
 正在处理: ./demo/firrtl program/width-spec.fir ...
-extraction time : 0.000010
+extraction time : 0.000012
 computation time : 0.000019
-total time : 0.000035
+total time : 0.000038
 components amount : 14
 ./demo/firrtl program/width-spec.fir width inference is finished
 

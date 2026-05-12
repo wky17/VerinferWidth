@@ -389,7 +389,7 @@ Definition satisfies_constraint2 (v: TVM.t nat) (c: Constraint2) : bool :=
   in Nat.leb total c.(lhs_const2).
 
 Definition rhs_vars (c : Constraint1) : list TripVar.t :=
-  map snd (rhs_terms1 c) ++ map snd (rhs_power c).
+  rev_append (map snd (rhs_power c)) (map snd (rhs_terms1 c)).
 
 Definition remove_power1 (value : TVM.t nat) (c : Constraint1) : Constraint1 :=
   {|
@@ -486,7 +486,7 @@ Fixpoint extract_constraint_expr_mod (mv : VM.key) (e : hfexpr) (mod_tmap : VM.t
                             extract_constraint_expr_mod mv e1 mod_tmap tmap instmap, extract_constraint_expr_mod mv e2 mod_tmap tmap instmap with
                             | Some (exist (Gtyp (Fuint w1)) _), Some (exist (Gtyp (Fuint w2)) _), Some (el1, cs1), Some (el2, cs2) 
                             | Some (exist (Gtyp (Fsint w1)) _), Some (exist (Gtyp (Fsint w2)) _), Some (el1, cs1), Some (el2, cs2) => 
-                              Some (map (fun '(a,b) => Min a b) (cartesian el1 el2), cs1 ++ cs2)
+                              Some (map (fun '(a,b) => Min a b) (cartesian el1 el2), rev_append cs1 cs2)
                             | _, _, _, _ => None 
                             end
   | Ecast AsUInt e1 
@@ -563,7 +563,7 @@ Fixpoint extract_constraint_expr_mod (mv : VM.key) (e : hfexpr) (mod_tmap : VM.t
                                     extract_constraint_expr_mod mv e1 mod_tmap tmap instmap, extract_constraint_expr_mod mv e2 mod_tmap tmap instmap with
                             | Some (exist (Gtyp (Fsint _)) _), Some (exist (Gtyp (Fsint _)) _), Some (el1, cs1), Some (el2, cs2)
                             | Some (exist (Gtyp (Fuint _)) _), Some (exist (Gtyp (Fuint _)) _), Some (el1, cs1), Some (el2, cs2) => 
-                                Some ([Expr (make_rhs nil nil 1%Z)], cs1 ++ cs2)
+                                Some ([Expr (make_rhs nil nil 1%Z)], rev_append cs1 cs2)
                             | _, _, _, _ => None
                             end
   | Eprim_binop Badd e1 e2
@@ -573,22 +573,22 @@ Fixpoint extract_constraint_expr_mod (mv : VM.key) (e : hfexpr) (mod_tmap : VM.t
                             | Some (exist (Gtyp (Fsint w1)) _), Some (exist (Gtyp (Fsint w2)) _), Some (el1, cs1), Some (el2, cs2) => 
                                 let nexp1 := map (fun temp_e => min_rhs_add_cst temp_e 1%Z) el1 in
                                 let nexp2 := map (fun temp_e => min_rhs_add_cst temp_e 1%Z) el2 in
-                                Some (nexp1 ++ nexp2, cs1 ++ cs2)
+                                Some (rev_append nexp1 nexp2, rev_append cs1 cs2)
                             | _, _, _, _ => None
                             end
   | Eprim_binop Bmul e1 e2 => match type_of_hfexpr e1 mod_tmap, type_of_hfexpr e2 mod_tmap,
                                     extract_constraint_expr_mod mv e1 mod_tmap tmap instmap, extract_constraint_expr_mod mv e2 mod_tmap tmap instmap with
                             | Some (exist (Gtyp (Fuint w1)) _), Some (exist (Gtyp (Fuint w2)) _), Some (el1, cs1), Some (el2, cs2) 
                             | Some (exist (Gtyp (Fsint w1)) _), Some (exist (Gtyp (Fsint w2)) _), Some (el1, cs1), Some (el2, cs2) => 
-                              Some (map (fun '(e1, e2) => combine_min_rhs e1 e2) (cartesian el1 el2), cs1 ++ cs2)
+                              Some (map (fun '(e1, e2) => combine_min_rhs e1 e2) (cartesian el1 el2), rev_append cs1 cs2)
                             | _, _, _, _ => None
                             end
   | Eprim_binop Bdiv e1 e2  => match type_of_hfexpr e1 mod_tmap, type_of_hfexpr e2 mod_tmap,
                                     extract_constraint_expr_mod mv e1 mod_tmap tmap instmap, extract_constraint_expr_mod mv e2 mod_tmap tmap instmap with
                             | Some (exist (Gtyp (Fuint w1)) _), Some (exist (Gtyp (Fuint w2)) _), Some (el1, cs1), Some (el2, cs2) => 
-                              Some (el1, cs1 ++ cs2)
+                              Some (el1, rev_append cs1 cs2)
                             | Some (exist (Gtyp (Fsint w1)) _), Some (exist (Gtyp (Fsint w2)) _), Some (el1, cs1), Some (el2, cs2) => 
-                              Some (map (fun temp_e => min_rhs_add_cst temp_e (Z.opp 1%Z)) el1, cs1 ++ cs2)
+                              Some (map (fun temp_e => min_rhs_add_cst temp_e (Z.opp 1%Z)) el1, rev_append cs1 cs2)
                             | _, _, _, _ => None
                             end
   | Eprim_binop Bdshl e1 e2 => match type_of_hfexpr e1 mod_tmap, type_of_hfexpr e2 mod_tmap,
@@ -615,14 +615,14 @@ Fixpoint extract_constraint_expr_mod (mv : VM.key) (e : hfexpr) (mod_tmap : VM.t
                                     extract_constraint_expr_mod mv e1 mod_tmap tmap instmap, extract_constraint_expr_mod mv e2 mod_tmap tmap instmap with
                             | Some (exist (Gtyp (Fuint w1)) _), Some (exist (Gtyp (Fuint w2)) _), Some (el1, cs1), Some (el2, cs2)
                             | Some (exist (Gtyp (Fsint w1)) _), Some (exist (Gtyp (Fuint w2)) _), Some (el1, cs1), Some (el2, cs2) => 
-                              Some (el1, cs1 ++ cs2)
+                              Some (el1, rev_append cs1 cs2)
                             | _, _, _, _ => None
                             end
   | Eprim_binop Bcat e1 e2 => match type_of_hfexpr e1 mod_tmap, type_of_hfexpr e2 mod_tmap,
                                     extract_constraint_expr_mod mv e1 mod_tmap tmap instmap, extract_constraint_expr_mod mv e2 mod_tmap tmap instmap with
                             | Some (exist (Gtyp (Fuint w1)) _), Some (exist (Gtyp (Fuint w2)) _), Some (el1, cs1), Some (el2, cs2) 
                             | Some (exist (Gtyp (Fsint w1)) _), Some (exist (Gtyp (Fsint w2)) _), Some (el1, cs1), Some (el2, cs2) => 
-                                Some (map (fun '(e1, e2) => combine_min_rhs e1 e2) (cartesian el1 el2), cs1 ++ cs2)
+                                Some (map (fun '(e1, e2) => combine_min_rhs e1 e2) (cartesian el1 el2), rev_append cs1 cs2)
                             | _, _, _, _ => None
                             end
   | Eprim_binop Band e1 e2
@@ -631,13 +631,13 @@ Fixpoint extract_constraint_expr_mod (mv : VM.key) (e : hfexpr) (mod_tmap : VM.t
                                     extract_constraint_expr_mod mv e1 mod_tmap tmap instmap, extract_constraint_expr_mod mv e2 mod_tmap tmap instmap with
                             | Some (exist (Gtyp (Fuint w1)) _), Some (exist (Gtyp (Fuint w2)) _), Some (el1, cs1), Some (el2, cs2) 
                             | Some (exist (Gtyp (Fsint w1)) _), Some (exist (Gtyp (Fsint w2)) _), Some (el1, cs1), Some (el2, cs2) => 
-                              Some (el1 ++ el2, cs1 ++ cs2)
+                              Some (rev_append el1 el2, rev_append cs1 cs2)
                             | _, _, _, _ => None
                             end
   | Emux c e1 e2 => match type_of_hfexpr c mod_tmap, extract_constraint_expr_mod mv c mod_tmap tmap instmap,
                                     extract_constraint_expr_mod mv e1 mod_tmap tmap instmap, extract_constraint_expr_mod mv e2 mod_tmap tmap instmap with
                             | Some (exist (Gtyp (Fuint _)) _), Some (ec, cs0), Some (el1, cs1), Some (el2, cs2) => 
-                              Some (el1 ++ el2, ec ++ cs0 ++ cs1 ++ cs2)
+                              Some (rev_append el1 el2, rev_append ec (rev_append cs0 (rev_append cs1 cs2)))
                             | _, _, _, _ => None
                             end (* condition c 只能是 0/1位宽 *)
 end.
@@ -650,7 +650,7 @@ match VM.find mv tmap with
   | Emux c e1 e2 => match type_of_hfexpr c mod_tmap, extract_constraint_expr_mod mv c mod_tmap tmap instmap, 
                           extract_mux_mod mv instmap e1 mod_tmap tmap, extract_mux_mod mv instmap e2 mod_tmap tmap with
                   | Some (exist (Gtyp (Fuint _)) _), Some (ec, cs0), Some (r1, cs1), Some (r2, cs2) => 
-                    Some (r1 ++ r2, ec ++ cs0 ++ cs1 ++ cs2)
+                    Some (rev_append r1 r2, rev_append ec (rev_append cs0 (rev_append cs1 cs2)))
                   | _, _, _, _ => None
                   end
   | _ => None
@@ -780,10 +780,10 @@ with extract_constraint_s (mv : VM.key) (s : hfstmt) (mod_tmap : VM.t (ftype * f
                             | Some pv, Some (exprs, cs2') =>
                               let (regular_cs, cs_min') := seperate_min pv exprs (nil, nil) in
                               let nmap := match TVM.find pv c1map with
-                                | Some cs1 => TVM.add pv (regular_cs ++ cs1) c1map
+                                | Some cs1 => TVM.add pv (rev_append regular_cs cs1) c1map
                                 | _ => TVM.add pv regular_cs c1map
                                 end
-                              in Some (nmap, cs2 ++ cs2', cs_min ++ cs_min', instmap)
+                              in Some (nmap, rev_append cs2 cs2', rev_append cs_min cs_min', instmap)
                             | _, _ => None
                             end
                     | Some ft => match expr with
@@ -800,7 +800,7 @@ with extract_constraint_s (mv : VM.key) (s : hfstmt) (mod_tmap : VM.t (ftype * f
                                                 match ref2pv_mod ref0 mv instmap tmap, type_of_ref ref0 mod_tmap with
                                                 | Some pvar, Some ft_ref => extract_constraint_passive ft ft_ref pv pvar temp_map
                                                 | _, _ => temp_map
-                                                end) rhsl c1map in Some (nmap, cs2 ++ cs2', cs_min, instmap)
+                                                end) rhsl c1map in Some (nmap, rev_append cs2' cs2, cs_min, instmap)
                                         | _, _ => None
                                         end
                             | _ => None
@@ -816,10 +816,10 @@ with extract_constraint_s (mv : VM.key) (s : hfstmt) (mod_tmap : VM.t (ftype * f
                                       | Some (exprs, cs2') => 
                                         let (regular_cs, cs_min') := seperate_min pv_reg exprs (nil, nil) in
                                         let nmap := match TVM.find pv_reg c1map with
-                                          | Some cs1 => TVM.add pv_reg (regular_cs ++ cs1) c1map
+                                          | Some cs1 => TVM.add pv_reg (rev_append regular_cs cs1) c1map
                                           | _ => TVM.add pv_reg regular_cs c1map
                                           end
-                                        in Some (nmap, cs2 ++ cs2', cs_min ++ cs_min', instmap)
+                                        in Some (nmap, rev_append cs2' cs2, rev_append cs_min' cs_min, instmap)
                                       | _ => None
                                       end
                     end
@@ -839,7 +839,7 @@ with extract_constraint_s (mv : VM.key) (s : hfstmt) (mod_tmap : VM.t (ftype * f
                                                           match ref2pv_mod ref0 mv instmap tmap, type_of_ref ref0 mod_tmap with
                                                           | Some pvar, Some ft_ref => extract_constraint_passive ft ft_ref pv_reg pvar temp_map
                                                           | _, _ => temp_map
-                                                          end) rhsl c1map in Some (nmap, cs2 ++ cs2', cs_min, instmap)
+                                                          end) rhsl c1map in Some (nmap, rev_append cs2' cs2, cs_min, instmap)
                                                   | _ => None
                                                   end
                                       | _ => None
@@ -853,10 +853,10 @@ with extract_constraint_s (mv : VM.key) (s : hfstmt) (mod_tmap : VM.t (ftype * f
                                   | Some (exprs, cs2') => 
                                       let (regular_cs, cs_min') := seperate_min pv_node exprs (nil, nil) in
                                       let nmap := match TVM.find pv_node c1map with
-                                        | Some cs1 => TVM.add pv_node (regular_cs ++ cs1) c1map
+                                        | Some cs1 => TVM.add pv_node (rev_append regular_cs cs1) c1map
                                         | _ => TVM.add pv_node regular_cs c1map
                                         end
-                                      in Some (nmap, cs2 ++ cs2', cs_min ++ cs_min', instmap)
+                                      in Some (nmap, rev_append cs2' cs2, rev_append cs_min' cs_min, instmap)
                                   | _ => None
                                   end
                     | Some (ft, _) => match e with
@@ -872,7 +872,7 @@ with extract_constraint_s (mv : VM.key) (s : hfstmt) (mod_tmap : VM.t (ftype * f
                                                         match ref2pv_mod ref0 mv instmap tmap, type_of_ref ref0 mod_tmap with
                                                         | Some pvar, Some ft_ref => extract_constraint_passive ft ft_ref pv_node pvar temp_map
                                                         | _, _ => temp_map
-                                                        end) rhsl c1map in Some (nmap, cs2 ++ cs2', cs_min, instmap)
+                                                        end) rhsl c1map in Some (nmap, rev_append cs2' cs2, cs_min, instmap)
                                         | _ => None
                                         end
                             | _ => None
@@ -886,7 +886,7 @@ with extract_constraint_s (mv : VM.key) (s : hfstmt) (mod_tmap : VM.t (ftype * f
   | Swire _ _ 
   | Sskip => Some (c1map, cs2, cs_min, instmap)
   | Swhen c ss_true ss_false => match extract_constraint_expr_mod mv c mod_tmap tmap instmap with
-                | Some (ce0, ce1) => match extract_constraint_ss mv ss_true mod_tmap tmap c1map (cs2 ++ ce0 ++ ce1) cs_min instmap with
+                | Some (ce0, ce1) => match extract_constraint_ss mv ss_true mod_tmap tmap c1map (rev_append ce1(rev_append ce0 cs2)) cs_min instmap with
                     | Some (c1map', cs2', cs_min', instmap') => extract_constraint_ss mv ss_false mod_tmap tmap c1map' cs2' cs_min' instmap'
                     | _ => None
                     end
@@ -1025,7 +1025,7 @@ Fixpoint extract_cs (ls : list TripVar.t) (cs1 : TVM.t (list Constraint1)) : lis
   match ls with
   | nil => []
   | hd :: tl => match TVM.find hd cs1 with
-      | Some c => c ++ (extract_cs tl cs1)
+      | Some c => rev_append c (extract_cs tl cs1)
       | _ => extract_cs tl cs1
       end
   end.
@@ -1393,20 +1393,6 @@ Definition length (x : TripVar.t) (bds : TVM.t (nat * nat)) : nat :=
 
 
 (* =================== termination proofs =================== *)
-
-Lemma product_bounds_helper : forall (l1 : list (ProdVar.t * (nat * nat))) init0 init1, init0 < init1 -> fold_left
-  (fun (acc : nat) '(_, bs) => let '(lb0, ub0) := bs in (acc + (ub0 - lb0))) l1
-  init0 <
-  fold_left
-  (fun (acc : nat) '(_, bs) => let '(lb0, ub0) := bs in (acc + (ub0 - lb0))) l1
-  init1.
-Proof.
-  elim. simpl; intros; done.
-  simpl; intros. apply H. destruct a as [v [lb0 ub0]]. rewrite (ltn_add2r _ init0 init1) //.
-Qed.
-
-Axiom elements_add : forall [A : Type] bounds, forall v (a b : A), TVM.find v bounds = Some a -> 
-  exists l0 l1, l0 ++ (v, a) :: l1 = TVM.elements bounds /\ l0 ++ (v, b) :: l1 = TVM.elements (TVM.add v b bounds).
 
 Lemma bab_bin_g1 :
   seq TripVar.t ->
