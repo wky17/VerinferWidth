@@ -71,7 +71,7 @@ def solve_by_gurobi(file_path):
 
     start = time.time()
     model = gp.Model("linear_constraints")
-    model.Params.Threads = 1
+    model.Params.Threads = 8
 
     variables = {}
 
