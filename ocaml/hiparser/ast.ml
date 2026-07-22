@@ -98,6 +98,7 @@ type hfreg = { coq_type : ftype; clock : hfexpr; reset : rst }
 
 let mk_freg t c e1 e2 = { coq_type = t; clock = c; reset = Rst(e1,e2) }
 let mk_freg_non t c = { coq_type = t; clock = c; reset = NRst}
+let mk_freg_r t c r = { coq_type = t; clock = c; reset = r}
 let mk_fmem e z1 z2 z3 vl1 vl2 r = { data_type = e; depth = z1;  read_latency = z2; write_latency = z3; reader = vl1; writer = vl2; read_write = r }
 let mk_fmem_non e z1 z2 z3 r = { data_type = e; depth = z1;  read_latency = z2; write_latency = z3; reader = []; writer = []; read_write = r }
 let mk_fmem_r e z1 z2 z3 vl r = { data_type = e; depth = z1;  read_latency = z2; write_latency = z3; reader = vl; writer = []; read_write = r }
@@ -106,12 +107,15 @@ type hfstmt =
 | Sskip
 | Swire of var * ftype
 | Sreg of var * hfreg
-| Smem of var * hfmem
+| Smem of var * ftype * int 
 | Sinst of var * var
 | Snode of var * hfexpr
 | Sfcnct of href * hfexpr
+| Spcnct of href * hfexpr
 | Sinvalid of href
 | Sinferport of var * href * hfexpr
+| Sreadport of var * href * hfexpr
+| Swriteport of var * href * hfexpr
 | Swhen of hfexpr * hfstmt_seq * hfstmt_seq
 and hfstmt_seq =
 | Qnil
@@ -136,103 +140,84 @@ type hfcircuit =
 type file = hfcircuit
 
 (** pretty printer **)
+open Printf
 
 let pp_gtyp out ty =
  match ty with
- | Fuint s -> output_string out "(Fuint "; output_string out (Int.to_string s); output_string out ")"
- | Fsint s -> output_string out "(Fsint "; output_string out (Int.to_string s); output_string out ")"
- | Fuint_implicit s -> output_string out "Fuint_implicit"
- | Fsint_implicit s -> output_string out "Fsint_implicit"
- | Freset -> output_string out "Freset"
- | Fasyncreset -> output_string out "Fasyncreset"
- | Fclock -> output_string out "Fclock"
-
-let pp_flip out fl = 
-  match fl with
-  | Flipped -> output_string out "flip "
-  | Nflip -> output_string out ""
+ | Fuint s -> output_string out "UInt<"; output_string out (Int.to_string s); output_string out ">"
+ | Fsint s -> output_string out "SInt<"; output_string out (Int.to_string s); output_string out ">"
+ | Fuint_implicit s -> output_string out "UInt"
+ | Fsint_implicit s -> output_string out "SInt"
+ | Freset -> output_string out "Reset"
+ | Fasyncreset -> output_string out "AsyncReset"
+ | Fclock -> output_string out "Clock"
 
 let rec pp_type out ty = 
   match ty with
-  | Gtyp gt -> output_string out "(Gtyp "; pp_gtyp out gt; output_string out ")"
-  | Atyp (atyp, n) -> output_string out "(Atyp "; pp_type out atyp; output_string out ("["^(Int.to_string n)^"]")
-  | Btyp btyp -> output_string out "({"; pp_btyp out btyp; output_string out "})";
+  | Gtyp gt -> pp_gtyp out gt
+  | Atyp (atyp, n) -> pp_type out atyp; output_string out ("["^(Int.to_string n)^"]")
+  | Btyp btyp -> output_string out "{"; pp_btyp out btyp; output_string out "}";
 
 and pp_btyp out ty = 
   match ty with
-  | Fnil -> output_string out "Fnil"
-  | Fflips (v, fl, ft, ff) -> pp_flip out fl; output_string out (v^" : "); pp_type out ft; output_string out "; "; pp_btyp out ff; output_string out ")"
+  | Fnil -> output_string out ""
+  | Fflips (fv, Nflip, ft, Fnil) -> fprintf out "%s : " fv; pp_type out ft
+  | Fflips (fv, Flipped, ft, Fnil) -> fprintf out " flip %s : " fv; pp_type out ft
+  | Fflips (fv, Nflip, ft, ff) -> fprintf out "%s : " fv; pp_type out ft; fprintf out ", "; pp_btyp out ff
+  | Fflips (fv, Flipped, ft, ff) -> fprintf out " flip %s : " fv; pp_type out ft; fprintf out ", "; pp_btyp out ff
 
-let pp_cast out cst = 
- match cst with
- | AsUInt -> output_string out "AsUInt"
- | AsSInt -> output_string out "AsSInt"
- | AsClock -> output_string out "AsUint "
- | AsAsync ->  output_string out "AsAsync"
- 
-let pp_unop out op =
- match op with
- | Upad s -> output_string out "(Upad "; output_string out (Int.to_string s); output_string out ")" 
- | Ushl s -> output_string out "(Ushl "; output_string out (Int.to_string s); output_string out")"
- | Ushr s -> output_string out "(Ushr "; output_string out (Int.to_string s); output_string out")"
- | Ucvt -> output_string out "Ucvt"
- | Uneg -> output_string out "Uneg"
- | Unot -> output_string out "Unot "
- | Uandr -> output_string out "Uandr"
- | Uorr -> output_string out "Uorr"
- | Uxorr -> output_string out "Uxorr"
- | Uextr (s1, s2) -> output_string out "(Uextr "; output_string out (Int.to_string s1);  output_string out " "; output_string out (Int.to_string s2); output_string out")"
- | Uhead s -> output_string out "(Uhead "; output_string out (Int.to_string s); output_string out")"
- | Utail s -> output_string out "(Utail "; output_string out (Int.to_string s); output_string out")"
- (*| Ubits (s1,s2)  -> output_string out "(Ubits "; output_string out (Int.to_string s1); output_string out " "; output_string out (Int.to_string s2); output_string out")"
- | Uincp -> output_string out "Uincp"
- | Udecp -> output_string out "Udecp"
- | Usetp -> output_string out "Usetp"
- | _ -> output_string out "" *)
-
-let pp_comp out cmp = 
- match cmp with
- | Blt -> output_string out "Blt" 
- | Bleq -> output_string out "Bleq"
- | Bgt -> output_string out "Bgt"
- | Bgeq -> output_string out "Bgeq"
- | Beq -> output_string out "Beq"
- | Bneq -> output_string out "Bneq"
-      
-let pp_binop out op =
- match op with
- | Badd -> output_string out "Badd "
- | Bsub -> output_string out "Bsub "
- | Bmul -> output_string out "Bmul"
- | Bdiv -> output_string out "Bdiv"
- | Brem -> output_string out "Brem"
- | Bcomp s -> output_string out "Bcomp("; pp_comp out s; output_string out")"
- | Bdshl -> output_string out "Bdshl "
- | Bdshr -> output_string out "Bdshr "
- | Band -> output_string out "Band "
- | Bor -> output_string out "Bor "
- | Bxor -> output_string out "Bxor "
- | Bcat -> output_string out "Bcat "
- (*| Bsdiv -> output_string out "Bsdiv "
- | Bsrem -> output_string out "Bsrem "
- | _ -> output_string out "" *)
-         
 let rec pp_expr out e =
  match e with
- | Econst (ty, s) -> output_string out "(econst "; pp_gtyp out ty; output_string out " [::b"; output_string out (Z.format "%b" s) ; output_string out"])"
- | Eref v -> output_string out "(eref "; pp_ref out v; output_string out ")"
- | Eprim_unop (op, e1) -> output_string out "(eprim_unop "; pp_unop out op; pp_expr out e1; output_string out ")"
- | Eprim_binop (bop, e1, e2) -> output_string out "(eprim_binop "; pp_binop out bop; pp_expr out e1; output_string out " "; pp_expr out e2; output_string out ")"
- | Emux (e1,e2,e3)  -> output_string out "(emux "; pp_expr out e1; output_string out " "; pp_expr out e2; output_string out " "; pp_expr out e3; output_string out " "; output_string out ")"
- (*| Evalidif (e1,e2)  -> output_string out "(evalidif "; pp_expr out e1; output_string out " "; pp_expr out e2; output_string out ")"*)
- | Ecast (s, e) -> output_string out "(ecast "; pp_cast out s; output_string out " "; pp_expr out e; output_string out ")";
+ | Econst (gt, bs) -> (match gt with
+                          | Fuint n -> pp_gtyp out gt; fprintf out "(%s)" (Z.to_string bs)
+                          | Fsint n -> pp_gtyp out gt; fprintf out "(%s)" (Z.to_string bs)
+                          | _ -> printf "error const expression\n")
+ | Eref v -> pp_ref out v
+ | Eprim_unop (op, e0) -> (match op with
+                          | Upad s -> fprintf out "pad("; pp_expr out e0; fprintf out ", %d)" s
+                          | Ushl s -> fprintf out "shl("; pp_expr out e0; fprintf out ", %d)" s
+                          | Ushr s -> fprintf out "shr("; pp_expr out e0; fprintf out ", %d)" s
+                          | Uhead s -> fprintf out "ahead("; pp_expr out e0; fprintf out ", %d)" s(* ahead *)
+                          | Utail s -> fprintf out "tail("; pp_expr out e0; fprintf out ", %d)" s
+                          | Uextr (s1, s2) -> fprintf out "bits("; pp_expr out e0; fprintf out ", %d, %d)" s1 s2
+                          | Ucvt -> fprintf out "cvt("; pp_expr out e0; fprintf out ")"
+                          | Uneg -> fprintf out "neg("; pp_expr out e0; fprintf out ")"
+                          | Unot -> fprintf out "not("; pp_expr out e0; fprintf out ")"
+                          | Uandr -> fprintf out "andr("; pp_expr out e0; fprintf out ")"
+                          | Uorr -> fprintf out "orr("; pp_expr out e0; fprintf out ")"
+                          | Uxorr -> fprintf out "xorr("; pp_expr out e0; fprintf out ")")
+ | Eprim_binop (op, e1, e2) -> (match op with
+                          | Badd -> fprintf out "add("; pp_expr out e1; fprintf out ", "; pp_expr out e2; fprintf out ")"
+                          | Bsub -> fprintf out "sub("; pp_expr out e1; fprintf out ", "; pp_expr out e2; fprintf out ")"
+                          | Bmul -> fprintf out "mul("; pp_expr out e1; fprintf out ", "; pp_expr out e2; fprintf out ")"
+                          | Bdiv -> fprintf out "div("; pp_expr out e1; fprintf out ", "; pp_expr out e2; fprintf out ")"
+                          | Brem -> fprintf out "rem("; pp_expr out e1; fprintf out ", "; pp_expr out e2; fprintf out ")"
+                          | Bdshl -> fprintf out "dshl("; pp_expr out e1; fprintf out ", "; pp_expr out e2; fprintf out ")"
+                          | Bdshr -> fprintf out "dshr("; pp_expr out e1; fprintf out ", "; pp_expr out e2; fprintf out ")"
+                          | Band -> fprintf out "and("; pp_expr out e1; fprintf out ", "; pp_expr out e2; fprintf out ")"
+                          | Bor -> fprintf out "or("; pp_expr out e1; fprintf out ", "; pp_expr out e2; fprintf out ")"
+                          | Bxor -> fprintf out "xor("; pp_expr out e1; fprintf out ", "; pp_expr out e2; fprintf out ")"
+                          | Bcat -> fprintf out "cat("; pp_expr out e1; fprintf out ", "; pp_expr out e2; fprintf out ")"
+                          | Bcomp s -> (match s with
+                                              | Blt -> fprintf out "lt("; pp_expr out e1; fprintf out ", "; pp_expr out e2; fprintf out ")"
+                                              | Bleq -> fprintf out "leq("; pp_expr out e1; fprintf out ", "; pp_expr out e2; fprintf out ")"
+                                              | Bgt -> fprintf out "gt("; pp_expr out e1; fprintf out ", "; pp_expr out e2; fprintf out ")"
+                                              | Bgeq -> fprintf out "geq("; pp_expr out e1; fprintf out ", "; pp_expr out e2; fprintf out ")"
+                                              | Beq -> fprintf out "eq("; pp_expr out e1; fprintf out ", "; pp_expr out e2; fprintf out ")"
+                                              | Bneq -> fprintf out "neq("; pp_expr out e1; fprintf out ", "; pp_expr out e2; fprintf out ")"))
+ | Emux (e1,e2,e3)  -> output_string out "mux("; pp_expr out e1; output_string out ", "; pp_expr out e2; output_string out ", "; pp_expr out e3; output_string out ")"
+ | Ecast (c, e0) -> (match c with
+                          | AsUInt -> fprintf out "asUInt("; pp_expr out e0; fprintf out ")"
+                          | AsSInt -> fprintf out "asSInt("; pp_expr out e0; fprintf out ")"
+                          | AsClock -> fprintf out "asClock("; pp_expr out e0; fprintf out ")"
+                          | AsAsync -> fprintf out "asAsyncReset("; pp_expr out e0; fprintf out ")")
 
 and pp_ref out ref = 
  match ref with
- | Eid v -> output_string out "(eid "; output_string out v; output_string out ")"
+ | Eid v -> output_string out v
  | Esubfield (ref1, v) -> pp_ref out ref1; output_string out "."; output_string out v
  | Esubindex (ref1, n) -> pp_ref out ref1; output_string out "["; output_string out ((Int.to_string n)^"]")
- | Esubaccess (ref1, e) -> pp_ref out ref1; output_string out "."; pp_expr out e
+ | Esubaccess (ref1, e) -> pp_ref out ref1; output_string out "["; pp_expr out e; output_string out "]"
 
  let pp_ruw out e = 
  match e with
@@ -240,46 +225,70 @@ and pp_ref out ref =
  | Coq_new -> output_string out "new"
  | Coq_undefined -> output_string out "undefined"
 
-let pp_exprs out el =  List.iter (fun c -> pp_expr out c; output_string out "") el
-
-let rec pp_ports out pl = output_string out "[::"; List.iter (fun c -> pp_port out c; output_string out "") pl;  output_string out "]\n";
+let rec pp_ports out pl = List.iter (fun c -> pp_port out c) pl
                      
 and pp_port out p =
   match p with
-  | Finput (v, ty) -> output_string out "(Finput "; output_string out (v^" : "); pp_type out ty; output_string out ")\n"
-  | Foutput (v, ty) -> output_string out "(Foutput "; output_string out (v^" : "); pp_type out ty; output_string out ")\n"                 
-                       
-let rec pp_statements out sl = 
+  | Finput (v, ty) -> output_string out ("    input "^v^" : "); pp_type out ty; output_string out "\n"
+  | Foutput (v, ty) -> output_string out ("    output "^v^" : "); pp_type out ty; output_string out "\n"                 
+
+let repeat_string n =
+  if n <= 0 then ""
+  else
+    let buf = Buffer.create (2 * n) in
+    for _ = 1 to n do
+      Buffer.add_string buf "  "
+    done;
+    Buffer.contents buf
+
+let pp_indent out n =
+  output_string out (repeat_string n)
+          
+let rec pp_statements out indent sl = 
   match sl with
-  | Qnil -> output_string out "Fnil"
-  | Qcons (s, ss) -> pp_statement out s; pp_statements out ss
-                             
-and pp_statement out s =
+  | Qnil -> output_string out ""
+  | Qcons (s, ss) -> pp_indent out indent; pp_statement out indent s; pp_statements out indent ss
+
+and pp_statement out indent s =
   match s with
-  | Sskip -> output_string out "sskip\n"
-  | Swire (v, ty) -> output_string out "(swire "; output_string out (v^" : "); pp_type out ty; output_string out ")\n"
-  | Smem (v, m) -> output_string out "smem ( "; output_string out (v^" : "); output_string out ")\n"
-  | Sfcnct (e1, e2) -> output_string out "(sfcnct "; pp_ref out e1; output_string out " "; pp_expr out e2; output_string out ")\n"
-  | Sinvalid v -> output_string out "(sinvalid "; pp_ref out v; output_string out ")\n"
+  | Sskip -> output_string out "skip\n"
+  | Swire (v, ty) -> output_string out ("wire "^v^" : "); pp_type out ty; output_string out "\n"
+  | Smem (v, ty, n) -> output_string out ("cmem "^v^" : "); pp_type out ty; fprintf out "[%d]\n" n
+  | Sfcnct (e1, e2) -> pp_ref out e1; output_string out " <= "; pp_expr out e2; output_string out "\n"
+                       (*output_string out "connect "; pp_ref out e1; output_string out ", "; pp_expr out e2; output_string out "\n"*)
+  | Spcnct (e1, e2) -> pp_ref out e1; output_string out " <- "; pp_expr out e2; output_string out "\n"
+  | Sinvalid v -> pp_ref out v; output_string out " is invalid\n"
+                  (*output_string out "invalidate "; pp_ref out v; output_string out "\n"*)
   | Sreg (v, r) ->
      (match r.reset with
-     | NRst -> output_string out "sreg ( "; output_string out (v^" : "); pp_type out (r.coq_type); output_string out " "; pp_expr out r.clock; output_string out " NRst)\n"
+     | NRst -> output_string out ("reg "^v^" : "); pp_type out (r.coq_type); output_string out ", "; pp_expr out r.clock; output_string out " \n"
      | Rst (e1, e2) ->
-        output_string out "sreg ( "; output_string out (v^" : "); pp_type out (r.coq_type); output_string out " "; pp_expr out r.clock; output_string out " (rrst "; pp_expr out e1; output_string out " "; pp_expr out e2; output_string out "))\n")
-  | Snode (v, e) -> output_string out "(snode "; output_string out (v^" : "); pp_expr out e; output_string out ")\n"
-  | Sinst (v, e) -> output_string out "(sinst "; output_string out (v^" "); output_string out "of "; output_string out e; output_string out ")\n"
-  | Swhen (c, s1, s2) -> output_string out "(swhen "; pp_expr out c; output_string out "\nthen [::"; pp_statements out s1; output_string out "]\nelse \n [::"; pp_statements out s2; output_string out "])\n"
-  | Sinferport _ -> output_string out "inferport\n"
-          
+        (*output_string out ("regreset "^v^" : "); pp_type out (r.coq_type); output_string out ", "; pp_expr out r.clock; output_string out ", "; pp_expr out e1; output_string out ", "; pp_expr out e2; output_string out "\n")*)
+        output_string out ("reg "^v^" : "); pp_type out (r.coq_type); output_string out ", "; pp_expr out r.clock; 
+        output_string out " with : (reset => ("; pp_expr out e1; output_string out ", "; pp_expr out e2; output_string out "))"; output_string out " \n")
+  | Snode (v, e) -> output_string out ("node "^v^" = "); pp_expr out e; output_string out "\n"
+  | Sinst (v, e) -> output_string out ("inst "^v^" aof "^e^"\n")(* aof *)
+  | Swhen (c, s1, s2) -> 
+    (match s1, s2 with
+    | Qnil, Qnil -> output_string out "when "; pp_expr out c; output_string out " : \n{\n"(*" : \n"*); pp_indent out (indent+1); pp_statement out (indent +1) Sskip; output_string out "}\n"
+    | Qnil, _ ->  output_string out "when "; pp_expr out c; output_string out " : \n{\n"(*" : \n"*); pp_indent out (indent+1); pp_statement out (indent +1) Sskip; output_string out "}\n";
+           pp_indent out indent; output_string out "else : \n{\n"(*"else : \n"*); pp_statements out (indent +1) s2; output_string out "}\n"
+    | _, Qnil -> output_string out "when "; pp_expr out c; output_string out " : \n{\n"(*" : \n"*); pp_statements out (indent +1) s1; output_string out "}\n"
+    | _, _ -> output_string out "when "; pp_expr out c; output_string out " : \n{\n"(*" : \n"*); pp_statements out (indent +1) s1; output_string out "}\n";
+           pp_indent out indent; output_string out "else : \n{\n"(*"else : \n"*); pp_statements out (indent +1) s2; output_string out "}\n")
+  | Sinferport (v, ref, e) -> output_string out ("infer mport "^v^" = "); pp_ref out ref; output_string out ", "; pp_expr out e; output_string out " \n"
+  | Sreadport (v, ref, e) -> output_string out ("read mport "^v^" = "); pp_ref out ref; output_string out ", "; pp_expr out e; output_string out " \n"
+  | Swriteport (v, ref, e) -> output_string out ("write mport "^v^" = "); pp_ref out ref; output_string out ", "; pp_expr out e; output_string out " \n"
+
 let pp_module out fmod =
   match fmod with
-  | FInmod (v, pl, sl) -> output_string out "(FInmod "; output_string out (v^"\n"); pp_ports out pl; output_string out "[:: "; pp_statements out sl; output_string out "]).\n"
-  | FExmod (v, pl, sl) -> output_string out "(FExmod "; output_string out (v^"\n"); pp_ports out pl; output_string out "[:: "; pp_statements out sl; output_string out "]).\n"
-          
-let pp_modules out fmod = List.iter (fun c -> pp_module out c; output_string out "") fmod
+  | FInmod (v, pl, sl) -> output_string out ("  module "^v^" : \n"); pp_ports out pl; pp_statements out 2 sl
+  | FExmod _ -> output_string out "  extmodule\n"
+
+let pp_modules out fmod = List.iter (fun c -> pp_module out c) fmod
 
 let pp_fcircuit out fc =
   match fc with
-  | Fcircuit (v, fmod) -> output_string out "(FCircuit "; output_string out (v^"\n"); pp_modules out fmod; output_string out ")\n"
-
+  | Fcircuit (v, fmod) -> output_string out ("FIRRTL version 2.0.0\ncircuit "^v^" : \n"); pp_modules out fmod
+  
 let pp_file out fc = pp_fcircuit out fc

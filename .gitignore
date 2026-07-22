@@ -53,3 +53,6 @@ ocaml/ocaml.opam
 ocaml/extraction
 ocaml_try/extraction
 .Makefile.d 
+*/.DS_Store
+*/output.out
+*/output.txt

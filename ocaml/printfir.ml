@@ -58,11 +58,11 @@ let nat_of_bits bv = nat_of_bits_rev (Stdlib.List.rev bv)
 let rec pp_ref_fir out ref = 
   match ref with
   | HiFirrtl.Eid v -> fprintf out "_%d" (Obj.magic v)
-  | Esubfield (ref1, v) -> pp_ref_fir out ref1; fprintf out ".%d" (Obj.magic v)
+  | Esubfield (ref1, v) -> pp_ref_fir out ref1; fprintf out "._%d" (Obj.magic v)
   | Esubindex (ref1, n) -> pp_ref_fir out ref1; fprintf out "[%d]" n
-  | Esubaccess (ref1, e) -> fprintf out "subaccess"(*pp_ref_fir out ref1; output_string out "["; pp_expr_fir out e; output_string out "]"*)
+  | Esubaccess (ref1, e) -> pp_ref_fir out ref1; output_string out "["; pp_expr_fir out e; output_string out "]"
 
-let rec pp_expr_fir out e =
+and pp_expr_fir out e =
   match e with
   | HiFirrtl.Econst (gt, bs) -> (match gt with
                           | Env.Fuint n -> pp_fgtyp_fir out gt; fprintf out "(%s)" (string_of_big_int  (nat_of_bits bs))
@@ -133,7 +133,7 @@ and pp_statement_fir out indent s =
     | Rst (e1, e2) ->
       fprintf out "regreset _%d : " (Obj.magic v); pp_ftype_fir out (r.coq_type); output_string out ", "; pp_expr_fir out r.clock; output_string out ", "; pp_expr_fir out e1; output_string out ", "; pp_expr_fir out e2; output_string out "\n")
   | Snode (v, e) -> fprintf out "node _%d = " (Obj.magic v); pp_expr_fir out e; output_string out "\n"
-  | Sinst (v, mv) -> fprintf out "inst _%d of module %d " (Obj.magic v) (Obj.magic mv); output_string out "\n"
+  | Sinst (v, mv) -> fprintf out "inst _%d of %d " (Obj.magic v) (Obj.magic mv); output_string out "\n"
   | Swhen (c, s1, s2) -> 
     (match s2 with
     | Qnil -> output_string out "when "; pp_expr_fir out c; output_string out " : \n"; pp_statements_fir out (indent +1) s1

@@ -97,6 +97,7 @@ statements
 statement
   : STM_SKIP                             { Sskip }
   | ref STM_CONNECT expr                 { Sfcnct ($1, $3) }
+  | ref STM_PCONNECT expr                { Spcnct ($1, $3) }
   | STM_CONNECT0 ref SPRT expr           { Sfcnct ($2, $4) }
   | STM_WIRE symbol KEYWORD typ_def      { Swire ($2, $4) }
   | STM_NODE symbol STM_NASS expr        { Snode ($2, $4) }
@@ -111,19 +112,33 @@ statement
   | ref STM_INVALID                      { Sinvalid ($1) }
   | STM_INVALID0 ref                     { Sinvalid ($2) }
   /*| STM_MEM symbol KEYWORD STM_DATATYPE REG_RSTARR typ_def STM_DEPTH REG_RSTARR numeral STM_READ_L REG_RSTARR numeral STM_WRITE_L REG_RSTARR numeral memrdports memwrports STM_READWRITE REG_RSTARR ruw
-                                         { Smem ($2, mk_fmem $6 $9 $12 $15 $16 $17 $20)}
+                                          { Smem ($2, mk_fmem $6 $9 $12 $15 $16 $17 $20)}
   | STM_MEM symbol KEYWORD STM_DATATYPE REG_RSTARR typ_def STM_DEPTH REG_RSTARR numeral STM_READ_L REG_RSTARR numeral STM_WRITE_L REG_RSTARR numeral STM_READ REG_RSTARR symbols STM_WRITE REG_RSTARR symbols STM_READWRITE REG_RSTARR ruw
-                                           { Smem (mk_fmem $2 $6 $9 $12 $15 $18 $21 $24)}*/
+                                          { Smem (mk_fmem $2 $6 $9 $12 $15 $18 $21 $24)}*/
 
-  | STM_MEM symbol KEYWORD typ_def       { Swire ($2, $4) }
-  | STM_SMEM symbol KEYWORD typ_def      { Swire ($2, $4) }
-  | STM_SMEM symbol KEYWORD typ_def SPRT M_UNDEFINED      { Swire ($2, $4) }
+  | STM_MEM symbol KEYWORD typ_def SQR_OPEN numeral SQR_CLOSE      
+                                          { Smem ($2, $4, $6) }
+  | STM_SMEM symbol KEYWORD typ_def SQR_OPEN numeral SQR_CLOSE     
+                                          { Smem ($2, $4, $6) }
+  | STM_SMEM symbol KEYWORD typ_def SQR_OPEN numeral SQR_CLOSE SPRT M_UNDEFINED      
+                                          { Smem ($2, $4, $6) }
+  /*| STM_MEM symbol KEYWORD typ_def  
+                                          { Swire ($2, $4) }
+  | STM_SMEM symbol KEYWORD typ_def
+                                          { Swire ($2, $4) }*/
+
   | STM_MEM_INFER symbol STM_NASS ref SPRT expr
                                          { Sinferport ($2, $4, $6) }
-  | STM_MEM_READ symbol STM_NASS expr SPRT ref
-                                         { Snode ($2, $4) }
-  | STM_MEM_WRITE symbol STM_NASS expr SPRT ref
-                                         { Snode ($2, $4) }
+  | STM_MEM_READ symbol STM_NASS ref SPRT expr
+                                         { Sreadport ($2, $4, $6) }
+  | STM_MEM_WRITE symbol STM_NASS ref SPRT expr
+                                         { Swriteport ($2, $4, $6) }
+  /*| STM_MEM_INFER symbol STM_NASS ref SPRT expr
+                                         { Snode ($2, Eref $4) }
+  | STM_MEM_READ symbol STM_NASS ref SPRT expr
+                                         { Snode ($2, Eref $4) }
+  | STM_MEM_WRITE symbol STM_NASS ref SPRT expr
+                                         { Snode ($2, Eref $4) }*/
 
   | STM_INST symbol KEYWORD_OF symbol    { Sinst ($2, $4) }
   | STM_WHEN expr KEYWORD BRA_OPEN statements BRA_CLOSE STM_ELSE KEYWORD BRA_OPEN statements BRA_CLOSE
@@ -280,8 +295,8 @@ ref
   : SYMBOL                              { Eid ($1) }
   | ref FULL SYMBOL                     { Esubfield ($1, $3) }
   | ref SQR_OPEN numeral SQR_CLOSE      { Esubindex ($1, $3) }
-  | ref SQR_OPEN expr SQR_CLOSE          { Esubindex ($1, 0) }
-  /*| ref SQR_OPEN expr SQR_CLOSE         { Esubaccess ($1, $3) }*/
+  /*| ref SQR_OPEN expr SQR_CLOSE          { Esubindex ($1, 0) }*/
+  | ref SQR_OPEN expr SQR_CLOSE         { Esubaccess ($1, $3) }
 ;
 
 symbols

@@ -4,7 +4,7 @@ circuit SyncReset :
     input reset1 : Reset
     output io : { cnt : UInt<8>, tick : UInt<1>}
 
-    reg cntReg : UInt<8>, clock1 with :
+    reg cntReg : UInt, clock1 with :
       reset => (reset1, UInt<8>("h0")) @[Counter.scala 29:23]
     node _cntReg_T = add(cntReg, UInt<1>("h1")) @[Counter.scala 31:20]
     node _cntReg_T_1 = tail(_cntReg_T, 1) @[Counter.scala 31:20]

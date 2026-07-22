@@ -7,7 +7,7 @@ open Mlir_lang
 open Extraction.Constraints
 open Extraction.Extract_cs_multimod
 open Extraction.InferWidths_multimod
-open Min_solver
+open Min_solver_hash
 
 let pp_cstrt1 out c1 = fprintf out "x(%d,(%d,%d)) >= " (Obj.magic (fst c1.lhs_var1)) (Obj.magic (fst (snd c1.lhs_var1))) (Obj.magic (snd (snd c1.lhs_var1)));
     Stdlib.List.iter (fun (coe, var) -> fprintf out "%d * x(%d,(%d,%d)) + " coe (Obj.magic (fst var)) (Obj.magic (fst (snd var))) (Obj.magic (snd (snd var)))) c1.rhs_terms1;
@@ -56,21 +56,23 @@ let store_cons_res in_file hif_ast =
   let fcir = Transhiast_without_inline.trans_cir hif_ast modmap map in 
   let oc_cons = open_out (process_string in_file "_cons.txt") in
   let oc_res_num = open_out (process_string in_file "_res_num.txt") in
+  (*StringMap.iter (fun mv mv_num -> fprintf oc_res_num "module %s : %d\n" mv mv_num) modmap;
+  StringMap.iter (fun mv (m, _) -> fprintf oc_res_num "module %s : \n" mv; StringMap.iter (fun stringv nl -> fprintf oc_res_num "%s : " stringv; Stdlib.List.iter (fprintf oc_res_num "%d;") nl; fprintf oc_res_num "\n";) m) map;*)
 
   (match circuit_tmap fcir, fcir with
     | Some tmap, HiFirrtl.Fcircuit (_, ml) -> 
       let ut0 = (Unix.times()).tms_utime in 
-      (match extract_constraint_ml ml tmap TVM.empty [] [] with
+      (match extract_constraint_ml ml tmap (H_triple.empty ()) [] [] with
       | Some ((c1map, cs2), cs_min) -> 
         let ut1 = (Unix.times()).tms_utime in 
         printf "extraction time : %f\n" (Float.sub ut1 ut0);
-        let cs1 = split2_tailrec (TVM.elements c1map) in
+        let cs1 = Hashtbl.fold (fun _ v acc -> Stdlib.List.rev_append v acc) c1map [] in
         (match my_solve_fun fcir tmap with
         | Some solution ->
-          Stdlib.List.iter (fun c -> pp_cstrt1 oc_cons (remove_power1 solution c)) cs1;
-          Stdlib.List.iter (fun c -> pp_cstrt_min oc_cons (remove_power_min solution c)) cs_min;
-          Stdlib.List.iter (fun c -> pp_cstrt2 oc_cons (remove_power_min_rhs solution c)) cs2;
-          Stdlib.List.iter (fun (var, value) -> fprintf oc_res_num "x(%d,(%d,%d)) : %d\n" (fst (Obj.magic var)) (fst (snd (Obj.magic var))) (snd (snd (Obj.magic var))) value) (TVM.elements solution);
+          Stdlib.List.iter (fun c -> pp_cstrt1 oc_cons (*remove_power1 solution c*)c) cs1;
+          Stdlib.List.iter (fun c -> pp_cstrt_min oc_cons (*remove_power_min solution c*)c) cs_min;
+          Stdlib.List.iter (fun c -> pp_cstrt2 oc_cons (*remove_power_min_rhs solution c*)c) cs2;
+          (*Stdlib.List.iter (fun (var, value) -> fprintf oc_res_num "x(%d,(%d,%d)) : %d\n" (fst (Obj.magic var)) (fst (snd (Obj.magic var))) (snd (snd (Obj.magic var))) value) (TVM.elements solution);*)
           close_out oc_cons; close_out oc_res_num; 
           printf "constraints are stored in %s\n" (process_string in_file "_cons.txt");
           printf "results are stored in %s\n" (process_string in_file "_res_num.txt");

@@ -44,7 +44,12 @@ let rec type_of_ref r tmap =
                   | Atyp (ty, _) -> Some ty
                   | _ -> None)
      | None -> None)
-  | Esubaccess (_, _) -> None
+  | Esubaccess (r0, _) ->
+      (match type_of_ref r0 tmap with
+       | Some f -> (match f with
+                    | Atyp (ty, _) -> Some ty
+                    | _ -> None)
+       | None -> None)
 
 let fgtyp_mux x y =
   match x with

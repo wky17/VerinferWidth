@@ -118,7 +118,7 @@ let my_coq_InferWidths_trans_m m tmap =
        (match my_coq_InferWidths_transps ps mod_tmap with
         | Some nps ->
           (match my_coq_InferWidths_transss ss mod_tmap HiFirrtl.Qnil with
-           | Some nss -> Some (HiFirrtl.FInmod (mv, nps, nss))
+           | Some nss -> Some (HiFirrtl.FInmod (mv, nps, Transhiast.revstmts nss HiFirrtl.Qnil))
            | None -> None)
         | None -> None)
      | None -> None)
@@ -143,7 +143,7 @@ let my_coq_InferWidths_trans_c c tmap =
 
 let my_coq_InferWidths_fun c =
   match circuit_tmap c with
-  | Some tmap ->
+  | Some tmap -> 
       let ut0 = (Unix.times()).tms_utime in 
       (match my_solve_fun c tmap with
       | Some solution ->
@@ -160,10 +160,10 @@ let my_coq_InferWidths_fun c =
   | None -> None
 
 let print_iw_fir in_file hif_ast = 
-  (*let oc_fir = open_out (process_string in_file "_iw.fir") in*)
+  let oc_fir = open_out (process_string in_file "_iw.fir") in 
   (*Ast.pp_fcircuit stdout hif_ast;*)
-  let ((modmap, _), map) = Transhiast_without_inline.mapcir hif_ast in
-  let fcir = Transhiast_without_inline.trans_cir hif_ast modmap map in 
+  let ((modmap, _), map) = Transhiast_without_inline.mapcir hif_ast in 
+  let fcir = Transhiast_without_inline.trans_cir hif_ast modmap map in
 
   (* see extraction time *)
   (*match circuit_tmap fcir with
@@ -176,6 +176,8 @@ let print_iw_fir in_file hif_ast =
   | None -> ()*)
 
   (match my_coq_InferWidths_fun fcir with
-  | Some (newc, _) -> (*Printfir.pp_fcircuit_fir oc_fir newc;*) (*Printfir.pp_fcircuit_fir stdout newc;*) (*close_out oc_fir;*)
-    printf "%s width inference is finished\n" in_file
+  | Some (newc, newtm) -> (*Printfir.pp_fcircuit_fir oc_fir newc; Printfir.pp_fcircuit_fir stdout newc; close_out oc_fir;*)
+    printf "%s width inference is finished\n" in_file;
+    let string_cir = Transfast.trans_cir hif_ast modmap map newtm in 
+    Ast.pp_fcircuit oc_fir string_cir; close_out oc_fir
   | _ -> output_string stdout ("cannot be inferred\n"))

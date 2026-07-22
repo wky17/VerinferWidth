@@ -42,7 +42,7 @@ let rec mapstmt ((map, flag), tmap) stmt =
   match stmt with
   | Ast.Swire (v, ty) -> (mapftype v (map, flag) ty, StringMap.add v ty tmap)
   | Ast.Sreg (v, r) -> (mapftype v (map, flag) r.coq_type, StringMap.add v r.coq_type tmap)
-  | Ast.Smem (v, _) -> ((StringMap.add v [flag] map, flag + 1), tmap)
+  | Ast.Smem (v, _, _) -> ((StringMap.add v [flag] map, flag + 1), tmap)
   | Ast.Snode (v, e) -> (match type_of_hfexpr e tmap with
                       | Some ty -> (mapftype v (map, flag) ty, StringMap.add v ty tmap)
                       | None -> printf "%s wrong expr type\n" v; Ast.pp_expr stdout e; ((map, flag), tmap))
@@ -180,9 +180,10 @@ let rec trans_ref ref map =
   | Ast.Eid v -> HiFirrtl.Eid (Obj.magic (Stdlib.List.hd (StringMap.find v map)))
   | Ast.Esubfield (r, _) ->  HiFirrtl.Esubfield (trans_ref r map, Obj.magic (Stdlib.List.hd (StringMap.find (find_nat4v ref) map)))
   | Ast.Esubindex (r, n) -> HiFirrtl.Esubindex (trans_ref r map, n)
-  | Ast.Esubaccess (r, _) -> (trans_ref r map)
+  | Ast.Esubaccess (r, e) -> (*Ast.pp_ref stdout r; output_string stdout "["; Ast.pp_expr stdout e; output_string stdout "]\n";*)
+                             HiFirrtl.Esubaccess (trans_ref r map, trans_expr e map)
 
-let rec trans_expr e map = 
+and trans_expr e map = 
   match e with
   | Ast.Econst (ty, s) -> (match ty with
     | Ast.Fuint_implicit _ -> HiFirrtl.Econst (trans_fgtyp (Ast.Fuint (binary_length false s)), bits_of_z s (binary_length false s))
