@@ -1,7 +1,8 @@
 From Coq Require Import FMaps ZArith (*FunInd FMapAVL OrderedType*).
 From mathcomp Require Import all_ssreflect.
 From HB Require Import structures.
-From Solver Require Import Env.
+From firrtl Require Import Env.
+From Lib Require Import SsrOrder Nbits.
 Import ListNotations.
 
 Set Implicit Arguments.
@@ -343,4 +344,3 @@ Record fwriter_port : Type :=
   Inductive fcircuit : Type := Fcircuit : var -> seq fmodule -> fcircuit.
 
 End LoFirrtl.
-

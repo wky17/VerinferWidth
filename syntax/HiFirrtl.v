@@ -1,7 +1,8 @@
 From Coq Require Import FMaps ZArith FunInd FMapAVL OrderedType.
 From mathcomp Require Import all_ssreflect.
 From HB Require Import structures.
-From Solver Require Import Env LoFirrtl HiEnv.
+From firrtl Require Import Env LoFirrtl HiEnv.
+From Lib Require Import SsrOrder Var.
 Import ListNotations.
 
 Set Implicit Arguments.
@@ -13,6 +14,8 @@ Section HiFirrtl.
   (****** Syntax ******)
 
   (****** Expressions ******)
+
+  Variable var : eqType.
 
   Inductive sign := Unsigned | Signed.
 
@@ -123,7 +126,7 @@ Proof.
   * clear href_eqP.
     induction x, y ; simpl ;
           try (apply ReflectF ; discriminate).
-    + destruct (v == v0) eqn: Hs ; move /eqP : Hs => Hs ;
+    + destruct (s == s0) eqn: Hs ; move /eqP : Hs => Hs ;
             last by (apply ReflectF ; injection ; done).
       rewrite Hs.
       apply ReflectT ; reflexivity.
@@ -132,7 +135,7 @@ Proof.
             last by (apply ReflectF ; injection ; intros _ H0 ;
                      destruct IHx as [IHx _] ; apply IHx in H0 ; done).
       destruct IHx as [_ IHx] ; rewrite IHx //.
-      destruct (v == v0) eqn: Hv ; move /eqP : Hv => Hv ;
+      destruct (s == s0) eqn: Hv ; move /eqP : Hv => Hv ;
             last by (apply ReflectF ; injection ; done).
       rewrite Hv.
       apply ReflectT ; reflexivity.
@@ -363,7 +366,7 @@ Lemma hfstmt_eqP : (*Equality.axiom hfstmt_eqn*)
   * clear hfstmt_eqP.
     induction x, y ; simpl ; try (apply ReflectF ; discriminate).
     + apply ReflectT ; reflexivity.
-    1-3,5: destruct (v == v0) eqn: Hs ; move /eqP : Hs => Hs ;
+    1-3,5: destruct (s == s0) eqn: Hs ; move /eqP : Hs => Hs ;
                last (by apply ReflectF ; injection ; done) ;
          rewrite Hs andTb.
     + destruct (f == f0) eqn: Hf ; move /eqP : Hf => Hf ;
@@ -374,10 +377,10 @@ Lemma hfstmt_eqP : (*Equality.axiom hfstmt_eqn*)
                last (by apply ReflectF ; injection ; done) ;
          rewrite Hh ;
          apply ReflectT ; reflexivity.
-    + destruct (v == v1) eqn: Hs ; move /eqP : Hs => Hs ;
+    + destruct (s == s1) eqn: Hs ; move /eqP : Hs => Hs ;
                last (by apply ReflectF ; injection ; done) ;
             rewrite Hs andTb.
-      destruct (v0 == v2) eqn: Hs0 ; move /eqP : Hs0 => Hs0 ;
+      destruct (s0 == s2) eqn: Hs0 ; move /eqP : Hs0 => Hs0 ;
                last (by apply ReflectF ; injection ; done) ;
             rewrite Hs0.
       apply ReflectT ; reflexivity.
@@ -651,9 +654,9 @@ Qed.
   rewrite /Equality.axiom /hfport_eqn.
   intros.
   destruct x, y ; try (apply ReflectF ; discriminate).
-  1,2: destruct (v == v0) eqn: Hs.
+  1,2: destruct (s == s0) eqn: Hs.
   2,4: move /eqP : Hs => Hs ; apply ReflectF ; injection ; done.
-  1,2: move /eqP : Hs => Hs ; rewrite -Hs andTb ; clear Hs v0 ;
+  1,2: move /eqP : Hs => Hs ; rewrite -Hs andTb ; clear Hs s0 ;
        destruct (f == f0) eqn: Hf.
   2,4: move /eqP : Hf => Hf ; apply ReflectF ; injection ; done.
   1,2: move /eqP : Hf => Hf ; rewrite -Hf ; clear Hf f0 ;
@@ -701,199 +704,161 @@ HB.instance Definition _ := hasDecEq.Build hfport hfport_eqP.
 
 End HiFirrtl.
 
-Fixpoint fcomponent_amount_s (s : hfstmt) : nat :=
-match s with
-  | Sskip => 0
-  | Sfcnct _ _ => 0
-  | Sinvalid _ => 0
-  | Swire _ _ => 1
-  | Sreg v reg => 1
-  | Snode _ _ => 1
-  | Smem _ _ => 1
-  | Sinst _ _ => 1
-  | Swhen _ ss_true ss_false =>
-    fcomponent_amount_ss ss_true + fcomponent_amount_ss ss_false
-  end
-with fcomponent_amount_ss (ss : hfstmt_seq) : nat :=
-  match ss with
-  | Qnil => 0
-  | Qcons s st => fcomponent_amount_s s + fcomponent_amount_ss st
-  end.
 
-Definition fcomponent_amount_m (m : hfmodule) : nat :=
-  match m with
-  | FInmod _ ps ss => List.length ps + fcomponent_amount_ss ss
-  | _ => 0
-  end.
+Module MakeHiFirrtl (V : SsrOrder). 
 
-Fixpoint fcomponent_amount_ml (ml : seq hfmodule) : nat :=
-  match ml with
-  | nil => 0
-  | hd :: tl => fcomponent_amount_m hd + fcomponent_amount_ml tl
-  end.
+  (* Local Open Scope hifirrtl. *)
 
-Definition fcomponent_amount (c : hfcircuit) : nat :=
-  match c with
-  | Fcircuit v ml => fcomponent_amount_ml ml
-  end.
+  Local Notation var := V.t.
 
-  (* ground type equivalence *)
-  Definition fgtyp_equiv t1 t2 :=
-    match t1, t2 with
-    | Fuint _, Fuint _
-    | Fuint_implicit _, Fuint _
-    | Fuint _, Fuint_implicit _
-    | Fuint_implicit _, Fuint_implicit _
-    | Fsint _, Fsint _
-    | Fsint_implicit _, Fsint _
-    | Fsint _, Fsint_implicit _
-    | Fsint_implicit _, Fsint_implicit _
-    | Fclock, Fclock
-    | Freset, Freset
-    (* | Freset, Fuint 1 *)
-    | Fasyncreset, Fasyncreset => true
-    | _, _ => false
+  Definition econst s c := @Econst V.T s c.
+  Definition ecast u e := @Ecast V.T u e.
+  Definition eprim_unop u e := @Eprim_unop V.T u e.
+  Definition eprim_binop b e1 e2 := @Eprim_binop V.T b e1 e2.
+  Definition emux c e1 e2 := @Emux V.T c e1 e2.
+  (* Definition evalidif c e := @Evalidif V.T c e. *)
+  Definition hfexpr := hfexpr V.T.
+  Definition eref r := @Eref V.T r.
+  Definition eid v := @Eid V.T v.
+  Definition esubfield r v := @Esubfield V.T r v.
+  Definition esubindex r n := @Esubindex V.T r n.
+  Definition esubaccess r e := @Esubaccess V.T r e.
+  Definition href := href V.T.
+
+  Definition hfstmt := hfstmt V.T.
+  Definition hfstmt_seq := hfstmt_seq V.T.
+  Definition qnil := Qnil V.T.
+(*Definition qcons s ss := @Qcons V.T s ss.*)
+  Definition sskip := @Sskip V.T.
+  Definition swire v t := @Swire V.T v t.
+  Definition sreg v r := @Sreg V.T v r.
+  Definition smem v m := @Smem V.T v m.
+  Definition snode v e := @Snode V.T v e.
+  Definition sfcnct v1 v2 := @Sfcnct V.T v1 v2.
+  Definition sinvalid v1 := @Sinvalid V.T v1.
+  Definition swhen c s1 s2 := @Swhen V.T c s1 s2.
+  (* Definition sstop e1 e2 n := @Sstop V.T e1 e2 n. *)
+  Definition sinst v1 v2 := @Sinst V.T v1 v2.
+
+  Definition hfreg := @hfreg V.T.
+  Definition mk_hfreg := @mk_freg V.T.
+  Definition rst := @rst V.T.
+  Definition nrst := @NRst V.T.
+  Definition rrst e1 e2 := @Rst V.T e1 e2.
+  Definition mk_mem_port := @mk_mem_port V.T.
+  Definition mem_port := @mem_port V.T.
+  Definition hfmem := @hfmem V.T.
+  Definition mk_hfmem := @mk_fmem V.T.
+  Definition hfport := @hfport V.T.
+  Definition hinport v t := @Finput V.T v t.
+  Definition houtport v t := @Foutput V.T v t.
+  Definition hfmodule := @hfmodule V.T.
+  Definition hfinmod v ps ss := @FInmod V.T v ps ss.
+  Definition hfexmod v ps ss := @FExmod V.T v ps ss.
+  Definition hfcircuit := @hfcircuit V.T.
+
+  (****** Oriented type ******)
+  Inductive forient : Type :=
+  | Source | Sink | Duplex | Passive | Other.
+
+  (** eq dec *)
+  Lemma forient_eq_dec : forall {x y : forient}, {x = y} + {x <> y}.
+  Proof. decide equality. Qed.
+  Definition forient_eqn (x y : forient) : bool :=
+  match x, y with Source, Source | Sink, Sink | Duplex, Duplex | Passive, Passive | Other, Other => true
+                | _, _ => false end.
+  Lemma forient_eqP : Equality.axiom forient_eqn.
+  Proof. unfold Equality.axiom, forient_eqn. induction x, y ; try (apply ReflectF ; discriminate) ; try (apply ReflectT ; reflexivity). Qed.
+  
+  Fixpoint base_ref r : V.t :=
+    match r with
+    | Eid v => v
+    | Esubfield r v => base_ref r
+    | Esubindex r n => base_ref r
+    | Esubaccess r n => base_ref r
     end.
+End MakeHiFirrtl.
+Module HiF := MakeHiFirrtl VarOrder.
 
-  (* type equivalence *)
-  Fixpoint ftype_equiv (t1 t2 : ftype) : bool :=
-    match t1, t2 with
-    | Gtyp gt1, Gtyp gt2 => fgtyp_equiv gt1 gt2
-    | Atyp t1 n1, Atyp t2 n2 => (n1 == n2) && ftype_equiv t1 t2
-    | Btyp bt1, Btyp bt2 => fbtyp_equiv bt1 bt2
-    | _, _ => false
-    end
-  with fbtyp_equiv (bt1 bt2 : ffield) : bool :=
-         match bt1, bt2 with
-         | Fnil, Fnil => true
-         | Fflips v1 Flipped t1 fs1, Fflips v2 Flipped t2 fs2 =>
-           (v1 == v2) && ftype_equiv t1 t2 && fbtyp_equiv fs1 fs2
-         | Fflips v1 Nflip t1 fs1, Fflips v2 Nflip t2 fs2 =>
-           (v1 == v2) && ftype_equiv t1 t2 && fbtyp_equiv fs1 fs2
-         | _, _ => false
-         end.
 
-  Lemma fgtyp_equiv_refl t1 : fgtyp_equiv t1 t1.
-  Proof.
-  case : t1; intros; try done.
-  Qed.
+Module MakeHiFirrtlP (V : SsrOrder).
 
-  Lemma ftype_equiv_refl t1 : ftype_equiv t1 t1
-  with fbtyp_equiv_refl f1 : fbtyp_equiv f1 f1.
-  Proof.
-    induction t1; simpl; try apply fgtyp_equiv_refl.
-    rewrite eq_refl IHt1; done.
-    apply fbtyp_equiv_refl.
-    induction f1; simpl; try done.
-    case : f; rewrite eq_refl IHf1 ftype_equiv_refl; done.
-  Qed.
+  Local Notation pvar := (V.t * V.t).
 
-  Lemma fgtyp_equiv_comm t1 t2 : fgtyp_equiv t1 t2 -> fgtyp_equiv t2 t1.
-  Proof.
-    case : t1; intros; try done.
-  Qed.
+  Definition econst s c := @Econst V.T s c.
+  Definition ecast u e := @Ecast V.T u e.
+  Definition eprim_unop u e := @Eprim_unop V.T u e.
+  Definition eprim_binop b e1 e2 := @Eprim_binop V.T b e1 e2.
+  Definition emux c e1 e2 := @Emux V.T c e1 e2.
+  (* Definition evalidif c e := @Evalidif V.T c e. *)
+  Definition hfexpr := hfexpr V.T.
+  Definition eref r := @Eref V.T r.
+  Definition eid v := @Eid V.T v.
+  Definition esubfield r v := @Esubfield V.T r v.
+  Definition esubindex r n := @Esubindex V.T r n.
+  Definition esubaccess r e := @Esubaccess V.T r e.
+  Definition href := href V.T.
 
-  Lemma ftype_equiv_comm : forall t1 t2, ftype_equiv t1 t2 -> ftype_equiv t2 t1
-  with fbtyp_equiv_comm : forall f1 f2, fbtyp_equiv f1 f2 -> fbtyp_equiv f2 f1.
-  Proof.
-    elim; intro t1.
-    elim; intro t2; simpl; try discriminate; try apply fgtyp_equiv_comm.
-    intros IH n t2.
-    case Ht2 : t2 => [|t2' n'|]; simpl; try discriminate.
-    intro; move /andP : H => [H1 H2]; move /eqP : H1 => H1; rewrite H1; apply IH in H2.
-    rewrite eq_refl H2; done.
-    intro t2.
-    case Ht2 : t2 => [||t2']; simpl; try discriminate; try apply fbtyp_equiv_comm.
-    elim.
-    intro t2.
-    case Ht2 : t2; simpl; try discriminate; try done.
-    intros v f f0 f1 IH.
-    intro t2; case Ht2 : t2 => [|v' f' f0' f1']; simpl; case Hf : f; try discriminate.
-    1,2: case Hf' : f'; try discriminate.
-    1,2: intro.
-    1,2: move /andP : H => [H1 H2]; move /andP : H1 => [H1 H]; move /eqP : H1 => H1; rewrite H1 eq_refl.
-    1,2: apply IH in H2; apply ftype_equiv_comm in H; rewrite H H2; done.
-  Qed.
+  Definition hfstmt := hfstmt V.T.
+  Definition hfstmt_seq := hfstmt_seq V.T.
+  Definition qnil := Qnil V.T.
+  Definition qcons s ss := @Qcons V.T s ss.
+  Definition qcat s ss := @Qcat V.T s ss.
+  Definition qcatrev s ss := @Qcatrev V.T s ss.
+  Definition qrcons s ss := @Qrcons V.T s ss.
+  Definition sskip := @Sskip V.T.
+  Definition swire v t := @Swire V.T v t.
+  Definition sreg v r := @Sreg V.T v r.
+  Definition smem v m := @Smem V.T v m.
+  Definition snode v e := @Snode V.T v e.
+  Definition sfcnct v1 v2 := @Sfcnct V.T v1 v2.
+  (* Definition spcnct v1 v2 := @Spcnct V.T v1 v2. *)
+  Definition sinvalid v1 := @Sinvalid V.T v1.
+  Definition swhen c s1 s2 := @Swhen V.T c s1 s2.
+  (* Definition sstop e1 e2 n := @Sstop V.T e1 e2 n. *)
+  Definition sinst v1 v2 := @Sinst V.T v1 v2.
 
-Lemma fgtyp_equiv_dlvr : forall t1 t2 t3, fgtyp_equiv t1 t2 -> fgtyp_equiv t2 t3 -> fgtyp_equiv t1 t3.
-Proof.
-  intros.
-  case Ht1 : t1; case Ht2 : t2; case Ht3 : t3; rewrite Ht1 Ht2 in H; rewrite Ht2 Ht3 in H0; simpl in H; simpl in H0; simpl; try done; try discriminate.
-Qed.
+  Definition hfreg := @hfreg V.T.
+  Definition mk_hfreg := @mk_freg V.T.
+  Definition rst := @rst V.T.
+  Definition nrst := @NRst V.T.
+  Definition rrst e1 e2 := @Rst V.T e1 e2.
+  Definition mk_mem_port := @mk_mem_port V.T.
+  Definition mem_port := @mem_port V.T.
+  Definition hfmem := @hfmem V.T.
+  Definition mk_hfmem := @mk_fmem V.T.
+  Definition hfport := @hfport V.T.
+  Definition hinport v t := @Finput V.T v t.
+  Definition houtport v t := @Foutput V.T v t.
+  Definition hfmodule := @hfmodule V.T.
+  Definition hfinmod v ps ss := @FInmod V.T v ps ss.
+  Definition hfexmod v ps ss := @FExmod V.T v ps ss.
+  Definition fcircuit v ml := @Fcircuit V.T v ml.
+  Definition hfcircuit := @hfcircuit V.T.
 
-Lemma ftype_equiv_dlvr : forall t1 t2 t3, ftype_equiv t1 t2 -> ftype_equiv t2 t3 -> ftype_equiv t1 t3
-with ftype_equiv_dlvr_f : forall t1 t2 t3, fbtyp_equiv t1 t2 -> fbtyp_equiv t2 t3 -> fbtyp_equiv t1 t3.
-Proof.
-  elim.
-  intros gt1 t2 t3 H H0.
-  case Ht2 : t2 => [gt2|atyp2 n2|btyp2]; rewrite Ht2 in H H0; simpl in H; try discriminate.
-  case Ht3 : t3 => [gt3|atyp3 n3|btyp3]; rewrite Ht3 in H H0; simpl in H0; simpl; try done; try discriminate.
-  move : H H0; apply fgtyp_equiv_dlvr.
+  (****** Oriented type ******)
+  Inductive forient : Type :=
+  | Source | Sink | Duplex | Passive | Other.
 
-  intros atyp1 IH n1 t2 t3 H H0.
-  case Ht2 : t2 => [gt2|atyp2 n2|btyp2]; rewrite Ht2 in H H0; simpl in H; try discriminate.
-  case Ht3 : t3 => [gt3|atyp3 n3|btyp3]; rewrite Ht3 in H H0; simpl in H0; simpl; try done; try discriminate.
-  move /andP : H => [H1 H].
-  move /andP : H0 => [H2 H0].
-  move /eqP : H1 => H1.
-  move /eqP : H2 => H2.
-  apply rwP with (P := (n1 == n3) /\ ftype_equiv atyp1 atyp3).
-  apply andP.
-  split.
-  rewrite H1 -H2; try done.
-  move : H H0; apply IH.
+  (** eq dec *)
+  Lemma forient_eq_dec : forall {x y : forient}, {x = y} + {x <> y}.
+  Proof. decide equality. Qed.
+  Definition forient_eqn (x y : forient) : bool :=
+  match x, y with Source, Source | Sink, Sink | Duplex, Duplex | Passive, Passive | Other, Other => true
+                | _, _ => false end.
+  Lemma forient_eqP : Equality.axiom forient_eqn.
+  Proof. unfold Equality.axiom, forient_eqn. induction x, y ; try (apply ReflectF ; discriminate) ; try (apply ReflectT ; reflexivity). Qed.
+  
+  Fixpoint base_ref r : V.t :=
+    match r with
+    | Eid v => v
+    | Esubfield r v => base_ref r
+    | Esubindex r n => base_ref r
+    | Esubaccess r n => base_ref r
+    end.
+End MakeHiFirrtlP.
+Module HiFP := MakeHiFirrtlP ProdVarOrder.
 
-  intros btyp t2 t3 H H0.
-  case Ht2 : t2 => [gt2|atyp2 n2|btyp2]; rewrite Ht2 in H H0; simpl in H; try discriminate.
-  case Ht3 : t3 => [gt3|atyp3 n3|btyp3]; rewrite Ht3 in H H0; simpl in H0; simpl; try done; try discriminate.
-  move : H H0; apply ftype_equiv_dlvr_f.
-
-  elim.
-  intros t2 t3 H H0.
-  case Ht2 : t2 => [|v2 fl2 ft2 f2]; rewrite Ht2 in H H0; simpl in H; try discriminate.
-  case Ht3 : t3 => [|v3 fl3 ft3 f3]; rewrite Ht3 in H0; simpl in H0; try discriminate.
-  simpl; done.
-  intros v1 fl1 ft1 f1 IH t2 t3 H H0.
-  case Ht2 : t2 => [|v2 fl2 ft2 f2]; rewrite Ht2 in H H0; simpl in H; case Hf1 : fl1; rewrite Hf1 in H; try discriminate.
-  case Hf2 : fl2; rewrite Hf2 in H; try discriminate.
-  case Ht3 : t3 => [|v3 fl3 ft3 f3]; rewrite Ht3 Hf2 in H0; simpl in H0; try discriminate.
-  case Hf3 : fl3; rewrite Hf3 in H0; try discriminate.
-  simpl.
-  move /andP : H => [H H1].
-  move /andP : H => [H H']. 
-  move /andP : H0 => [H0 H2].
-  move /andP : H0 => [H0 H3].
-  move /eqP : H => H.
-  move /eqP : H0 => H0.
-  apply rwP with (P := (v1 == v3) && ftype_equiv ft1 ft3 /\ fbtyp_equiv f1 f3).
-  apply andP.
-  split.
-  apply rwP with (P := (v1 == v3) /\ ftype_equiv ft1 ft3).
-  apply andP.
-  split.
-  rewrite H -H0; done.
-  move : H' H3; apply ftype_equiv_dlvr.
-  move : H1 H2; apply IH.
-  case Hf2 : fl2; rewrite Hf2 in H; try discriminate.
-  case Ht3 : t3 => [|v3 fl3 ft3 f3]; rewrite Ht3 Hf2 in H0; simpl in H0; try discriminate.
-  case Hf3 : fl3; rewrite Hf3 in H0; try discriminate.
-  simpl.
-  move /andP : H => [H H1].
-  move /andP : H => [H H']. 
-  move /andP : H0 => [H0 H2].
-  move /andP : H0 => [H0 H3].
-  move /eqP : H => H.
-  move /eqP : H0 => H0.
-  apply rwP with (P := (v1 == v3) && ftype_equiv ft1 ft3 /\ fbtyp_equiv f1 f3).
-  apply andP.
-  split.
-  apply rwP with (P := (v1 == v3) /\ ftype_equiv ft1 ft3).
-  apply andP.
-  split.
-  rewrite H -H0; done.
-  move : H' H3; apply ftype_equiv_dlvr.
-  move : H1 H2; apply IH.
-Qed.
 
 Module Type VarType <: DecidableType.
   Definition t : Type := N.
@@ -1650,12 +1615,9 @@ Print Module VarMap.
 
 Module VM := VarMap OrderedVarType.
 Module PVM := VarMap ProdVar.
-Print VM.key.
-Print PVM.key.
-Print PVM.find.
-Search (PVM.find).
+
   (* type of ref expressions *)
-  Fixpoint type_of_ref (r : href) (tmap : VM.t (ftype * forient)) : option ftype :=
+  Fixpoint type_of_ref (r : HiF.href) (tmap : VM.t (ftype * forient)) : option ftype :=
     match r with
     | Eid v => match VM.find v tmap with
               | Some (ft, _) => Some ft
@@ -1676,7 +1638,10 @@ Search (PVM.find).
               | Some (Atyp ty _) => Some ty
               | _ => None
               end
-    | Esubaccess r e => None
+    | Esubaccess r e => match type_of_ref r tmap with
+              | Some (Atyp ty _) => Some ty
+              | _ => None
+              end
     end.
 
 (* offset of sub-elements *)
@@ -1712,7 +1677,7 @@ Fixpoint offset_of_subfield_b ft fid n : option nat :=
       offset_ref v tmap
     end.
 
-Fixpoint base_id (r : href) : var :=
+Fixpoint base_id (r : HiF.href) : var :=
   match r with
   | Eid v => v 
   | Esubindex v i => base_id v 
@@ -1720,14 +1685,14 @@ Fixpoint base_id (r : href) : var :=
   | Esubaccess v e => base_id v 
   end.
 
-Definition ref2pv (r : href) (tmap : VM.t (ftype * forient)) : option ProdVar.t :=
+Definition ref2pv (r : HiF.href) (tmap : VM.t (ftype * forient)) : option ProdVar.t :=
   let base_v := base_id r in
   match offset_ref r tmap with
   | Some os => Some (base_v, N.of_nat os)
   | None => None
   end.
 
-Fixpoint pv2ref' (base_ref : href) (offset : nat) (ft :ftype) : option href :=
+Fixpoint pv2ref' (base_ref : HiF.href) (offset : nat) (ft :ftype) : option HiF.href :=
 match ft with
   | Gtyp gt => if offset == 0 then Some base_ref
               else None
@@ -1735,7 +1700,7 @@ match ft with
               else pv2ref' (Esubindex base_ref 0) offset atyp
   | Btyp ff => pv2ref_f base_ref offset ff
   end
-with pv2ref_f (base_ref : href) (offset : nat) (ff : ffield) : option href :=
+with pv2ref_f (base_ref : HiF.href) (offset : nat) (ff : ffield) : option HiF.href :=
   match ff with
   | Fnil => None
   | Fflips v0 fl ft ff' => if offset < (size_of_ftype ft) then
@@ -1743,7 +1708,7 @@ with pv2ref_f (base_ref : href) (offset : nat) (ff : ffield) : option href :=
               pv2ref_f base_ref (offset - (size_of_ftype ft)) ff'
   end.
 
-Definition pv2ref (pv : ProdVar.t) (tmap : VM.t (ftype * forient)) : option href :=
+Definition pv2ref (pv : ProdVar.t) (tmap : VM.t (ftype * forient)) : option HiF.href :=
   match VM.find pv.1 tmap with
   | Some (ft, _) => pv2ref' (Eid pv.1) (N.to_nat pv.2) ft
   | _ => None
@@ -1832,7 +1797,7 @@ Definition ftype_mux (x : ftype_explicit) (y : ftype_explicit) : option ftype_ex
    Similar to mux_types in InferWidths *)
    @ftype_mux' (proj1_sig x) (proj2_sig x) (proj1_sig y) (proj2_sig y).
 
-Fixpoint type_of_hfexpr (e : hfexpr) (tmap: VM.t (ftype * forient)) : option ftype_explicit :=
+Fixpoint type_of_hfexpr (e : HiF.hfexpr) (tmap: VM.t (ftype * forient)) : option ftype_explicit :=
   match e with
   | Econst t bs => match t with
                   | Fuint_implicit _ => Some (exist ftype_not_implicit_width (Gtyp (Fuint (size bs))) I)
@@ -1981,7 +1946,7 @@ Fixpoint type_of_hfexpr (e : hfexpr) (tmap: VM.t (ftype * forient)) : option fty
                     end*)
   end.
   
-Fixpoint stmts_tmap' (tmap : VM.t (ftype * forient)) (ss : hfstmt_seq): option (VM.t (ftype * forient)) :=
+Fixpoint stmts_tmap' (tmap : VM.t (ftype * forient)) (ss : HiF.hfstmt_seq): option (VM.t (ftype * forient)) :=
   match ss with
   | Qnil => Some tmap
   | Qcons s ss' => match stmt_tmap' tmap s with
@@ -1989,7 +1954,7 @@ Fixpoint stmts_tmap' (tmap : VM.t (ftype * forient)) (ss : hfstmt_seq): option (
       | None => None
       end
   end
-  with stmt_tmap' (tmap : VM.t (ftype * forient)) (s : hfstmt) : option (VM.t (ftype * forient)) :=
+  with stmt_tmap' (tmap : VM.t (ftype * forient)) (s : HiF.hfstmt) : option (VM.t (ftype * forient)) :=
   match s with
   | Sskip => Some tmap
   | Sfcnct _ _ => Some tmap
@@ -2015,7 +1980,7 @@ Fixpoint stmts_tmap' (tmap : VM.t (ftype * forient)) (ss : hfstmt_seq): option (
       end
   end.
 
-Fixpoint ports_tmap' (tmap : VM.t (ftype * forient)) (pp : seq hfport) : option (VM.t (ftype * forient)) :=
+Fixpoint ports_tmap' (tmap : VM.t (ftype * forient)) (pp : seq HiF.hfport) : option (VM.t (ftype * forient)) :=
 (* creates a tmap that contains exactly the types of the ports in pp. *)
   match pp with
   | [::] => Some tmap
@@ -2029,7 +1994,7 @@ Fixpoint ports_tmap' (tmap : VM.t (ftype * forient)) (pp : seq hfport) : option 
           end
   end.    
 
-Definition module_tmap (tmap : VM.t (ftype * forient)) (m : hfmodule) : option (VM.t (ftype * forient)) :=
+Definition module_tmap (tmap : VM.t (ftype * forient)) (m : HiF.hfmodule) : option (VM.t (ftype * forient)) :=
   match m with
   | FInmod _ ps ss => match ports_tmap' tmap ps with
               | Some pmap => stmts_tmap' pmap ss
@@ -2038,7 +2003,7 @@ Definition module_tmap (tmap : VM.t (ftype * forient)) (m : hfmodule) : option (
   | _ => None
   end.
 
-Fixpoint modules_tmap (tmap : VM.t (ftype * forient)) (ml : seq hfmodule) : option (VM.t (ftype * forient)) :=
+Fixpoint modules_tmap (tmap : VM.t (ftype * forient)) (ml : seq HiF.hfmodule) : option (VM.t (ftype * forient)) :=
   match ml with
   | nil => Some tmap
   | hd :: tl => match module_tmap tmap hd with
@@ -2047,39 +2012,53 @@ Fixpoint modules_tmap (tmap : VM.t (ftype * forient)) (ml : seq hfmodule) : opti
               end
   end.
 
-Definition circuit_tmap (c : hfcircuit) : option (VM.t (ftype * forient)) :=
+Definition circuit_tmap (c : HiF.hfcircuit) : option (VM.t (ftype * forient)) :=
   match c with
   | Fcircuit v ml => modules_tmap (VM.empty (ftype * forient)) ml
   end.
 
-Definition test_ports0 := [:: Finput 0%num (Gtyp (Fuint 2)) ;
-                              Foutput 1%num (Gtyp (Fuint_implicit 0));
-                              Finput 2%num (Gtyp Fclock); 
-                              Finput 3%num (Gtyp (Fuint 1))].
-Definition pmap0 := ports_tmap' (VM.empty (ftype * forient)) test_ports0.
-
-Definition tmap0' := match pmap0 with
-                    | Some pmap => stmt_tmap' pmap (Sreg 4%num (mk_freg (Gtyp (Fuint 8)) (Eref (Eid 2%num))
-                            (Rst (Eref (Eid 3%num))
-                            (Econst (Fuint 8) [:: false]))))
-                    | _ => None
-                    end.
-                    
-Definition test_stmts0 := Qcons (Sfcnct (Eid 1%num) (Eref (Eid 0%num))) 
-                         (Qcons (Sreg 4%num (mk_freg (Gtyp (Fuint 8)) (Eref (Eid 2%num))
-                            (Rst (Eref (Eid 3%num))
-                            (Econst (Fuint 8) [:: false])))) 
-                         (Qcons (Sfcnct (Eid 4%num) (Eref (Eid 0%num))) Qnil)). 
-Definition test_mod0 := FInmod 5%num test_ports0 test_stmts0.
-Definition test_cir0 := Fcircuit 5%num [test_mod0].
-Definition tmap0 := circuit_tmap test_cir0.
-
 
 Section finProdVar.
 
-Variable (c : hfcircuit).
+Variable (c : HiF.hfcircuit).
 
-Definition pv_is_fintype (pv : ProdVar.t) (c : hfcircuit) : Prop :=
+Fixpoint fcomponent_amount_s (s : HiF.hfstmt) : nat :=
+match s with
+  | Sskip => 0
+  | Sfcnct _ _ => 0
+  | Sinvalid _ => 0
+  | Swire _ _ => 1
+  | Sreg v reg => 1
+  | Snode _ _ => 1
+  | Smem _ _ => 1
+  | Sinst _ _ => 1
+  | Swhen _ ss_true ss_false =>
+    fcomponent_amount_ss ss_true + fcomponent_amount_ss ss_false
+  end
+with fcomponent_amount_ss (ss : HiF.hfstmt_seq) : nat :=
+  match ss with
+  | Qnil => 0
+  | Qcons s st => fcomponent_amount_s s + fcomponent_amount_ss st
+  end.
+
+Definition fcomponent_amount_m (m : HiF.hfmodule) : nat :=
+  match m with
+  | FInmod _ ps ss => List.length ps + fcomponent_amount_ss ss
+  | _ => 0
+  end.
+
+Fixpoint fcomponent_amount_ml (ml : seq HiF.hfmodule) : nat :=
+  match ml with
+  | nil => 0
+  | hd :: tl => fcomponent_amount_m hd + fcomponent_amount_ml tl
+  
+  end.
+Definition fcomponent_amount (c : HiF.hfcircuit) : nat :=
+  match c with
+  | Fcircuit v ml => fcomponent_amount_ml ml
+  end.
+
+Definition pv_is_fintype (pv : ProdVar.t) (c : HiF.hfcircuit) : Prop :=
   match circuit_tmap c with
   | Some tmap =>
     match VM.find pv.1 tmap with

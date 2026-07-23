@@ -1,6 +1,7 @@
 From mathcomp Require Import all_ssreflect.
 From Coq Require Import ZArith Arith List Ascii String Lia FMaps.
-From Solver Require Import Env LoFirrtl HiEnv HiFirrtl constraints.
+From firrtl Require Import Env LoFirrtl HiEnv HiFirrtl.
+From Solver Require Import constraints.
 Require Import Coq.Bool.Bool.
 Import ListNotations.
 Require Import Coq.Classes.RelationClasses.

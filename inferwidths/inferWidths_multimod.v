@@ -1,7 +1,8 @@
 From HB Require Import structures.
 From Coq Require Import ZArith Arith List Ascii String Lia FMaps.
 From mathcomp Require Import all_ssreflect.
-From Solver Require Import Env LoFirrtl HiEnv HiFirrtl constraints extract_cs extract_cswithmin extract_cs_multimod inferWidths.
+From firrtl Require Import Env LoFirrtl HiEnv HiFirrtl.
+From Solver Require Import constraints extract_cs extract_cswithmin extract_cs_multimod inferWidths.
 Import ListNotations.
 
 Module TripVar <: OrderedType.
@@ -422,7 +423,7 @@ End constraint.
 
 Section Extract_Constraints_for_multimod.
 
-Fixpoint find_ref_inside (instv : VM.key) (r : href) : option href :=
+Fixpoint find_ref_inside (instv : VM.key) (r : HiF.href) : option HiF.href :=
   match r with
   | Eid v => None
   | Esubfield (Eid instv) v => Some (Eid v)
@@ -443,7 +444,7 @@ Fixpoint find_ref_inside (instv : VM.key) (r : href) : option href :=
 Compute (find_ref_inside (N.of_nat 4) (Esubfield (Eid (N.of_nat 4)) (N.of_nat 1))).
 Compute (find_ref_inside (N.of_nat 4) (Esubfield (Esubfield (Eid (N.of_nat 4)) (N.of_nat 0)) (N.of_nat 1))).
 
-Definition ref2pv_mod (r : href) (mv : VM.key) (instmap : VM.t VM.key)(* mapping known instance name to module name *) 
+Definition ref2pv_mod (r : HiF.href) (mv : VM.key) (instmap : VM.t VM.key)(* mapping known instance name to module name *) 
   (tmap : VM.t (VM.t (ftype * forient))) : option TripVar.t :=
   let base_ref := base_id r in
   match VM.find base_ref instmap with
@@ -465,7 +466,7 @@ Definition ref2pv_mod (r : href) (mv : VM.key) (instmap : VM.t VM.key)(* mapping
       end
   end.
 
-Fixpoint extract_constraint_expr_mod (mv : VM.key) (e : hfexpr) (mod_tmap : VM.t (ftype * forient)) (tmap : VM.t (VM.t (ftype * forient))) (instmap : VM.t VM.key) 
+Fixpoint extract_constraint_expr_mod (mv : VM.key) (e : HiF.hfexpr) (mod_tmap : VM.t (ftype * forient)) (tmap : VM.t (VM.t (ftype * forient))) (instmap : VM.t VM.key) 
   : option ((list min_rhs) * (list min_rhs)) :=
   (* min_rhs 的 Expr case 是一条phi1约束的一次项，指数项和常数项。rem产生min_rhs 中的 Min case
      mux 直接生成 list of min_rhs
@@ -642,7 +643,7 @@ Fixpoint extract_constraint_expr_mod (mv : VM.key) (e : hfexpr) (mod_tmap : VM.t
                             end (* condition c 只能是 0/1位宽 *)
 end.
 
-Fixpoint extract_mux_mod (mv : VM.key) (instmap : VM.t VM.key) (e : hfexpr) (mod_tmap : VM.t (ftype * forient)) (tmap : VM.t (VM.t (ftype * forient))) : option (list href * list min_rhs) := 
+Fixpoint extract_mux_mod (mv : VM.key) (instmap : VM.t VM.key) (e : HiF.hfexpr) (mod_tmap : VM.t (ftype * forient)) (tmap : VM.t (VM.t (ftype * forient))) : option (list HiF.href * list min_rhs) := 
 match VM.find mv tmap with
 | Some mod_tmap => 
   match e with
@@ -758,7 +759,7 @@ with extract_constraint_non_passive_f (ff ff_ref : ffield) (flip : bool) (pv pva
   | _, _ => c1map
   end.
 
-Fixpoint extract_constraint_ss (mv : VM.key) (ss : hfstmt_seq) (mod_tmap : VM.t (ftype * forient)) (tmap : VM.t (VM.t (ftype * forient))) (c1map : TVM.t (list Constraint1)) 
+Fixpoint extract_constraint_ss (mv : VM.key) (ss : HiF.hfstmt_seq) (mod_tmap : VM.t (ftype * forient)) (tmap : VM.t (VM.t (ftype * forient))) (c1map : TVM.t (list Constraint1)) 
   (cs2 : list min_rhs) (cs_min : list Constraint_Min) (instmap : VM.t VM.key) 
   : option (TVM.t (list Constraint1) * list min_rhs * list Constraint_Min * VM.t VM.key) :=
   match ss with
@@ -769,7 +770,7 @@ Fixpoint extract_constraint_ss (mv : VM.key) (ss : hfstmt_seq) (mod_tmap : VM.t 
     | _ => None
     end
   end
-with extract_constraint_s (mv : VM.key) (s : hfstmt) (mod_tmap : VM.t (ftype * forient)) (tmap : VM.t (VM.t (ftype * forient))) (c1map : TVM.t (list Constraint1)) 
+with extract_constraint_s (mv : VM.key) (s : HiF.hfstmt) (mod_tmap : VM.t (ftype * forient)) (tmap : VM.t (VM.t (ftype * forient))) (c1map : TVM.t (list Constraint1)) 
   (cs2 : list min_rhs) (cs_min : list Constraint_Min) (instmap : VM.t VM.key) 
   : option (TVM.t (list Constraint1) * list min_rhs * list Constraint_Min * VM.t VM.key) :=
   match s with
@@ -908,7 +909,7 @@ Fixpoint extract_constraint_ml ml (tmap : VM.t (VM.t (ftype * forient))) (c1map 
   | _ :: tl => extract_constraint_ml tl tmap c1map cs2 cs_min
   end.
 
-Definition extract_constraints_c (c : hfcircuit) (tmap : VM.t (VM.t (ftype * forient))) : option (list (TVM.t (list Constraint1)) * list min_rhs) :=
+Definition extract_constraints_c (c : HiF.hfcircuit) (tmap : VM.t (VM.t (ftype * forient))) : option (list (TVM.t (list Constraint1)) * list min_rhs) :=
   match c with
   | Fcircuit _ ml => match extract_constraint_ml ml tmap (TVM.empty (list Constraint1)) nil nil with
                     | Some (c1map, cs2, cs_min) => let group_of_mins := map list_Constraint_Min cs_min in
@@ -1654,7 +1655,7 @@ Fixpoint update_tmap (tmap : VM.t (VM.t (ftype * forient))) (new_widths : list (
                     end
   end.
 
-Definition InferWidths_trans_m m (tmap : VM.t (VM.t (ftype * forient))) : option hfmodule :=
+Definition InferWidths_trans_m m (tmap : VM.t (VM.t (ftype * forient))) : option HiF.hfmodule :=
   match m with
   | FInmod mv ps ss => match VM.find mv tmap with
           | Some mod_tmap => match InferWidths_transps ps mod_tmap, InferWidths_transss ss mod_tmap with
@@ -1666,7 +1667,7 @@ Definition InferWidths_trans_m m (tmap : VM.t (VM.t (ftype * forient))) : option
   | FExmod _ _ _ => Some m 
   end.
 
-Fixpoint InferWidths_trans_ml ml (tmap : VM.t (VM.t (ftype * forient))) : option (seq hfmodule) :=
+Fixpoint InferWidths_trans_ml ml (tmap : VM.t (VM.t (ftype * forient))) : option (seq HiF.hfmodule) :=
   match ml with
   | nil => Some nil
   | hd :: tl => match InferWidths_trans_m hd tmap, InferWidths_trans_ml tl tmap with
@@ -1675,7 +1676,7 @@ Fixpoint InferWidths_trans_ml ml (tmap : VM.t (VM.t (ftype * forient))) : option
       end
   end.
 
-Definition InferWidths_trans_c c (tmap : VM.t (VM.t (ftype * forient))) : option hfcircuit :=
+Definition InferWidths_trans_c c (tmap : VM.t (VM.t (ftype * forient))) : option HiF.hfcircuit :=
   match c with
   | Fcircuit c ml => match InferWidths_trans_ml ml tmap with
       | Some nml => Some (Fcircuit c nml)

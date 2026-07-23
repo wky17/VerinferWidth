@@ -1,12 +1,13 @@
 From HB Require Import structures.
 From Coq Require Import ZArith Arith List Ascii String Lia FMaps.
 From mathcomp Require Import all_ssreflect.
-From Solver Require Import Env LoFirrtl HiEnv HiFirrtl constraints.
+From firrtl Require Import Env LoFirrtl HiEnv HiFirrtl.
+From Solver Require Import constraints.
 Import ListNotations.
 
 Section Extract_Constraints_better.
 
-Fixpoint extract_constraint_expr (e : hfexpr) (tmap : VM.t (ftype * forient)) : option (list ((list (list term * list term * Z.t)) * (list Constraint2))) :=
+Fixpoint extract_constraint_expr (e : HiF.hfexpr) (tmap : VM.t (ftype * forient)) : option (list ((list (list term * list term * Z.t)) * (list Constraint2))) :=
   match e with
   | Eref r => match type_of_ref r tmap, ref2pv r tmap with
                             | Some (Gtyp (Fuint_implicit _)), Some pv 
@@ -193,7 +194,7 @@ end.
 (*Compute (combine_terms ([(1,(1%num,0%num))], 4%Z) ([(1,(1%num,0%num))], 0%Z)).
 Compute (flat_map (fun x => map (combine_terms x) [([(1,(1%num,0%num))], 4%Z)]) [([(1,(1%num,0%num))], 0%Z)]).*)
 
-Fixpoint expand_mux (e : hfexpr) (tmap : VM.t (ftype * forient)) : option (list (list href * list Constraint2)) := 
+Fixpoint expand_mux (e : HiF.hfexpr) (tmap : VM.t (ftype * forient)) : option (list (list HiF.href * list Constraint2)) := 
   match e with
   | Eref r => Some [([r], nil)]
   | Emux c e1 e2 => match type_of_hfexpr c tmap, extract_constraint_expr c tmap, 
@@ -287,7 +288,7 @@ with extract_constraint_non_passive_f (ff ff_ref : ffield) (pv pvar : ProdVar.t)
   | _, _ => c1map
   end.
 
-Fixpoint extract_constraint (s : hfstmt) (tmap : VM.t (ftype * forient)) (c1map : PVM.t (list Constraint1)) : option (list (PVM.t (list Constraint1) * list Constraint2)) :=
+Fixpoint extract_constraint (s : HiF.hfstmt) (tmap : VM.t (ftype * forient)) (c1map : PVM.t (list Constraint1)) : option (list (PVM.t (list Constraint1) * list Constraint2)) :=
   match s with
   | Sskip => Some [(c1map, nil)]
   | Sfcnct r expr => match type_of_ref r tmap with
@@ -419,7 +420,7 @@ Fixpoint extract_constraint (s : hfstmt) (tmap : VM.t (ftype * forient)) (c1map 
     | _, _, _ => None
     end 
   end
-with extract_constraints (ss : hfstmt_seq) (tmap : VM.t (ftype * forient)) (c1map : PVM.t (list Constraint1)) : option (list (PVM.t (list Constraint1) * list Constraint2)) :=
+with extract_constraints (ss : HiF.hfstmt_seq) (tmap : VM.t (ftype * forient)) (c1map : PVM.t (list Constraint1)) : option (list (PVM.t (list Constraint1) * list Constraint2)) :=
   match ss with
   | Qnil => Some [(c1map, nil)]
   | Qcons s st => 
@@ -433,7 +434,7 @@ with extract_constraints (ss : hfstmt_seq) (tmap : VM.t (ftype * forient)) (c1ma
     end
   end.
 
-Definition extract_constraint_tailrec (s : hfstmt) (tmap : VM.t (ftype * forient)) (c1map : PVM.t (list Constraint1)) : option (list (PVM.t (list Constraint1) * list Constraint2)) :=
+Definition extract_constraint_tailrec (s : HiF.hfstmt) (tmap : VM.t (ftype * forient)) (c1map : PVM.t (list Constraint1)) : option (list (PVM.t (list Constraint1) * list Constraint2)) :=
   match s with
   | Sskip => Some [(c1map, nil)]
   | Sfcnct r expr => match type_of_ref r tmap with
@@ -550,7 +551,7 @@ Definition extract_constraint_tailrec (s : hfstmt) (tmap : VM.t (ftype * forient
   | Swhen _ _ _ => None
   end.
 
-Fixpoint extract_constraints_tailrec (ss : hfstmt_seq) (tmap : VM.t (ftype * forient)) (res : list (PVM.t (list Constraint1) * list Constraint2)) 
+Fixpoint extract_constraints_tailrec (ss : HiF.hfstmt_seq) (tmap : VM.t (ftype * forient)) (res : list (PVM.t (list Constraint1) * list Constraint2)) 
           : option (list (PVM.t (list Constraint1) * list Constraint2)) :=
   match ss with
   | Qnil => Some res
@@ -565,26 +566,26 @@ Fixpoint extract_constraints_tailrec (ss : hfstmt_seq) (tmap : VM.t (ftype * for
     end
   end.
 
-Fixpoint expandwhen (s : hfstmt) (res : hfstmt_seq * (list hfexpr)) : hfstmt_seq * (list hfexpr) :=
+Fixpoint expandwhen (s : HiF.hfstmt) (res : HiF.hfstmt_seq * (list HiF.hfexpr)) : HiF.hfstmt_seq * (list HiF.hfexpr) :=
   match s with
   | Swhen c s1 s2 => let res' := expandwhens s1 res in 
                      let (s2', c2') := expandwhens s2 res' in (s2', c :: c2') 
   | _ => (Qcons s res.1, res.2)
   end
-with expandwhens (ss : hfstmt_seq) (res : hfstmt_seq * (list hfexpr)) : hfstmt_seq * (list hfexpr) :=
+with expandwhens (ss : HiF.hfstmt_seq) (res : HiF.hfstmt_seq * (list HiF.hfexpr)) : HiF.hfstmt_seq * (list HiF.hfexpr) :=
   match ss with
   | Qnil => res
   | Qcons s st => expandwhens st (expandwhen s res)
   end.
 
-Definition extract_constraint_m (m : hfmodule) (tmap : VM.t (ftype * forient)) (c1map : PVM.t (list Constraint1)) : option (list (PVM.t (list Constraint1) * list Constraint2)) :=
+Definition extract_constraint_m (m : HiF.hfmodule) (tmap : VM.t (ftype * forient)) (c1map : PVM.t (list Constraint1)) : option (list (PVM.t (list Constraint1) * list Constraint2)) :=
   match m with
-  | FInmod _ _ ss => let (ss', _) := expandwhens ss (Qnil, []) in
+  | FInmod _ _ ss => let (ss', _) := expandwhens ss (HiF.qnil, []) in
                      extract_constraints ss' tmap c1map
   | _ => None
   end.
 
-Definition extract_constraints_c (c : hfcircuit) (tmap : (VM.t (ftype * forient))) : option (list (PVM.t (list Constraint1) * list Constraint2)) :=
+Definition extract_constraints_c (c : HiF.hfcircuit) (tmap : (VM.t (ftype * forient))) : option (list (PVM.t (list Constraint1) * list Constraint2)) :=
   match c with
   | Fcircuit _ [m] => extract_constraint_m m tmap (PVM.empty (list Constraint1))
   | _ => None

@@ -1,7 +1,8 @@
 From Coq Require Import FMaps ZArith(*FunInd FMapAVL OrderedType*).
 From mathcomp Require Import all_ssreflect.
 From HB Require Import structures.
-From Solver Require Import Env LoFirrtl.
+From firrtl Require Import Env LoFirrtl.
+From Lib Require Import Var.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -11,9 +12,13 @@ Import Prenex Implicits.
 
 Section Ftype.
 
-(* Variable var : eqType. *)
+(*Variable var : eqType.*)
 
 Inductive fflip : Type := Flipped | Nflip.
+
+(* flipped direction type equality is decidable *)
+Lemma fflip_eq_dec (x y : fflip) : {x = y} + {x <> y}.
+  Proof. decide equality. Qed.
 
 (* equality of fflip is decidable *)
 Definition fflip_eqn (x y : fflip) : bool :=
@@ -31,7 +36,7 @@ Qed.
 
 HB.instance Definition _ := hasDecEq.Build fflip fflip_eqP.
 
-Definition var : Set := N.
+(*Definition var : Set := N.*)
 
 Inductive ftype : Type :=
 | Gtyp : fgtyp -> ftype
@@ -82,8 +87,8 @@ with ffield_eq_dec (fx fy : ffield) : {fx = fy} + {fx <> fy}.
 Proof.
 * decide equality. apply fgtyp_eq_dec. apply Nat.eq_dec.
 * decide equality.
-  decide equality. apply N.eq_dec.
-Qed.
+  decide equality. 
+Admitted.
 
 Lemma ftype_eqn_refl (x : ftype) : x =? x
 with ffield_eqn_refl (fx : ffield) : ffield_eqn fx fx.

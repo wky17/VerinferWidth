@@ -1,7 +1,8 @@
 From mathcomp Require Import all_ssreflect.
 Require Import Coq.Lists.List.
 Require Import Coq.ZArith.ZArith.
-From Solver Require Import Env LoFirrtl HiEnv HiFirrtl constraints scc.
+From firrtl Require Import Env LoFirrtl HiEnv HiFirrtl.
+From Solver Require Import constraints scc.
 Require Import Coq.Bool.Bool.
 From mathcomp.tarjan Require Import kosaraju.
 Require Import Program.

@@ -1,18 +1,28 @@
--Q . Solver
-constraints.v
-floyd_sc.v
-scc.v
-branch_and_bound.v
-graph.v 
-Env.v
-LoFirrtl.v
-HiEnv.v 
-HiFirrtl.v
-TopoSort.v
-extract_cs.v
-extract_cswithmin.v
-inferWidths.v
-inferWidths_exp.v
-extract_cs_multimod.v
-inferWidths_multimod.v
-Extract.v
+-Q ./lib Lib
+lib/SsrOrder.v
+lib/Var.v
+lib/Nbits.v
+-Q ./syntax firrtl
+syntax/Env.v
+syntax/LoFirrtl.v
+syntax/HiEnv.v 
+syntax/HiFirrtl.v
+-Q ./inferwidths Solver
+inferWidths/constraints.v
+inferWidths/floyd_sc.v
+inferWidths/scc.v
+inferWidths/branch_and_bound.v
+inferWidths/graph.v 
+inferWidths/TopoSort.v
+inferWidths/extract_cs.v
+inferWidths/extract_cswithmin.v
+inferWidths/inferWidths.v
+inferWidths/inferWidths_exp.v
+inferWidths/extract_cs_multimod.v
+inferWidths/inferWidths_multimod.v
+-Q ./semantics Semantics
+semantics/Semantics.v
+-Q ./lowertypes LowerTypes
+lowertypes/ExpandConnects_inst.v
+-Q ./expandwhens ExpandWhens 
+expandwhens/ExpandWhens_inst.v

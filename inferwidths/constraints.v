@@ -4,7 +4,7 @@ Require Import Coq.Arith.Arith.
 Require Import Coq.ZArith.ZArith.
 Require Import Coq.Bool.Bool.
 From HB Require Import structures.
-From Solver Require Import Env HiEnv LoFirrtl HiFirrtl.
+From firrtl Require Import Env HiEnv LoFirrtl HiFirrtl.
 Import ListNotations.
 
 Set Implicit Arguments.

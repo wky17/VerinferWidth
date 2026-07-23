@@ -2,7 +2,8 @@ From mathcomp Require Import all_ssreflect.
 Require Import Coq.Lists.List.
 Require Import Coq.ZArith.ZArith.
 Import ListNotations.
-From Solver Require Import Env LoFirrtl HiEnv HiFirrtl constraints.
+From firrtl Require Import Env LoFirrtl HiEnv HiFirrtl.
+From Solver Require Import constraints.
 From mathcomp.tarjan Require Import kosaraju.
 
 Definition T := ProdVar.t.
@@ -39,7 +40,7 @@ Import Prenex Implicits.
 Section dpdcgraph.
 (* -------------------- Method 2 -------------------- *)
 
-Variable  (c : hfcircuit).
+Variable  (c : HiF.hfcircuit).
 Definition Graph : Type := finProdVar c -> finProdVar c -> bool.
 
 Definition add_dependency (g : Graph) (from to : finProdVar c) : Graph :=
