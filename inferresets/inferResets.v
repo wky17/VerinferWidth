@@ -165,13 +165,93 @@ Definition reset_graph_c (c : HiF.hfcircuit) (tmap : VM.t (VM.t (ftype * forient
   | Fcircuit _ ml => reset_graph_ml ml tmap empty_Graph
   end.
 
+Fixpoint find_common_reset (ls : list (TripVar.t * fgtyp)) (rst : option fgtyp) : option fgtyp :=
+  match hd with
+  | nil => rst
+  | (_, hd) :: tl => match rst, hd with
+          | Some Fasyncreset, Some Fasyncreset 
+          | Some Freset, Some Fasyncreset
+          | None, Some Fasyncreset => find_common_reset tl (Some Fasyncreset)
+          | Some (Fuint 1), Some (Fuint 1)
+          | Some Freset, Some (Fuint 1)
+          | None, Some (Fuint 1) => find_common_reset tl (Some (Fuint 1))
+          | _, Some Freset => find_common_reset tl rst
+          | _, _ => None
+          end
+  end.
+
+Fixpoint update_rst_ftype (offset : nat) (new_rst : fgtyp) (ft : ftype) : option ftype :=
+  match ft with
+  | Gtyp gt => if offset == 0 then Some (Gtyp new_rst)
+               else None
+  | Atyp atyp n => let offset' := offset mod (size_of_ftype atyp) in
+              match update_rst_ftype offset' new_rst atyp with
+              | Some newt => Some (Atyp newt n)
+              | _ => None
+              end
+  | Btyp ff => match update_rst_ftype_f offset new_rst ff with
+              | Some newf => Some (Btyp newf)
+              | _ => None
+              end
+  end
+with update_rst_ftype_f (offset : nat) (new_rst : fgtyp) (ff : ffield) : option ffield :=
+  match ff with
+  | Fnil => None
+  | Fflips v0 fl ft ff' => if offset < (size_of_ftype ft) then
+              match update_rst_ftype offset new_rst ft with
+              | Some newt => Some (Fflips v0 fl newt ff')
+              | _ => None
+              end else
+              match update_rst_ftype_f (offset - (size_of_ftype ft)) new_rst ff' with
+              | Some newf => Some (Fflips v0 fl ft newf)
+              | _ => None
+              end
+  end.
+
+Fixpoint update_rst_tmap (hd : list (TripVar.t * fgtyp)) (rst : fgtyp) (tmap : VM.t (VM.t (ftype * forient))) : option (VM.t (VM.t (ftype * forient))) :=
+  match hd with
+  | nil => Some tmap
+  | (pv, _) :: tl => match VM.find pv.1 tmap with (* 找到对应moule的tmap *)
+                    | Some mod_tmap => 
+                        match VM.find pv.2.1 mod_tmap with
+                        | Some (ft, ori) => match update_rst_ftype pv.2.2 rst ft with 
+                                | Some nft => update_rst_tmap (VM.add pv.1 (VM.add pv.2.1 (nft, ori) mod_tmap) tmap) tl
+                                | _ => None
+                                end
+                        | _ => None
+                        end
+                    | _ => None
+                    end
+  end.
+
+Definition solve_reset_scc (hd : list (TripVar.t * fgtyp)) (tmap : VM.t (VM.t (ftype * forient))) : option (VM.t (VM.t (ftype * forient))) := 
+match hd with
+| nil => None
+| [:: v] => None
+| _ => match find_common_reset hd None with
+      | Some rst => (* 把hd中的ref都改为类型为Gtyp rst *)
+        update_rst_tmap hd rst tmap
+      | _ => None
+      end
+end.
+
+Fixpoint solve_reset_alg (res : list (list (TripVar.t * fgtyp))) (tmap : VM.t (VM.t (ftype * forient))) : option (VM.t (VM.t (ftype * forient))) := 
+match res with
+| nil => Some tmap
+| hd :: tl => 
+    match solve_reset_scc hd tmap with
+    | Some nv => solve_reset_alg tl nv
+    | None => None
+    end
+end.
+
 (*Definition InferResets_fun : option HiF.hfcircuit :=
   match circuit_tmap c with
   | Some tmap =>
     let dpdcg := reset_graph_c c tmap in 
     let res := rev (map rev (kosaraju dpdcg)) in
     let res' := map (map (@finTripVar2TripVar c)) res in
-    match solve_rst res' tmap with
+    match solve_reset_alg res' tmap with
     | Some newtm => InferWidths_trans_c c newtm
     | _ => None
     end
