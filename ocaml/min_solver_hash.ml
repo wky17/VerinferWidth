@@ -707,27 +707,27 @@ and stmt_tmap modplmap tmap = function
    | None -> None)
 | _ -> Some tmap
 
-(** val ports_tmap' :
+(** val ports_tmap :
     (ftype * forient) H.t -> hfport list -> (ftype * forient) H.t option **)
-let rec ports_tmap' tmap = function
+let rec ports_tmap tmap = function
 | [] -> Some tmap
 | h :: pp' ->
   match h with
   | Finput (v, t0) ->
     (match H.find v tmap with
      | Some _ -> None
-     | None -> H.add v (t0, Source) tmap; ports_tmap' tmap pp')
+     | None -> H.add v (t0, Source) tmap; ports_tmap tmap pp')
   | Foutput (v, t0) ->
     (match H.find v tmap with
      | Some _ -> None
-     | None -> H.add v (t0, Duplex) tmap; ports_tmap' tmap pp')
+     | None -> H.add v (t0, Duplex) tmap; ports_tmap tmap pp')
 
 let rec modules_tmap modplmap tmap = function
 | [] -> Some tmap
 | h :: tl ->
   match h with
   | FInmod (mv, ps, ss) ->
-    (match ports_tmap' (H.empty ()) ps with
+    (match ports_tmap (H.empty ()) ps with
      | Some pmap ->
        (match stmts_tmap modplmap pmap ss with
         | Some tmap' ->

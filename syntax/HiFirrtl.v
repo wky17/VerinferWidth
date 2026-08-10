@@ -437,6 +437,18 @@ Qed.
 HB.instance Definition _ := hasDecEq.Build hfstmt hfstmt_eqP'.
 HB.instance Definition _ := hasDecEq.Build hfstmt_seq hfstmt_seq_eqP'.
 
+Lemma hfstmt_eqn_refl (x : hfstmt) : x == x
+with hfstmt_seq_eqn_refl (fx : hfstmt_seq) : fx == fx.
+Proof.  all: rewrite eq_refl //.  Qed.
+
+Lemma hfstmt_eqn_sym (x y : hfstmt) : x == y -> y == x
+with hfstmt_seq_eqn_sym (fx fy : hfstmt_seq) : fx == fy -> fy == fx.
+Proof.  all: intro ; rewrite eq_sym //.  Qed.
+
+Lemma hfstmt_eqn_trans (x y z : hfstmt) : x == y -> y == z -> x == z
+with hfstmt_seq_eqn_trans (x y z : hfstmt_seq) : x == y -> y == z -> x == z.
+Proof.  all: intro ; move /eqP : H => H ; rewrite H ; done.  Qed.
+
    (** hfstmt_seq is an equivalence relation *)
 
    Definition Qhead (default : hfstmt) (s : hfstmt_seq) : hfstmt :=
@@ -483,12 +495,96 @@ HB.instance Definition _ := hasDecEq.Build hfstmt_seq hfstmt_seq_eqP'.
                 | Qcons h tl => (hfstmt_eqn h s) || (Qin s tl)
     end.
 
+  Fixpoint Qin_when (s : hfstmt) (ss : hfstmt_seq) : bool :=
+  match ss with 
+  | Qnil => false
+  | Qcons (Swhen c s1 s2) tl => (Qin_when s s1) || (Qin_when s s2) || (Qin_when s tl)
+  | Qcons h tl => (hfstmt_eqn h s) || (Qin_when s tl)
+  end.
+
+  Fixpoint Qremove (s : hfstmt) (ss : hfstmt_seq) : hfstmt_seq :=
+      match ss with
+      | Qnil => Qnil
+      | Qcons h tl =>
+          if hfstmt_eqn h s
+          then tl
+          else Qcons h (Qremove s tl)
+      end.
+
+  Fixpoint Qremove_when (s : hfstmt) (ss : hfstmt_seq) : hfstmt_seq :=
+      match ss with
+      | Qnil => Qnil
+      | Qcons (Swhen c s1 s2) tl => 
+        if (Qin_when s s1) then Qcons (Swhen c (Qremove_when s s1) s2) tl
+        else if (Qin_when s s2) then Qcons (Swhen c s1 (Qremove_when s s2)) tl
+        else Qcons (Swhen c s1 s2) (Qremove_when s tl)
+      | Qcons h tl =>
+          if hfstmt_eqn h s
+          then tl
+          else Qcons h (Qremove_when s tl)
+      end.
+(* Removing statements from [ss] cannot create new [Qin_when] occurrences*)
+  Axiom Qremove_when_Qin_when : forall s s0 ss, Qin_when s0 (Qremove_when s ss) -> Qin_when s0 ss.
+
+  Lemma Qin_when_Qcons : forall s0 ss s, Qin_when s0 ss -> Qin_when s0 (Qcons s ss).
+  Proof.
+  intros s0 ss s H.
+  destruct ss as [|h tl].
+  - simpl in H. inversion H.
+  - simpl.
+    destruct s; simpl; apply orb_true_iff; right; exact H.
+  Qed.
+
+  Lemma Qin_Qcat : forall s ss0 ss1, Qin s ss0 \/ Qin s ss1 <-> Qin s (Qcat ss0 ss1).
+  Proof.
+    intros s ss0. induction ss0 as [|h tl IH]; intros ss1.
+    - (* Qnil 情形 *)
+      simpl. split.
+      + intros [H|H]; [done | assumption].
+      + intros H; right; assumption.
+    - (* Qcons h tl 情形 *)
+      simpl. split.
+      + intros H. simpl in H.
+        destruct H as [H | H].
+        * (* 左侧分支：(hfstmt_eqn h s || Qin s tl) = true *)
+          apply Bool.orb_true_iff in H. destruct H as [H_eq | H_tl].
+          -- (* hfstmt_eqn h s = true *)
+             rewrite H_eq orb_true_l //.
+          -- (* Qin s tl = true *)
+              apply Bool.orb_true_iff. right. apply IH. left. exact H_tl.
+        * (* Qin s ss1 = true *)
+          apply Bool.orb_true_iff. right. apply IH. right. exact H.
+      + intros H. simpl in H.
+        apply Bool.orb_true_iff in H. destruct H as [H_eq | H_cat].
+        * (* hfstmt_eqn h s = true *)
+             rewrite H_eq orb_true_l. left; done.
+        * (* Qin s (Qcat tl ss1) = true *)
+          apply IH in H_cat. destruct H_cat as [H_tl | H_ss1].
+          -- apply Bool.orb_true_iff. rewrite H_tl orb_true_r orb_true_l. done.
+          -- right. exact H_ss1.
+  Qed.
+
    Fixpoint Qrcons (ss : hfstmt_seq) (s : hfstmt) : hfstmt_seq :=
    match ss with
    | Qnil => Qcons s Qnil
    | Qcons h tl => Qcons h (Qrcons tl s)
    end.
 
+   Lemma in_qremove (s s0 : hfstmt) ss : Qin s (Qremove s0 ss) -> Qin s ss.
+   Proof.
+   induction ss as [|h tl IH]; simpl.
+   - intros H. discriminate H.
+   - destruct (hfstmt_eqn h s0) eqn:Heq.
+     + simpl. intros H. 
+       apply orb_true_iff. right. assumption. 
+     + simpl. intros H.
+       apply orb_true_iff in H. 
+       apply orb_true_iff.
+       destruct H as [H|H].
+       * left. assumption.
+       * right. apply IH. assumption.
+   Qed.
+ 
    Lemma Qcat_rcons : forall (ss1 : hfstmt_seq) (s : hfstmt) (ss2 : hfstmt_seq),
       Qcat (Qrcons ss1 s) ss2 = Qcat ss1 (Qcons s ss2).
    Proof.
@@ -1946,15 +2042,15 @@ Fixpoint type_of_hfexpr (e : HiF.hfexpr) (tmap: VM.t (ftype * forient)) : option
                     end*)
   end.
   
-Fixpoint stmts_tmap' (tmap : VM.t (ftype * forient)) (ss : HiF.hfstmt_seq): option (VM.t (ftype * forient)) :=
+Fixpoint stmts_tmap (tmap : VM.t (ftype * forient)) (ss : HiF.hfstmt_seq): option (VM.t (ftype * forient)) :=
   match ss with
   | Qnil => Some tmap
-  | Qcons s ss' => match stmt_tmap' tmap s with
-      | Some tmap' => stmts_tmap' tmap' ss'
+  | Qcons s ss' => match stmt_tmap tmap s with
+      | Some tmap' => stmts_tmap tmap' ss'
       | None => None
       end
   end
-  with stmt_tmap' (tmap : VM.t (ftype * forient)) (s : HiF.hfstmt) : option (VM.t (ftype * forient)) :=
+  with stmt_tmap (tmap : VM.t (ftype * forient)) (s : HiF.hfstmt) : option (VM.t (ftype * forient)) :=
   match s with
   | Sskip => Some tmap
   | Sfcnct _ _ => Some tmap
@@ -1974,30 +2070,30 @@ Fixpoint stmts_tmap' (tmap : VM.t (ftype * forient)) (ss : HiF.hfstmt_seq): opti
   | Smem _ _ => None
   | Sinst _ _ => None
   | Swhen cond ss_true ss_false =>
-      match type_of_hfexpr cond tmap, stmts_tmap' tmap ss_true with
-      | Some (exist (Gtyp (Fuint 1)) _), Some tmap_true => stmts_tmap' tmap_true ss_false 
+      match type_of_hfexpr cond tmap, stmts_tmap tmap ss_true with
+      | Some (exist (Gtyp (Fuint 1)) _), Some tmap_true => stmts_tmap tmap_true ss_false 
       | _, _ => None
       end
   end.
 
-Fixpoint ports_tmap' (tmap : VM.t (ftype * forient)) (pp : seq HiF.hfport) : option (VM.t (ftype * forient)) :=
+Fixpoint ports_tmap (tmap : VM.t (ftype * forient)) (pp : seq HiF.hfport) : option (VM.t (ftype * forient)) :=
 (* creates a tmap that contains exactly the types of the ports in pp. *)
   match pp with
   | [::] => Some tmap
   | Finput v t :: pp' => match VM.find v tmap with
           | Some _ => None
-          | None => ports_tmap' (VM.add v (t, Source) tmap) pp'
+          | None => ports_tmap (VM.add v (t, Source) tmap) pp'
           end
   | Foutput v t :: pp' => match VM.find v tmap with
           | Some _ => None
-          | None => ports_tmap' (VM.add v (t, Duplex) tmap) pp'
+          | None => ports_tmap (VM.add v (t, Duplex) tmap) pp'
           end
   end.    
 
 Definition module_tmap (tmap : VM.t (ftype * forient)) (m : HiF.hfmodule) : option (VM.t (ftype * forient)) :=
   match m with
-  | FInmod _ ps ss => match ports_tmap' tmap ps with
-              | Some pmap => stmts_tmap' pmap ss
+  | FInmod _ ps ss => match ports_tmap tmap ps with
+              | Some pmap => stmts_tmap pmap ss
               | None => None
               end
   | _ => None

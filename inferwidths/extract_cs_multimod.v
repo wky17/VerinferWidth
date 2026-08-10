@@ -858,7 +858,7 @@ with stmt_tmap (modplmap : VM.t (seq HiF.hfport)) (tmap : VM.t (ftype * forient)
 Fixpoint modules_tmap (modplmap : VM.t (seq HiF.hfport)) (tmap : VM.t (VM.t (ftype * forient))) (ml : seq HiF.hfmodule) : option (VM.t (VM.t (ftype * forient))) :=
   match ml with
   | nil => Some tmap
-  | FInmod mv ps ss :: tl => match ports_tmap' (VM.empty (ftype * forient)) ps with
+  | FInmod mv ps ss :: tl => match ports_tmap (VM.empty (ftype * forient)) ps with
               | Some pmap => match stmts_tmap modplmap pmap ss with
                   | Some tmap' => modules_tmap modplmap (VM.add mv tmap' tmap) tl
                   | None => None

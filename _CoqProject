@@ -24,5 +24,10 @@ inferWidths/inferWidths_multimod.v
 semantics/Semantics.v
 -Q ./lowertypes LowerTypes
 lowertypes/ExpandConnects_inst.v
+lowertypes/LowerTypes_proof.v
 -Q ./expandwhens ExpandWhens 
 expandwhens/ExpandWhens_inst.v
+expandwhens/ExpandWhens_proof.v
+-Q ./inferresets InferResets 
+inferresets/inferResets.v
+inferresets/inferResets_proof.v
