@@ -121,7 +121,7 @@ Proof.
   (* when *) intro; done.
 Qed.
 
-(*Lemma eval_hfstmts_for_unique_node' ss v e : 
+Lemma eval_hfstmts_for_unique_node' ss v e : 
   Qin (Snode v e) ss -> unique_node_dclr ss -> (forall c ss1 ss2, ~ Qin (Swhen c ss1 ss2) ss) ->
   forall init_s tmap rs s, Sem_HiFP.eval_hfstmts ss (PVM.empty bits) (PVM.empty bits) init_s tmap = Some (rs, s) -> PVM.find v s = Sem_HiFP.eval_hfexpr e init_s tmap.
 Proof.
@@ -139,7 +139,7 @@ Proof.
         move /andP : Hs => [Hv He]. move /eqP : Hv => Hv. move /eqP : He => He. subst var node_e. rewrite Hnode_e; clear Hnode_e.
         unfold unique_node_dclr in Hunique. assert (Hin : Qin (Snode v e) (Qcons (Snode v e) ss)) by (simpl; rewrite eq_refl; rewrite eq_refl //).
         apply Hunique in Hin; clear Hunique. move : Hin => [Hnode [Hcnct Hinvalid]]. 
-        apply eval_hfstmts_unique_ss_find_eq with (v := v) in Heval. rewrite PVM.Lemmas.find_add_eq in Heval. done. apply PVM.M.SE.eq_refl.
+        apply eval_hfstmts_unique_ss_find_eq with (v := v) in Heval. rewrite PVM.Lemmas.find_add_eq in Heval. done. split; apply eq_refl.
         (* node *) simpl in Hnode. intros; apply (Hnode _ e'). rewrite eq_refl; simpl. rewrite eq_refl; simpl; done.
         (* cnct *) intro. specialize (Hcnct e'). move : Hcnct; apply contra_not. intro. simpl; rewrite H //.
         (* invalid *) intros; apply Hinvalid. simpl. done.
@@ -172,16 +172,17 @@ Proof.
             destruct (Sem_HiFP.eval_hfexpr e0 init_s tmap); try discriminate.
             inversion Hevals; subst rs1 ns1; rewrite PVM.Lemmas.find_add_neq //.
             assert (Qin (Snode v0 e0) (Qremove (Snode v e) (Qcons (Snode v0 e0) ss))). simpl; simpl in Hs; rewrite Hs. simpl. rewrite eq_refl. rewrite eq_refl. simpl; done.
-            specialize (Hunique _ _ H).
-            unfold PVM.M.SE.eq. move : Hunique; apply contra_not. intro. move /eqP : H0 => H0; done.
+            specialize (Hunique _ _ H). move : Hunique; apply contra_not; intro.
+            move: H0 => [/eqP H1 /eqP H2]; destruct v; destruct v0; simpl in H1, H2. subst s s0; done.
           * (* cnct *)
             move : Hunique => [_ [Hunique _]].
             destruct v0 as [ref|a|a|a] eqn : Href; try (inversion Hevals; subst rs1 ns1; done).
             destruct (PVM.find ref tmap) as [[gt cmpnt]|] eqn : Hfind; try discriminate.
             specialize (Hunique e0). assert (Hnoteq : ~ hfstmt_eqn (Sfcnct (Eid ref) e0) (Sfcnct (Eid v) e0)). 
               move : Hunique; apply contra_not. simpl; intro. rewrite H orb_true_l //.
-            assert (Hneq : ~ PVM.M.SE.eq v ref). simpl in Hnoteq. rewrite eq_refl andb_true_r in Hnoteq.
-              move : Hnoteq; apply contra_not. intro. unfold PVM.M.SE.eq in H. move /eqP : H => H; subst v; done.
+            assert (Hneq : ~ (fst v == fst ref /\ snd v == snd ref)). simpl in Hnoteq. rewrite eq_refl andb_true_r in Hnoteq.
+              move : Hnoteq; apply contra_not. intro. 
+              move: H => [/eqP H1 /eqP H2]; destruct v; destruct ref; simpl in H1, H2. subst s s0; done.
             destruct cmpnt; destruct (Sem_HiFP.eval_hfexpr e0 init_s tmap); try discriminate.
             1-5,7-8 : inversion Hevals; subst rs1 ns1; rewrite PVM.Lemmas.find_add_neq //.
             inversion Hevals; subst rs1 ns1; done.
@@ -191,7 +192,9 @@ Proof.
             destruct (PVM.find ref tmap) as [[gt cmpnt]|] eqn : Hfind; try discriminate. subst v0. clear Hs.
             assert (Hnoteq : v <> ref). apply Hunique. simpl. rewrite eq_refl orb_true_l //.
             destruct cmpnt; destruct (sizeof_fgtyp gt < length indeterminate_val); inversion Hevals; subst rs1 ns1; try done.
-            1-14 : rewrite PVM.Lemmas.find_add_neq //. 1-14 : unfold PVM.M.SE.eq; move : Hnoteq; apply contra_not; intro; move /eqP : H => H; done.
+            1-14 : rewrite PVM.Lemmas.find_add_neq //. 
+            1-14 : move : Hnoteq; apply contra_not; intro;
+            move: H => [/eqP H1 /eqP H2]; destruct v; destruct ref; simpl in H1, H2; subst s s0; done.
           * (* when *) specialize (Hwhen' c ss1 ss2); simpl in Hwhen'. rewrite eq_refl in Hwhen'; simpl in Hwhen'. 
             specialize (hfstmt_seq_eqn_refl ss1) as Heq. move/eqP : Heq => Heq. specialize (hfstmt_seq_eqP ss1 ss1) as Heq'. apply reflect_iff in Heq'.
             apply Heq' in Heq. rewrite Heq in Hwhen'; simpl in Hwhen'. clear Heq Heq'.
@@ -241,17 +244,22 @@ Proof.
   simpl; intros _ Heval. destruct (PVM.find var init_s); try discriminate. inversion Heval; subst rs s; done.
   (* node *)
   simpl; intros Hneq Heval. destruct (Sem_HiFP.eval_hfexpr node_e init_s tmap); try discriminate. inversion Heval; subst rs s.
-  rewrite PVM.Lemmas.find_add_neq //. unfold PVM.M.SE.eq. move : Hneq; apply contra_not. intro. move /eqP : H => H. done.
+  rewrite PVM.Lemmas.find_add_neq //. move : Hneq; apply contra_not. intro.
+            move: H => [/eqP H1 /eqP H2]; destruct v; destruct var; simpl in H1, H2; subst s s0; done.
   (* cnct *)
   simpl; intros Hneq Heval. destruct ref; try (inversion Heval; subst rs s; done).
   destruct (PVM.find s0 tmap) as [[gt cmpnt]|]; try discriminate. 
   destruct cmpnt; destruct (Sem_HiFP.eval_hfexpr e init_s tmap); try discriminate; try (inversion Heval; subst rs s; try done).
-  1-7 : rewrite PVM.Lemmas.find_add_neq //. 1-7 : unfold PVM.M.SE.eq; move : Hneq; apply contra_not; intro; move /eqP : H => H; done.
+  1-7 : rewrite PVM.Lemmas.find_add_neq //. 
+  1-7 : move : Hneq; apply contra_not; intro;
+            move: H => [/eqP H1 /eqP H2]; destruct v; destruct s0; simpl in H1, H2; subst s s1; done.
   (* invalid *)
   simpl; intros Hneq Heval. destruct ref; try (inversion Heval; subst rs s; done).
   destruct (PVM.find s0 tmap) as [[gt cmpnt]|]; try discriminate. 
   destruct cmpnt; destruct (sizeof_fgtyp gt < length indeterminate_val); try (inversion Heval; subst rs s; try done).
-  1-14 : rewrite PVM.Lemmas.find_add_neq //. 1-14 : unfold PVM.M.SE.eq; move : Hneq; apply contra_not; intro; move /eqP : H => H; done.
+  1-14 : rewrite PVM.Lemmas.find_add_neq //. 
+  1-14 : move : Hneq; apply contra_not; intro;
+            move: H => [/eqP H1 /eqP H2]; destruct v; destruct s0; simpl in H1, H2; subst s s1; done.
   (* when *) intros [Hnode_true [Hcnct_true [Hinvalid_true [Hnode_false [Hcnct_false Hinvalid_false]]]]] Heval. simpl in Heval.
   destruct (Sem_HiFP.eval_hfexpr cond init_s tmap) as [valc|]; try discriminate. destruct (~~ is_zero valc).
   1,2 :move : Heval; apply eval_hfstmts_unique_when_ss_find_eq; try done.
@@ -333,7 +341,7 @@ Proof.
       simpl in Hcnct. simpl in Hinvalid. simpl in Hnode; rewrite eq_refl in Hnode; simpl in Hnode. rewrite eq_refl in Hnode; simpl in Hnode.
       apply (eval_hfstmts_unique_when_ss_find_eq Hnode Hcnct Hinvalid) in Hevals.
       rewrite Hevals. simpl in Heval. destruct (Sem_HiFP.eval_hfexpr e init_s tmap); try discriminate.
-      inversion Heval; subst rs1 ns1. apply PVM.Lemmas.find_add_eq; apply PVM.M.SE.eq_refl.
+      inversion Heval; subst rs1 ns1. apply PVM.Lemmas.find_add_eq. split; apply eq_refl.
     - (* s is in ss *) rewrite orb_false_l in Hin.
       move : Hevals. apply (IH Hin); try (move : Hunique; apply unique_node_dclr_when_subseq). move : Hunique Hs Hin Heval Hfind; clear; intros.
       unfold unique_node_dclr_when in Hunique. apply Qin_with_cond2Qin_when in Hin. assert (Qin_when (Snode v e) (Qcons (Snode var node_e) ss)) by (simpl; rewrite Hin orb_true_r //).
@@ -344,7 +352,8 @@ Proof.
       simpl in Hunique; simpl in Hs; rewrite Hs in Hunique. simpl in Hunique. 
       rewrite eq_refl in Hunique; simpl in Hunique. rewrite eq_refl in Hunique; simpl in Hunique.
       assert (true) by done. apply Hunique in H0.
-      unfold PVM.M.SE.eq. move : H0; apply contra_not. intro. move /eqP : H0 => H0; done.
+      move : H0; apply contra_not. intro. 
+      move: H0 => [/eqP H1 /eqP H2]; destruct v; destruct var; simpl in H1, H2; subst s s0; done.
   + (* cnct *) simpl in Hin.
       move : Hevals. apply (IH Hin); try (move : Hunique; apply unique_node_dclr_when_subseq). 
       move : Hunique Hin Heval Hfind; clear; intros.
@@ -354,7 +363,8 @@ Proof.
       move : Hunique => [_ [Hunique _]]. specialize (Hunique cnct_e). simpl in Hunique. rewrite eq_refl in Hunique; simpl in Hunique.
       destruct cmpnt; destruct (Sem_HiFP.eval_hfexpr cnct_e init_s tmap); try discriminate; 
       inversion Heval; subst rs1 ns1; try done. 1-7 : rewrite PVM.Lemmas.find_add_neq //.
-      1-7 : unfold PVM.M.SE.eq; move : Hunique; apply contra_not; intro; move /eqP : H0 => H0; subst v; rewrite eq_refl; simpl; done.
+      1-7 : move : Hunique; apply contra_not; intro;
+      move: H0 => [/eqP H1 /eqP H2]; destruct v; destruct ref; simpl in H1, H2; subst s s0; rewrite eq_refl; simpl; done.
   + (* invalid *) simpl in Hin.
       move : Hevals. apply (IH Hin); try (move : Hunique; apply unique_node_dclr_when_subseq). 
       move : Hunique Hin Heval Hfind; clear; intros.
@@ -365,7 +375,8 @@ Proof.
       destruct cmpnt; destruct (sizeof_fgtyp gt < length indeterminate_val); 
       try (inversion Heval; subst rs1 ns1; try done). 1-14 : rewrite PVM.Lemmas.find_add_neq //. 
       1-14 : assert (true) by done; apply Hunique in H0.
-      1-14 : unfold PVM.M.SE.eq; move : H0; apply contra_not; intro; move /eqP : H0 => H0; subst v; done.
+      1-14 : move : H0; apply contra_not; intro;
+      move: H0 => [/eqP H1 /eqP H2]; destruct v; destruct ref; simpl in H1, H2; subst s s0; done.
   + (* when *) specialize (eval_hfstmt_for_unique_node _ _ e _ _ _ _ Hfind _ _ Heval); simpl in eval_hfstmt_for_unique_node.
     simpl in Heval; destruct (Sem_HiFP.eval_hfexpr cond init_s tmap) as [valc|] eqn : Hc; try discriminate. 
     destruct (~~ is_zero valc) eqn : Hcond. 
@@ -415,7 +426,7 @@ Proof.
   clear eval_hfstmt_for_unique_node.
   intros rs0 ns0 Hfind rs ns Heval. induction s as [|v0 t|v0 r|v0 m|v0 v1|v0 e0|v0 e0|v0|cond ss_true ss_false]; intros; simpl in Heval; try done.
   move /andP : H => [Hv He]; move /eqP : Hv => Hv; move /eqP : He => He; subst v; subst e. destruct (Sem_HiFP.eval_hfexpr e0 init_s tmap); try discriminate.
-    inversion Heval; subst rs ns. rewrite PVM.Lemmas.find_add_eq //. apply PVM.M.SE.eq_refl.
+    inversion Heval; subst rs ns. rewrite PVM.Lemmas.find_add_eq //.
   destruct (Sem_HiFP.eval_hfexpr cond init_s tmap) as [valc|] eqn : Hcond; try discriminate. move : H => [Hunique_true [Hunique_false Hin]].
   destruct (~~ is_zero valc). 
   1,2 : move : Heval; apply (eval_hfstmts_for_unique_node_helper _ _ _ _ _ Hin); try done.
@@ -446,29 +457,35 @@ Proof.
   - (* reg *)
     simpl; intros. destruct (PVM.find v0 init_s) as [val|]; try discriminate.
     inversion H; inversion H0; subst rs s rs' s'. split; try done. destruct (v == v0) eqn : Heq.
-    move /eqP : Heq => Heq; subst v. rewrite PVM.Lemmas.find_add_eq. rewrite PVM.Lemmas.find_add_eq //. 1,2 : apply PVM.M.SE.eq_refl.
+    move /eqP : Heq => Heq; subst v. rewrite PVM.Lemmas.find_add_eq. rewrite PVM.Lemmas.find_add_eq //. split; apply eq_refl.
     rewrite PVM.Lemmas.find_add_neq. rewrite PVM.Lemmas.find_add_neq. try done. 
-    1,2 : unfold PVM.M.SE.eq; rewrite Heq //. 
+    1,2 : move /negP : Heq => Heq; move : Heq; apply contra_not; intro;
+    move: H1 => [/eqP H1 /eqP H2]; destruct v; destruct v0; simpl in H1, H2; subst s s0; done.
   - (* node *)
     simpl; intros. destruct (Sem_HiFP.eval_hfexpr e0 init_s tmap) as [val|]; try discriminate.
     inversion H; inversion H0; subst rs s rs' s'. split; try done. destruct (v == v0) eqn : Heq.
-    move /eqP : Heq => Heq; subst v. rewrite PVM.Lemmas.find_add_eq. rewrite PVM.Lemmas.find_add_eq //. 1,2 : apply PVM.M.SE.eq_refl.
+    move /eqP : Heq => Heq; subst v. rewrite PVM.Lemmas.find_add_eq. rewrite PVM.Lemmas.find_add_eq //. split; apply eq_refl.
     rewrite PVM.Lemmas.find_add_neq. rewrite PVM.Lemmas.find_add_neq. try done. 
-    1,2 : unfold PVM.M.SE.eq; rewrite Heq //. 
+    1,2 : move /negP : Heq => Heq; move : Heq; apply contra_not; intro;
+    move: H1 => [/eqP H1 /eqP H2]; destruct v; destruct v0; simpl in H1, H2; subst s s0; done.
   - (* cnct *)
     simpl; intros. destruct v0; try (inversion H; inversion H0; subst rs s rs' s'; split; try done).
     destruct (PVM.find s0 tmap) as [[gt cmpnt]|]; try discriminate. destruct cmpnt; destruct (Sem_HiFP.eval_hfexpr e0 init_s tmap); try discriminate;
     inversion H; inversion H0; subst rs s rs' s'; clear H H0; try (split; try done).
     1-8 : destruct (v == s0) eqn : Heq.
-    1,3,5,7,9,11,13,15 : move /eqP : Heq => Heq; subst v; rewrite PVM.Lemmas.find_add_eq; try apply PVM.M.SE.eq_refl; rewrite PVM.Lemmas.find_add_eq //; try apply PVM.M.SE.eq_refl.
-    1-8 : rewrite PVM.Lemmas.find_add_neq; unfold PVM.M.SE.eq; try rewrite Heq; try done; rewrite PVM.Lemmas.find_add_neq; unfold PVM.M.SE.eq; try rewrite Heq; try done.
+    1,3,5,7,9,11,13,15 : move /eqP : Heq => Heq; subst v; rewrite PVM.Lemmas.find_add_eq; try (split; apply eq_refl); rewrite PVM.Lemmas.find_add_eq //; try (split; apply eq_refl).
+    1-8 : intro; rewrite PVM.Lemmas.find_add_neq; try rewrite H; try rewrite PVM.Lemmas.find_add_neq //.
+    1-16 : move /negP : Heq => Heq; move : Heq; apply contra_not; intro;
+    move: H0 => [/eqP H1 /eqP H2]; destruct v; destruct s0; simpl in H1, H2; subst s s0; done.
   - (* invalid *)
     simpl; intros. destruct v0; try (inversion H; inversion H0; subst rs s rs' s'; split; try done).
     destruct (PVM.find s0 tmap) as [[gt cmpnt]|]; try discriminate. destruct cmpnt; destruct (sizeof_fgtyp gt < length indeterminate_val);
     inversion H; inversion H0; subst rs s rs' s'; clear H H0; try (split; try done).
     1-16 : destruct (v == s0) eqn : Heq.
-    1,3,5,7,9,11,13,15,17,19,21,23,25,27,29,31 : move /eqP : Heq => Heq; subst v; rewrite PVM.Lemmas.find_add_eq; try apply PVM.M.SE.eq_refl; rewrite PVM.Lemmas.find_add_eq //; try apply PVM.M.SE.eq_refl.
-    1-16 : rewrite PVM.Lemmas.find_add_neq; unfold PVM.M.SE.eq; try rewrite Heq; try done; rewrite PVM.Lemmas.find_add_neq; unfold PVM.M.SE.eq; try rewrite Heq; try done.
+    1,3,5,7,9,11,13,15,17,19,21,23,25,27,29,31 : move /eqP : Heq => Heq; subst v; rewrite PVM.Lemmas.find_add_eq; try (split; apply eq_refl); rewrite PVM.Lemmas.find_add_eq //; try (split; apply eq_refl).
+    1-16 : intro; rewrite PVM.Lemmas.find_add_neq; try rewrite H; try rewrite PVM.Lemmas.find_add_neq //.
+    1-32 : move /negP : Heq => Heq; move : Heq; apply contra_not; intro;
+    move: H0 => [/eqP H1 /eqP H2]; destruct v; destruct s0; simpl in H1, H2; subst s s0; done.
   - (* when *)
     simpl; intros. destruct (Sem_HiFP.eval_hfexpr c init_s tmap); try discriminate. destruct (~~ is_zero b).
     1,2 : move : H H0; apply eval_hfstmts_find_eq2find_eq.
@@ -529,8 +546,9 @@ Proof.
     destruct (Sem_HiFP.eval_hfexpr node_e init_s tmap); try discriminate.
     move : Heval'; apply IH with (temp_rs := temp_rs) (temp_s := PVM.add var b temp_s) (rs := rs); try done. intros; apply Hdclr; simpl; rewrite H orb_true_r //.
     intros; apply (Hneq v' e'); simpl; rewrite H orb_true_r; done.
-    rewrite Htemp HiFP.PCELemmas.find_add_neq //. assert (v <> var). specialize (Hneq var node_e). apply Hneq. simpl. rewrite eq_refl. rewrite eq_refl. simpl; done.
-    unfold PVM.M.SE.eq. move : H; apply contra_not. intro. move /eqP : H => H. done.
+    rewrite Htemp PVM.Lemmas.find_add_neq //. assert (v <> var). specialize (Hneq var node_e). apply Hneq. simpl. rewrite eq_refl. rewrite eq_refl. simpl; done.
+    move : H; apply contra_not. intro.
+    move: H => [/eqP H1 /eqP H2]; destruct v; destruct var; simpl in H1, H2; subst s1 s0; done.
     (* cnct *)
     assert (Qin (Sfcnct ref e) (Qcons (Sfcnct ref e) ss)). simpl. rewrite eq_refl. rewrite eq_refl //. apply Hdclr in H. simpl in H. done.
     (* invalid *)
@@ -572,8 +590,9 @@ Proof.
     destruct (Sem_HiFP.eval_hfexpr node_e init_s tmap); try discriminate.
     move : Heval'; apply IH with (temp_rs := temp_rs) (temp_s := PVM.add var b temp_s) (rs := rs); try done. intros; apply Hdclr; simpl; rewrite H orb_true_r //.
     intros; apply (Hneq v' e'); simpl; rewrite H orb_true_r; done.
-    rewrite Htemp HiFP.PCELemmas.find_add_neq //. assert (v <> var). specialize (Hneq var node_e). apply Hneq. simpl. rewrite eq_refl. rewrite eq_refl. simpl; done.
-    unfold PVM.M.SE.eq. move : H; apply contra_not. intro. move /eqP : H => H. done.
+    rewrite Htemp PVM.Lemmas.find_add_neq //. assert (v <> var). specialize (Hneq var node_e). apply Hneq. simpl. rewrite eq_refl. rewrite eq_refl. simpl; done.
+    move : H; apply contra_not. intro. 
+    move: H => [/eqP H1 /eqP H2]; destruct v; destruct var; simpl in H1, H2; subst s1 s0; done.
     (* cnct *)
     assert (Qin (Sfcnct ref e) (Qcons (Sfcnct ref e) ss)). simpl. rewrite eq_refl. rewrite eq_refl //. apply Hdclr in H. simpl in H. done.
     (* invalid *)
@@ -636,7 +655,7 @@ Proof.
   rewrite Hexists. apply (IH _ _ Hevals).
 Qed.
 
-Lemma eval_hfstmt_cnct_no_order s1 s2 rs0 ns0 rs1 ns1 rs2 ns2 init_s tmap rs ns rs' ns' : 
+(*Lemma eval_hfstmt_cnct_no_order s1 s2 rs0 ns0 rs1 ns1 rs2 ns2 init_s tmap rs ns rs' ns' : 
   match s1, s2 with
   | Sinvalid v1, Sinvalid v2 
   | Sinvalid v1, Sfcnct v2 _
@@ -652,7 +671,7 @@ Proof.
   case Hs1 : s1 => [||||||v1 e1|v1|c1 true_ss1 false_ss1]; subst s1; try done;
   case Hs2 : s2 => [||||||v2 e2|v2|c2 true_ss2 false_ss2]; subst s2; try done; simpl in *; intros Heval11 Heval12 Heval21 Heval22 v.
   destruct v1; destruct v2; try (inversion Heval11; inversion Heval12; inversion Heval21; inversion Heval22; subst rs1 ns1 rs ns rs2 ns2 rs' ns'; try done).
-  assert (Hneq' : ~ PVM.SE.eq s s0) by (move : Hneq; apply contra_not; intro; unfold PVM.SE.eq in H; move /eqP : H => H; subst s; done).
+  (*assert (Hneq' : ~ PVM.SE.eq s s0) by (move : Hneq; apply contra_not; intro; unfold PVM.SE.eq in H; move /eqP : H => H; subst s; done).*)
   - destruct (PVM.find s tmap) as [[gt0 cmpnt0]|]; try discriminate; destruct (PVM.find s0 tmap) as [[gt1 cmpnt1]|]; try discriminate.
     destruct cmpnt0; destruct cmpnt1; destruct (Sem_HiFP.eval_hfexpr e1 init_s tmap); destruct (Sem_HiFP.eval_hfexpr e2 init_s tmap); 
     try discriminate; try (inversion Heval11; inversion Heval12; inversion Heval21; inversion Heval22; subst rs1 ns1 rs ns rs2 ns2 rs' ns'; try done; try (split; try done)).
