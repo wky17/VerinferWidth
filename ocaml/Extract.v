@@ -2,9 +2,14 @@ From Coq Require Import Extraction ExtrOcamlBasic ExtrOcamlString.
 From Coq Require Import ExtrOcamlIntConv ExtrOcamlNatInt ExtrOcamlZInt.
 From Coq Require Import Arith List.
 From mathcomp Require Import all_ssreflect.
-Require Import Solver.HiFirrtl Solver.constraints Solver.floyd_sc Solver.scc Solver.branch_and_bound
-Solver.TopoSort Solver.extract_cs Solver.inferWidths_exp Solver.extract_cs_multimod Solver.inferWidths_multimod.
 From mathcomp.tarjan Require Import kosaraju.
+From firrtl Require Import Env LoFirrtl HiEnv HiFirrtl.
+From Solver Require Import constraints floyd_sc scc branch_and_bound graph TopoSort
+                   extract_cs extract_cswithmin inferWidths inferWidths_exp
+                   extract_cs_multimod inferWidths_multimod.
+From InferResets Require Import inferResets.
+From ExpandWhens Require Import ExpandWhens_inst.
+From LowerTypes Require Import ExpandConnects_inst.
 
 Extraction Language OCaml.
 Cd "ocaml/extraction".
@@ -16,5 +21,7 @@ Separate Extraction
          constraints.split_constraints' inferWidths.solve_alg_check
          extract_cs_multimod.extract_constraints_c extract_cs_multimod.update_tmap extract_cs_multimod.InferWidths_trans_c extract_cs_multimod.circuit_tmap
          inferWidths_multimod.extract_constraints_c inferWidths_multimod.solve_alg_check inferWidths_multimod.smaller_valuation inferWidths_multimod.update_tmap inferWidths_multimod.InferWidths_trans_c
-         inferWidths_multimod.remove_power1 inferWidths_multimod.remove_power_min.
+         inferWidths_multimod.remove_power1 inferWidths_multimod.remove_power_min
+         inferResets.InferResets_fun expandWhens expandconnects preprocess_subaccess
+         .
 Cd "../..".

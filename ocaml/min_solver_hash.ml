@@ -17,8 +17,8 @@ let rec pl2btyp = function
 | [] -> Fnil
 | h :: tl ->
   (match h with
-   | Finput (v, t0) -> Fflips (v, Nflip, t0, (pl2btyp tl))
-   | Foutput (v, t0) -> Fflips (v, Flipped, t0, (pl2btyp tl)))
+   | Finput (v, t0) -> Fflips (((Obj.magic v) : int), Nflip, t0, (pl2btyp tl))
+   | Foutput (v, t0) -> Fflips (((Obj.magic v) : int), Flipped, t0, (pl2btyp tl)))
 
 (** val add_pairs :
     'a1 -> 'a2 list -> ('a1 * 'a2) list -> ('a1 * 'a2) list **)
@@ -60,7 +60,7 @@ end
 let rec type_of_ref r tmap =
   match r with
   | Eid v ->
-    (match H.find v tmap with
+    (match H.find ((Obj.magic v) : int) tmap with
      | Some p -> let (ft, _) = p in Some ft
      | None -> None)
   | Esubfield (r0, v) ->
@@ -71,7 +71,7 @@ let rec type_of_ref r tmap =
           let rec aux = function
           | Fnil -> None
           | Fflips (v', _, t0, fxs) ->
-            if v = v'   (* 去掉 Obj.magic *)
+            if (Obj.magic v : int) = (Obj.magic v' : int)
             then Some t0
             else aux fxs
           in aux fs
@@ -655,38 +655,38 @@ let rec type_of_hfexpr e tmap =
      | None -> None)
 
 (** val stmts_tmap : ... -> ... option **)
-let rec stmts_tmap modplmap tmap = function
+let rec stmts_tmap (modplmap : hfport list H.t) tmap = function
 | Qnil -> Some tmap
 | Qcons (s, ss') ->
   match stmt_tmap modplmap tmap s with
   | Some tmap' -> stmts_tmap modplmap tmap' ss'
   | None -> None
 
-and stmt_tmap modplmap tmap = function
+and stmt_tmap (modplmap : hfport list H.t) tmap = function
 | Swire (v, t0) ->
-  (match H.find v tmap with
+  (match H.find ((Obj.magic v) : int) tmap with
    | Some _ -> None
-   | None -> H.add v (t0, Duplex) tmap; Some tmap)
+   | None -> H.add ((Obj.magic v) : int) (t0, Duplex) tmap; Some tmap)
 | Sreg (v, reg) ->
-  (match H.find v tmap with
+  (match H.find ((Obj.magic v) : int) tmap with
    | Some _ -> None
    | None ->
      match type_of_hfexpr reg.clock tmap with
-     | Some _ -> H.add v (reg.coq_type, Duplex) tmap; Some tmap
+     | Some _ -> H.add ((Obj.magic v) : int) (reg.coq_type, Duplex) tmap; Some tmap
      | None -> None)
-| Smem (v, m) -> H.add v (m.data_type, Duplex) tmap; Some tmap
+| Smem (v, m) -> H.add ((Obj.magic v) : int) (m.data_type, Duplex) tmap; Some tmap
 | Sinst (v, mv) ->
-  (match H.find mv modplmap with
+  (match H.find ((Obj.magic mv) : int) modplmap with
    | Some pl ->
      let t0 = Btyp (pl2btyp pl) in
-     H.add v (t0, Duplex) tmap; Some tmap
+     H.add ((Obj.magic v) : int) (t0, Duplex) tmap; Some tmap
    | None -> None)
 | Snode (v, expr) ->
-  (match H.find v tmap with
+  (match H.find ((Obj.magic v) : int) tmap with
    | Some _ -> None
    | None ->
      match type_of_hfexpr expr tmap with
-     | Some f -> H.add v ((make_ftype_implicit f), Source) tmap; Some tmap
+     | Some f -> H.add ((Obj.magic v) : int) ((make_ftype_implicit f), Source) tmap; Some tmap
      | None -> None)
 | Swhen (cond, ss_true, ss_false) ->
   (match type_of_hfexpr cond tmap with
@@ -714,15 +714,15 @@ let rec ports_tmap tmap = function
 | h :: pp' ->
   match h with
   | Finput (v, t0) ->
-    (match H.find v tmap with
+    (match H.find ((Obj.magic v) : int) tmap with
      | Some _ -> None
-     | None -> H.add v (t0, Source) tmap; ports_tmap tmap pp')
+     | None -> H.add ((Obj.magic v) : int) (t0, Source) tmap; ports_tmap tmap pp')
   | Foutput (v, t0) ->
-    (match H.find v tmap with
+    (match H.find ((Obj.magic v) : int) tmap with
      | Some _ -> None
-     | None -> H.add v (t0, Duplex) tmap; ports_tmap tmap pp')
+     | None -> H.add ((Obj.magic v) : int) (t0, Duplex) tmap; ports_tmap tmap pp')
 
-let rec modules_tmap modplmap tmap = function
+let rec modules_tmap (modplmap : hfport list H.t) tmap = function
 | [] -> Some tmap
 | h :: tl ->
   match h with
@@ -731,7 +731,7 @@ let rec modules_tmap modplmap tmap = function
      | Some pmap ->
        (match stmts_tmap modplmap pmap ss with
         | Some tmap' ->
-            H.add mv tmap' tmap;
+            H.add ((Obj.magic mv) : int) tmap' tmap;
             modules_tmap modplmap tmap tl
         | None -> None)
      | None -> None)
@@ -742,8 +742,8 @@ let circuit_tmap = function
   let modplmap =
     Stdlib.List.fold_left (fun acc m ->
       match m with
-      | FInmod (mv, ps, _) -> H.add mv ps acc; acc
-      | FExmod (mv, ps, _) -> H.add mv ps acc; acc) (H.empty ()) ml
+      | FInmod (mv, ps, _) -> H.add ((Obj.magic mv) : int) ps acc; acc
+      | FExmod (mv, ps, _) -> H.add ((Obj.magic mv) : int) ps acc; acc) (H.empty ()) ml
   in
   modules_tmap modplmap (H.empty ()) ml
 
@@ -869,9 +869,10 @@ let rec offset_of_subfield_b ft fid n =
   match ft with
   | Fnil -> None
   | Fflips (v, _, t0, fs) ->
-    if fid = v
+    if fid = ((Obj.magic v) : int)
     then Some n
     else offset_of_subfield_b fs fid (n + (size_of_ftype t0))
+
 
 (** val offset_ref : href -> (ftype * forient) H.t -> int option **)
 
@@ -884,7 +885,7 @@ let rec offset_ref r tmap =
        (match type_of_ref v tmap with
         | Some f0 ->
           (match f0 with
-           | Btyp ft -> offset_of_subfield_b ft f n   (* 直接使用 f，去掉 Obj.magic *)
+           | Btyp ft -> offset_of_subfield_b ft ((Obj.magic f) : int) n
            | _ -> None)
         | None -> None)
      | None -> None)
@@ -904,14 +905,14 @@ let rec base_id = function
 let ref2pv r tmap =
   let base_v = base_id r in
   (match offset_ref r tmap with
-   | Some os -> Some (base_v, os)   (* N.of_nat -> N.of_int *)
+   | Some os -> Some (((Obj.magic base_v) : int), os)   (* N.of_nat -> N.of_int *)
    | None -> None)
 
 (** val ref2pv_mod :
     href -> int -> int H.t -> (ftype * forient) H.t H.t -> (int * (int * int)) option **)
 let ref2pv_mod r mv instmap tmap =
   let base_ref = base_id r in
-  (match H.find base_ref instmap with
+  (match H.find ((Obj.magic base_ref) : int) instmap with
    | Some inst_mv ->
      (match find_ref_inside base_ref r with
       | Some inst_ref ->
@@ -2209,7 +2210,7 @@ let rec extract_constraint_ss mv ss mod_tmap tmap c1map cs2 cs_min instmap =
 and extract_constraint_s mv s mod_tmap tmap c1map cs2 cs_min instmap =
   match s with
   | Sreg (v, reg) ->
-    let pv_reg = (mv, (v, 0)) in
+    let pv_reg = (mv, (((Obj.magic v) : int), 0)) in
     (match reg.coq_type with
      | Gtyp gt ->
        if not_implicit gt
@@ -2257,13 +2258,13 @@ and extract_constraint_s mv s mod_tmap tmap c1map cs2 cs_min instmap =
               | None -> None)
            | _ -> None)))
   | Sinst (inst_v, inst_mv) ->
-    H.add inst_v inst_mv instmap;
+    H.add ((Obj.magic inst_v) : int) ((Obj.magic inst_mv) : int) instmap;
     Some (((c1map, cs2), cs_min), instmap)
   | Snode (v, e) ->
-    let pv_node = (mv, (v, 0)) in
+    let pv_node = (mv, (((Obj.magic v) : int), 0)) in
     (match H.find mv tmap with
      | Some mod_tmap0 ->
-       (match H.find v mod_tmap0 with
+       (match H.find ((Obj.magic v) : int) mod_tmap0 with
         | Some p ->
           let (ft, _) = p in
           (match ft with
@@ -2382,9 +2383,9 @@ let rec extract_constraint_ml ml tmap c1map cs2 cs_min =
   | y :: tl ->
     (match y with
      | FInmod (mv, _, ss) ->
-       (match H.find mv tmap with
+       (match H.find ((Obj.magic mv) : int) tmap with
         | Some mod_tmap ->
-          (match extract_constraint_ss mv ss mod_tmap tmap c1map cs2 cs_min
+          (match extract_constraint_ss ((Obj.magic mv) : int) ss mod_tmap tmap c1map cs2 cs_min
                    (H.empty ()) with
            | Some p ->
              let (p0, _) = p in
@@ -2592,13 +2593,13 @@ let coq_InferWidths_transp p tmap =
   | Finput (v, t0) ->
     if ftype_not_implicit t0
     then Some p
-    else (match H.find v tmap with
+    else (match H.find ((Obj.magic v) : int) tmap with
           | Some p0 -> let (ft, _) = p0 in Some (Finput (v, ft))
           | None -> None)
   | Foutput (v, t0) ->
     if ftype_not_implicit t0
     then Some p
-    else (match H.find v tmap with
+    else (match H.find ((Obj.magic v) : int) tmap with
           | Some p0 -> let (ft, _) = p0 in Some (Foutput (v, ft))
           | None -> None)
 
@@ -2618,13 +2619,13 @@ let rec my_coq_InferWidths_transs s tmap res =
   | HiFirrtl.Swire (v, t0) ->
     if HiEnv.ftype_not_implicit t0
     then Some (HiFirrtl.Qcons (s, res))
-    else (match H.find v tmap with
+    else (match H.find ((Obj.magic v) : int) tmap with
           | Some p -> let (ft, _) = p in Some (HiFirrtl.Qcons (Swire (v, ft), res))
           | None -> None)
   | Sreg (v, r) ->
     if HiEnv.ftype_not_implicit r.coq_type
     then Some (HiFirrtl.Qcons (s, res))
-    else (match H.find v tmap with
+    else (match H.find ((Obj.magic v) : int) tmap with
           | Some p ->
             let (ft, _) = p in
             Some (HiFirrtl.Qcons (Sreg (v, { coq_type = ft; clock = r.clock; reset =
@@ -2651,7 +2652,7 @@ and my_coq_InferWidths_transss sts tmap res =
 let my_coq_InferWidths_trans_m m tmap =
   match m with
   | HiFirrtl.FInmod (mv, ps, ss) ->
-    (match H.find mv tmap with
+    (match H.find ((Obj.magic mv) : int) tmap with
      | Some mod_tmap ->
        (match my_coq_InferWidths_transps ps mod_tmap with
         | Some nps ->
@@ -2698,7 +2699,7 @@ let my_coq_InferWidths_fun c =
       | None -> None)
   | None -> None
 
-let print_iw_fir in_file hif_ast = 
+(*let print_iw_fir in_file hif_ast = 
   let oc_fir = open_out (process_string in_file "_iw.fir") in 
   (*Ast.pp_fcircuit stdout hif_ast;*)
   let ((modmap, _), map) = Transhiast_without_inline.mapcir hif_ast in 
@@ -2707,6 +2708,8 @@ let print_iw_fir in_file hif_ast =
   (match my_coq_InferWidths_fun fcir with
   | Some (newc, newtm) -> (*Printfir.pp_fcircuit_fir oc_fir newc; Printfir.pp_fcircuit_fir stdout newc; close_out oc_fir;*)
     printf "%s width inference is finished\n" in_file;
+    Printfir.pp_fcircuit_fir stdout newc;
+    (*
     let string_cir = Transfast_hash.trans_cir hif_ast modmap map newtm in 
-    Ast.pp_fcircuit oc_fir string_cir; close_out oc_fir
-  | _ -> output_string stdout ("cannot be inferred\n"))
+    Ast.pp_fcircuit oc_fir string_cir; close_out oc_fir*)
+  | _ -> output_string stdout ("cannot be inferred\n"))*)

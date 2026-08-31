@@ -2,7 +2,7 @@ From HB Require Import structures.
 From Coq Require Import ZArith Arith List Ascii String Lia FMaps.
 From mathcomp Require Import all_ssreflect.
 From Lib Require Import SsrOrder Var.
-From firrtl Require Import Env LoFirrtl HiEnv HiFirrtl.
+From firrtl Require Import Env HiEnv LoFirrtl HiFirrtl.
 From Solver Require Import extract_cs_multimod inferWidths_multimod.
 From mathcomp.tarjan Require Import kosaraju.
 From Semantics Require Import Semantics.
@@ -153,7 +153,7 @@ with reset_graph_s (mv : VM.key) (s : HiF.hfstmt) (mod_tmap : VM.t (ftype * fori
       | _, _, _, _ => (instmap, g) 
       end
   | Swhen c ss_true ss_false => let (instmap', g') := reset_graph_ss mv ss_true mod_tmap tmap instmap g in
-    reset_graph_ss mv ss_true mod_tmap tmap instmap' g'
+    reset_graph_ss mv ss_false mod_tmap tmap instmap' g'
   | _ => (instmap, g) 
   end.
 
@@ -260,7 +260,7 @@ Fixpoint update_rst_tmap (hd : list (TripVar.t * fgtyp)) (rst : fgtyp) (tmap : V
 Definition solve_reset_scc (hd : list (TripVar.t * fgtyp)) (tmap : VM.t (VM.t (ftype * forient))) : option (VM.t (VM.t (ftype * forient))) := 
 match hd with
 | nil => None
-| [:: v] => None
+| [:: v] => Some tmap
 | _ => match find_common_reset hd None with
       | Some rst => (* 把hd中的ref都改为类型为Gtyp rst *)
         update_rst_tmap hd rst tmap
@@ -278,14 +278,17 @@ match res with
     end
 end.
 
-Definition InferResets_fun : option HiF.hfcircuit :=
+Definition InferResets_fun : option (HiF.hfcircuit * VM.t (VM.t (ftype * forient))) :=
   match circuit_tmap c with
   | Some tmap =>
     let dpdcg := reset_graph_c c tmap in 
     let res := rev (map rev (kosaraju dpdcg)) in
     let res' := map (map (@finTripVar2TripVar c)) res in
     match solve_reset_alg res' tmap with
-    | Some newtm => InferWidths_trans_c c newtm
+    | Some newtm => match InferWidths_trans_c c newtm with
+        | Some newc => Some (newc, newtm)
+        | _ => None
+        end
     | _ => None
     end
   | _ => None
@@ -293,7 +296,7 @@ Definition InferResets_fun : option HiF.hfcircuit :=
 
 End solve_reset.
 
-Definition same_fgtyp (ls : list (TripVar.t * fgtyp)) newtm : Prop := 
+(*Definition same_fgtyp (ls : list (TripVar.t * fgtyp)) newtm : Prop := 
   forall (hd : TripVar.t) (gt gt0 : fgtyp), List.hd_error ls = Some (hd, gt0) -> find_tv_tmap hd newtm = Some gt -> 
   forall tv gt1, List.In (tv, gt1) ls -> find_tv_tmap tv newtm = Some gt.
 
@@ -646,4 +649,4 @@ Proof.
     move : Hinfer hd Hin; apply IH. 
       simpl in Hnodup. rewrite constraints.split_app in Hnodup; simpl in Hnodup.
       apply constraints.NoDup_app_remove_l in Hnodup; done.
-Qed.
+Qed.*)

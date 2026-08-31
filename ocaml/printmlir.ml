@@ -284,7 +284,7 @@ let rec pp_stmt_mlir out eflag tmap s =
                                                fprintf out "firrtl.connect %s, %%e%d : !firrtl." eflag_v eflag; pp_ftype_mlir out tv; fprintf out "\n"; eflag1
                                   | _, _ -> fprintf out "wrong variable name\n"; eflag + 1)
   | HiFirrtl.Snode (v, e) -> let (eflag0, eflag1) = pp_expr_mlir out eflag tmap e in 
-                                  (match VM.find v tmap with
+                                  (match VM.find (Obj.magic v) tmap with
                                   | Some (tv, _) -> fprintf out "\n%%%d = firrtl.node %s : !firrtl." (Obj.magic v) eflag0; pp_ftype_mlir out tv; eflag1
                                   | _ -> fprintf out "wrong variable name\n"; eflag1)
   | HiFirrtl.Sreg (v, r) ->

@@ -58,3 +58,6 @@ ocaml_try/extraction
 */output.txt
 .vscode
 *.json
+*.out
+*.txt
+*.DS_Store

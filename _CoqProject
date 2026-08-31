@@ -31,3 +31,7 @@ expandwhens/ExpandWhens_proof.v
 -Q ./inferresets InferResets 
 inferresets/inferResets.v
 inferresets/inferResets_proof.v
+-Q ./lowermatches LowerMatches
+lowermatches/LowerMatches.v
+-Q ./ocaml Extract
+ocaml/Extract.v
