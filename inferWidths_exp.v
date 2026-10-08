@@ -175,15 +175,50 @@ Proof.
 Qed.
 
 Lemma NoDupA_NoDup l : NoDupA (PVM.eq_key (elt:=nat)) l -> NoDup l.
-Admitted.
+Proof.
+  induction l as [| x l IH]; intros H.
+  - constructor.
+  - inversion H as [|x' l' Hnin Hnd]; subst.
+    constructor.
+    + intro Hin. apply Hnin. rewrite InA_alt.
+      exists x. split; [unfold PVM.eq_key; simpl; split; rewrite eqxx // | exact Hin].
+    + apply IH; exact Hnd.
+Qed.
 
 Lemma key_NoDup : forall B (v : PVM.t B), NoDup (List.split (PVM.elements v)).1.
 Proof.
-Admitted.
+  intros B v.
+  assert (Hsplit : forall (l : list (PVM.key * B)), (List.split l).1 = map fst l).
+  { induction l as [|[k b] t IH]; [reflexivity|].
+    simpl. case E : (List.split t) => [ls rs].
+    rewrite E in IH. simpl in IH. simpl. rewrite IH. reflexivity. }
+  rewrite Hsplit.
+  assert (Hnd : NoDupA (PVM.eq_key (elt:=B)) (PVM.elements v)) by apply PVM.elements_3w.
+  remember (PVM.elements v) as els eqn:E; clear v E Hsplit.
+  revert Hnd.
+  induction els as [|[k b] t IH]; intros Hnd.
+  - constructor.
+  - inversion Hnd as [|x t' Hnin Hnd']; subst. simpl.
+    constructor.
+    + intro Hin. apply in_map_iff in Hin. destruct Hin as [[k' b'] [Hfk Hin']].
+      simpl in Hfk.
+      apply Hnin. rewrite InA_alt. exists (k', b').
+      split; [rewrite -Hfk; change (PVM.eq_key ((k,b)) ((k,b'))) with (PVM.Raw.Proofs.PX.eqk ((k,b)) ((k,b'))); unfold PVM.Raw.Proofs.PX.eqk; simpl; split; rewrite !eqxx // | exact Hin'].
+    + apply IH; exact Hnd'.
+Qed.
 
 Lemma key_in_elements [A : Type] (m : PVM.t A) v : List.In v (List.split (PVM.elements m)).1 <-> exists val, List.In (v, val) (PVM.elements m).
 Proof.
-Admitted.
+  intros.
+  assert (Hsplit : forall (l : list (PVM.key * A)), (List.split l).1 = map fst l).
+  { induction l as [|[k b] t IH]; [reflexivity|].
+    simpl. case E : (List.split t) => [ls rs].
+    rewrite E in IH. simpl in IH. simpl. rewrite IH. reflexivity. }
+  rewrite Hsplit. split.
+  - intro Hin. apply in_map_iff in Hin. destruct Hin as [[k' b'] [Hfk Hin']].
+    simpl in Hfk. subst k'. exists b'. exact Hin'.
+  - intros [val Hin]. apply in_map_iff. exists (v, val). split; [reflexivity | exact Hin].
+Qed.
 
 Lemma forallb2satisfies_all_constraint1 values: forall cs, forallb (satisfies_constraint1 values) cs <-> Solver.constraints.satisfies_all_constraint1 values cs.
 Proof.
