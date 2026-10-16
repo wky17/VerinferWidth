@@ -51,7 +51,11 @@ Fixpoint build_dependency_graph (constraints : list Constraint1) : Graph :=
   | c0 :: cs =>
       let graph := build_dependency_graph cs in
       fold_left (fun g (coef_var : nat * ProdVar.t) =>
-                   let (_, xi) := coef_var in add_dependency g (ProdVar2finProdVar c xi) (ProdVar2finProdVar c (lhs_var1 c0)))
+                   let (_, xi) := coef_var in
+                   match ProdVar2finProdVar c xi, ProdVar2finProdVar c (lhs_var1 c0) with
+                   | Some f, Some t => add_dependency g f t
+                   | _, _ => g
+                   end)
                 (rhs_terms1 c0)
                 graph
   end.

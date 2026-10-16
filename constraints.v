@@ -1,5 +1,6 @@
 From mathcomp Require Import all_ssreflect.
 Require Import Coq.Lists.List.
+Require Import Coq.Lists.SetoidList.
 Require Import Coq.Arith.Arith.
 Require Import Coq.ZArith.ZArith.
 Require Import Coq.Bool.Bool.
@@ -574,11 +575,113 @@ Proof.
   move : H1; apply H. apply NoDup_cons_iff in H0. exact H0.2.
 Qed.
 
-Axiom elements_add : forall [A : Type] bounds, forall v (a b : A), PVM.find v bounds = Some a -> 
-  exists l0 l1, l0 ++ (v, a) :: l1 = PVM.elements bounds /\ l0 ++ (v, b) :: l1 = PVM.elements (PVM.add v b bounds).
+Lemma eqlistA_eq : forall (elt:Type) (l : list (PVM.key * elt)) l',
+  eqlistA (PVM.Lemmas.O.eqke (elt:=elt)) l l' -> l = l'.
+Proof.
+  intros elt l.
+  induction l as [|p l IH]; intros l' H.
+  - inversion H; reflexivity.
+  - destruct l' as [|q l'']; [inversion H|].
+    inversion H as [| x x' ll ll' Hxy Hr].
+    unfold PVM.Lemmas.O.eqke in Hxy; simpl in Hxy.
+    destruct Hxy as [[Hk1 Hk2] Hv].
+    unfold is_true in Hk1, Hk2.
+    destruct p as [[p1 p2] pv]. destruct q as [[q1 q2] qv].
+    simpl in Hk1, Hk2, Hv |- *.
+    revert Hk1. revert Hk2. case eqP; case eqP;
+      intros Ha; intros Hb; intros E1; intros E2;
+      try discriminate E1; try discriminate E2;
+      rewrite ? Ha; rewrite ? Hb; rewrite Hv; f_equal; apply IH; exact Hr.
+Qed.
 
-Axiom elements_add' : forall [A : Type] bounds v (a : A), PVM.find v bounds = None -> 
+Lemma eqlistA_sym' : forall (elt:Type) (l l' : list (PVM.key * elt)),
+  eqlistA (PVM.Lemmas.O.eqke (elt:=elt)) l l' ->
+  eqlistA (PVM.Lemmas.O.eqke (elt:=elt)) l' l.
+Proof.
+  intros elt l l' H. induction H.
+  - constructor.
+  - constructor; [ symmetry; exact H | exact IHeqlistA ].
+Qed.
+
+Lemma gtb_key : forall (A:Type) k (e e' : A) q, PVM.Lemmas.gtb (elt:=A) (k,e) q = PVM.Lemmas.gtb (elt:=A) (k,e') q.
+Proof.
+  intros A k e e' [q1 q2].
+  unfold PVM.Lemmas.gtb. simpl.
+  destruct (ProdVar.compare k q1); reflexivity.
+Qed.
+
+Lemma elements_ge_key : forall (A:Type) k (e e' : A) m,
+  PVM.Lemmas.elements_ge (elt:=A) (k,e) m = PVM.Lemmas.elements_ge (elt:=A) (k,e') m.
+Proof.
+  intros A k e e' m.
+  unfold PVM.Lemmas.elements_ge, PVM.Lemmas.leb.
+  induction (PVM.elements m) as [|p l IH]; simpl; [reflexivity|].
+  rewrite (gtb_key (A:=A) k e e' p).
+  destruct (~~ PVM.Lemmas.gtb (elt:=A) (k,e') p); simpl.
+  - rewrite IH; reflexivity.
+  - exact IH.
+Qed.
+
+Lemma elements_add : forall [A : Type] bounds, forall v (a b : A), PVM.find v bounds = Some a -> 
+  exists l0 l1, l0 ++ (v, a) :: l1 = PVM.elements bounds /\ l0 ++ (v, b) :: l1 = PVM.elements (PVM.add v b bounds).
+Proof.
+  intros A bounds v a b Hfind.
+  set (m := PVM.remove v bounds).
+  assert (Hnin : ~ PVM.In (elt:=A) v m).
+  { apply (PVM.remove_1 (elt:=A) (m:=bounds) (x:=v) (y:=v)). split; reflexivity. }
+  assert (Hadd1 : PVM.Lemmas.P.Add (elt:=A) v a m bounds).
+  { intros y.
+    destruct (ProdVar.eq_dec v y) as [Heq|Hne].
+    - apply eq_from_prodvar_eq in Heq. subst y. rewrite find_add_eq. exact Hfind.
+    - unfold m.
+      rewrite (find_add_neq (A:=A) (v:=y) (a:=v)).
+      + rewrite (find_remove_neq (A:=A) (v:=y) (a:=v)).
+        * reflexivity.
+        * intro Hc. apply Hne. apply eq_from_prodvar_eq. rewrite Hc. reflexivity.
+      + intro Hc. apply Hne. apply eq_from_prodvar_eq. rewrite Hc. reflexivity. }
+  assert (Hadd2 : PVM.Lemmas.P.Add (elt:=A) v b m (PVM.add v b bounds)).
+  { intros y.
+    destruct (ProdVar.eq_dec v y) as [Heq|Hne].
+    - apply eq_from_prodvar_eq in Heq. subst y.
+      rewrite find_add_eq. rewrite find_add_eq. reflexivity.
+    - rewrite (find_add_neq (A:=A) (v:=y) (a:=v)).
+      + rewrite (find_add_neq (A:=A) (v:=y) (a:=v)).
+        * unfold m. rewrite (find_remove_neq (A:=A) (v:=y) (a:=v)).
+          -- reflexivity.
+          -- intro Hc. apply Hne. apply eq_from_prodvar_eq. rewrite Hc. reflexivity.
+        * intro Hc. apply Hne. apply eq_from_prodvar_eq. rewrite Hc. reflexivity.
+      + intro Hc. apply Hne. apply eq_from_prodvar_eq. rewrite Hc. reflexivity. }
+  pose proof (@PVM.Lemmas.elements_Add A m bounds v a Hnin Hadd1) as He1.
+  pose proof (@PVM.Lemmas.elements_Add A m (PVM.add v b bounds) v b Hnin Hadd2) as He2.
+  exists (PVM.Lemmas.elements_lt (v,a) m), (PVM.Lemmas.elements_ge (v,a) m).
+  split.
+  - apply eqlistA_eq.
+    apply (@eqlistA_sym' A).
+    rewrite (@elements_ge_key A v a b m).
+    exact He1.
+  - apply eqlistA_eq.
+    apply (@eqlistA_sym' A).
+    rewrite (@elements_ge_key A v a b m).
+    exact He2.
+Qed.
+
+Lemma elements_add' : forall [A : Type] bounds v (a : A), PVM.find v bounds = None -> 
   exists l0 l1, l0 ++ l1 = PVM.elements bounds /\ l0 ++ (v, a) :: l1 = PVM.elements (PVM.add v a bounds).
+Proof.
+  intros A bounds v a Hfind.
+  assert (Hnin : ~ PVM.In (elt:=A) v bounds).
+  { apply PVM.Lemmas.find_none_not_in. exact Hfind. }
+  pose proof (@PVM.Lemmas.elements_Add A bounds (PVM.add v a bounds) v a Hnin)
+    as Heq.
+  pose proof (PVM.Lemmas.elements_split (elt:=A) (v,a) bounds) as Hsplit.
+  exists (PVM.Lemmas.elements_lt (v,a) bounds), (PVM.Lemmas.elements_ge (v,a) bounds).
+  split.
+  - symmetry; exact Hsplit.
+  - apply eqlistA_eq.
+    pose proof (Heq ltac:(intros y; reflexivity)) as Hs.
+    apply (@eqlistA_sym' A) in Hs.
+    exact Hs.
+Qed.
 
 Lemma eq_dec : forall x y : ProdVar.t, { eq x y } + { ~ eq x y }.
 Proof.
@@ -587,9 +690,147 @@ Proof.
   right; intro. apply eq_from_prodvar_eq in H. done.
 Qed.
 
-Axiom elements_map : forall [A : Type] (f : A -> A) (bounds : PVM.t A), PVM.elements (PVM.map f bounds) = List.map (fun '(key, value) => (key, f value)) (PVM.elements bounds).
+Lemma eq_key_elt_eq (T0 : Type) : forall x y (a b : T0),
+  PVM.eq_key_elt (elt:=T0) (x, a) (y, b) -> x = y /\ a = b.
+Proof.
+  move=> x y a b Hke. move: Hke => [[H1 H2] H3].
+  destruct x as [x1 x2]. destruct y as [y1 y2].
+  move /eqP : H1 => H1. move /eqP : H2 => H2.
+  simpl in H1, H2, H3. subst. split; reflexivity.
+Qed.
 
-Axiom find_in_elements :forall [A : Type] x a (bounds : PVM.t A), PVM.find x bounds = Some a <-> List.In (x, a) (PVM.elements bounds).
+Lemma InA_eq_key_elt_In [A : Type] : forall (l : list (PVM.key * A)) p,
+  InA (PVM.eq_key_elt (elt:=A)) p l <-> List.In p l.
+Proof.
+  induction l as [| [k e] tl IH]; intros p; simpl.
+  - split; [ inversion 1 | intros [] ].
+  - split.
+    + intros H. inversion H as [y l' Hy | y l' H'].
+      * apply eq_key_elt_eq in Hy.
+        destruct p as [x a]. simpl in Hy. destruct Hy as [-> ->].
+        left; reflexivity.
+      * right. apply IH. exact H'.
+    + intros [-> | H].
+      * left; reflexivity.
+      * right. apply IH. exact H.
+Qed.
+
+Lemma find_in_elements : forall [A : Type] x a (bounds : PVM.t A), PVM.find x bounds = Some a <-> List.In (x, a) (PVM.elements bounds).
+Proof.
+  intros A x a bounds.
+  rewrite <- (PVM.Lemmas.find_mapsto_iff bounds x a).
+  rewrite (PVM.Lemmas.elements_mapsto_iff bounds x a).
+  rewrite InA_eq_key_elt_In. done.
+Qed.
+
+Lemma map_hdrel : forall (A:Type) (g : PVM.key * A -> PVM.key * A) l p,
+  (forall p, (g p).1 = p.1) ->
+  HdRel (PVM.M.lt_key (elt:=A)) p l ->
+  HdRel (PVM.M.lt_key (elt:=A)) (g p) (List.map g l).
+Proof.
+  intros A g l p Hkey H.
+  destruct l as [|a tl]; simpl in *.
+  - constructor.
+  - inversion H; subst.
+    constructor.
+    unfold PVM.M.lt_key, PVM.Raw.Proofs.PX.ltk.
+    simpl. rewrite (Hkey p). rewrite (Hkey a). exact H1.
+Qed.
+
+Lemma map_key_sort : forall (A:Type) (g : PVM.key * A -> PVM.key * A) l,
+  (forall p, (g p).1 = p.1) ->
+  Sorted (PVM.M.lt_key (elt:=A)) l ->
+  Sorted (PVM.M.lt_key (elt:=A)) (List.map g l).
+Proof.
+  intros A g l Hkey. induction l as [|p l IH]; intros Hs; simpl.
+  - constructor.
+  - inversion Hs; subst. constructor.
+    + apply IH. assumption.
+    + apply map_hdrel with (p := p); assumption.
+Qed.
+
+Lemma InA_intro_gen : forall (A:Type) (R : A -> A -> Prop) x y l,
+  In y l -> R x y -> InA R x l.
+Proof.
+  intros A R x y l Hin HR.
+  apply InA_alt. exists y. split; assumption.
+Qed.
+
+Lemma InA_map_g_inv : forall (A:Type) (f : A -> A) l p,
+  InA (PVM.Lemmas.O.eqke (elt:=A)) p (List.map (fun '(k,v) => (k, f v)) l) ->
+  exists a, p.2 = f a /\ InA (PVM.Lemmas.O.eqke (elt:=A)) (p.1, a) l.
+Proof.
+  intros A f l p H.
+  rewrite InA_alt in H.
+  destruct H as [q [Heqke Hin]].
+  apply in_map_iff in Hin.
+  destruct Hin as [w [Hqw HInw]].
+  destruct w as [[k1 k2] v].
+  simpl in Hqw, HInw, Heqke.
+  subst q.
+  unfold PVM.Lemmas.O.eqke in Heqke.
+  simpl in Heqke.
+  destruct Heqke as [[H1 H2] Hv].
+  simpl in H1, H2.
+  unfold is_true in H1, H2.
+  destruct p as [[p1 p2] pv]. simpl in *.
+  move: H1; case eqP => E1; last discriminate.
+  subst k1.
+  move: H2; case eqP => E2; last discriminate.
+  subst k2.
+  exists v. split; [exact Hv |].
+  apply InA_intro_gen with (y := (p1,p2,v)); [exact HInw |].
+  unfold PVM.Lemmas.O.eqke. simpl.
+  split; [split; [apply: eqxx | apply: eqxx] | reflexivity].
+Qed.
+
+Lemma InA_map_g : forall (A:Type) (f : A -> A) l p,
+  InA (PVM.Lemmas.O.eqke (elt:=A)) p l ->
+  InA (PVM.Lemmas.O.eqke (elt:=A)) (p.1, f p.2) (List.map (fun '(k,v) => (k, f v)) l).
+Proof.
+  intros A f l p H.
+  rewrite InA_alt in H.
+  destruct H as [q [Hke Hin]].
+  destruct q as [[q1 q2] qv]. simpl in Hke, Hin |- *.
+  apply InA_intro_gen with (y := ((q1,q2), f qv)).
+  - apply in_map_iff. exists (q1,q2,qv). split; [reflexivity | exact Hin].
+  - destruct p as [[p1 p2] pv]. simpl in Hke |- *.
+    unfold PVM.Lemmas.O.eqke in Hke; simpl in Hke.
+    destruct Hke as [[H1 H2] Hv].
+    simpl in H1, H2. unfold is_true in H1, H2.
+    move: H1; case eqP => E1; last discriminate.
+    move: H2; case eqP => E2; last discriminate.
+    subst p1. subst p2. subst pv.
+    unfold PVM.Lemmas.O.eqke. simpl.
+    split; [split; [apply: eqxx | apply: eqxx] | reflexivity].
+Qed.
+
+Lemma elements_map : forall [A : Type] (f : A -> A) (bounds : PVM.t A), PVM.elements (PVM.map f bounds) = List.map (fun '(key, value) => (key, f value)) (PVM.elements bounds).
+Proof.
+  intros A f bounds.
+  apply (eqlistA_eq (elt:=A)).
+  apply (PVM.Lemmas.sort_equivlistA_eqlistA (elt:=A)).
+  - apply PVM.M.elements_3.
+  - apply map_key_sort. intros [[] v]; reflexivity.
+    apply PVM.M.elements_3.
+  - intros [x e]. split; intros Hp.
+    + apply PVM.Lemmas.elements_mapsto_iff in Hp.
+      rewrite PVM.Lemmas.map_mapsto_iff in Hp.
+      destruct Hp as [a [Heq Hm]].
+      rewrite Heq.
+      change (InA (PVM.Lemmas.O.eqke (elt:=A)) ((x,a).1, f (x,a).2)
+              (List.map (fun '(k,v) => (k, f v)) (PVM.elements bounds))).
+      apply InA_map_g.
+      apply PVM.Lemmas.elements_mapsto_iff. exact Hm.
+    + apply InA_map_g_inv in Hp.
+      destruct Hp as [a [Heq Hin]].
+      simpl in Heq.
+      apply PVM.Lemmas.elements_mapsto_iff.
+      rewrite PVM.Lemmas.map_mapsto_iff.
+      exists a. split; [exact Heq |].
+      apply PVM.Lemmas.elements_mapsto_iff in Hin.
+      exact Hin.
+Qed.
 
 Lemma mem_in_elements [A : Type] : forall x (bounds : PVM.t A), PVM.mem x bounds <-> exists a, List.In (x, a) (PVM.elements bounds).
 Proof.

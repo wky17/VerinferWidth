@@ -1,5 +1,6 @@
-From Coq Require Import FMaps ZArith FunInd FMapAVL OrderedType.
+From Coq Require Import FMaps ZArith NArith FunInd FMapAVL OrderedType.
 From mathcomp Require Import all_ssreflect.
+From mathcomp.tarjan Require Import kosaraju.
 From HB Require Import structures.
 From Solver Require Import Env LoFirrtl HiEnv.
 Import ListNotations.
@@ -1065,6 +1066,20 @@ End ProdVar.
 
 HB.instance Definition _ := hasDecEq.Build ProdVar.t ProdVar.eqP.
 
+(* ProdVar.t = N * N carries a canonical Countable structure via pickling
+   through N; this provides the Choice instance needed, e.g., for seq_sub
+   to be a finType. *)
+Definition ProdVar_pickle (x : ProdVar.t) : nat :=
+  pickle (nat_of_N x.1, nat_of_N x.2).
+Definition ProdVar_unpickle (n : nat) : option ProdVar.t :=
+  option_map (fun p => (N.of_nat p.1, N.of_nat p.2)) (unpickle n).
+Lemma ProdVar_pickleK : pcancel ProdVar_pickle ProdVar_unpickle.
+Proof.
+  move=> [a b]; rewrite /ProdVar_pickle /ProdVar_unpickle pickleK /=.
+  by rewrite (N2Nat.id a) (N2Nat.id b).
+Qed.
+HB.instance Definition _ := isCountable.Build ProdVar.t ProdVar_pickleK.
+
 (* Extra lemmas for Coq finite maps *)
 
 Module FMapLemmas (M : FMapInterface.S).
@@ -2089,76 +2104,42 @@ Definition pv_is_fintype (pv : ProdVar.t) (c : hfcircuit) : Prop :=
   | _ => False
   end.
 
-Definition finProdVar : Type := {pv : ProdVar.t | pv_is_fintype pv c}.
+(* The finite carrier of ProdVar.t we reason about: every variable that
+   occurs as a key of the (successfully computed) type map of c, expanded
+   to all field offsets of its type. Finiteness comes from the canonical
+   instances of seq_sub, so no pickle/enum lemmas are needed. *)
+Fixpoint all_vars_of_ftype (v : OrderedVarType.t) (offset : nat) (ft : ftype) : list ProdVar.t :=
+  match ft with
+  | Gtyp _ => [(v, N.of_nat offset)]
+  | Atyp ft' _ => all_vars_of_ftype v offset ft'
+  | Btyp ff => all_vars_of_ffield v offset ff
+  end
+with all_vars_of_ffield (v : OrderedVarType.t) (offset : nat) (ff : ffield) : list ProdVar.t :=
+  match ff with
+  | Fnil => nil
+  | Fflips _ _ ft fs => let ls := all_vars_of_ftype v offset ft in
+                        ls ++ all_vars_of_ffield v (offset + size_of_ftype ft) fs
+  end.
 
-Lemma pv_is_fintypeP pv : pv_is_fintype pv c.
-Proof.
-  Admitted.
+Definition finProdVar_list : list ProdVar.t :=
+  match circuit_tmap c with
+  | Some tmap => flat_map (fun '(k, (ft, _)) => all_vars_of_ftype k 0 ft) (VM.elements tmap)
+  | None => nil
+  end.
 
-Definition ProdVar2finProdVar (pv : ProdVar.t) : finProdVar :=
-  exist _ pv (pv_is_fintypeP pv).
+Definition finProdVar : Type := seq_sub finProdVar_list.
+
+Definition ProdVar2finProdVar (pv : ProdVar.t) : option finProdVar :=
+  insub pv.
 
 Definition finProdVar2ProdVar (fin_v : finProdVar) : ProdVar.t :=
-  proj1_sig fin_v.
-
-Fixpoint list_finProdVar (v : N) (offset : nat) (t : ftype) (flag : nat) : list (finProdVar * nat) * nat * nat :=
-  match t with 
-  | Gtyp (Fuint_implicit _) 
-  | Gtyp (Fsint_implicit _) => ([(ProdVar2finProdVar (v, N.of_nat offset), flag)], flag+1, offset+1)
-  | Gtyp _ => (nil, flag, offset+1)
-  | Atyp atyp _ => list_finProdVar v offset atyp flag
-  | Btyp ff => list_finProdVar_f v offset ff flag
-  end
-with list_finProdVar_f (v : N) (offset : nat) (ff : ffield) (flag : nat) : list (finProdVar * nat) * nat * nat :=
-  match ff with
-  | Fnil => (nil, flag, offset)
-  | Fflips _ _ t fs => let '(ls, flag0, offset0) := list_finProdVar v offset t flag in 
-                       let '(ls0, flag1, offset1) := list_finProdVar_f v offset0 fs flag0 in
-                       (ls ++ ls0, flag1, offset1)
-  end.
-
-Definition list_finProdVar_circuit : list (finProdVar * nat) * nat :=
-  (* number implicit ground types by nat *)
-  match circuit_tmap c with 
-  | Some tmap => List.fold_left (fun '(ls, flag) '(key, (ft, _)) => 
-                  let '(ls0, flag0, _) := list_finProdVar key 0 ft flag in (ls ++ ls0, flag0)
-  ) (VM.elements tmap) (nil, 1)
-  | _ => (nil, 0)
-  end.
-
-Definition finProdVar_pickle (v : finProdVar) : nat := 
-  let '(fin_list, _) := list_finProdVar_circuit in
-  match List.find (fun '(pv, _) => (finProdVar2ProdVar pv) == (finProdVar2ProdVar v)) fin_list with
-  | Some (_, n) => n 
-  | _ => 0
-  end.
-
-Definition finProdVar_unpickle (n : nat) : option finProdVar := 
-  let '(fin_list, _) := list_finProdVar_circuit in
-  match List.find (fun '(_, n') => n == n') fin_list with
-  | Some (pv, n) => Some pv 
-  | _ => None
-  end.
-
-(*Parameter finProdVar_pickle : forall (x : finProdVar), nat.
-Parameter finProdVar_unpickle : forall (n : nat), option finProdVar.*)
-Lemma finProdVar_pickleK : pcancel finProdVar_pickle finProdVar_unpickle.
-Admitted.
-HB.instance Definition _ := isCountable.Build finProdVar finProdVar_pickleK.
-
-Definition finProdVar_enum_subdef : seq finProdVar := 
-  let '(fin_list, _) := list_finProdVar_circuit in map fst fin_list.
-Lemma finProdVar_enumP_subdef : Finite.axiom finProdVar_enum_subdef.
-Admitted.
-HB.instance Definition _ := isFinite.Build finProdVar finProdVar_enumP_subdef.
+  ssval fin_v.
 
 Definition a : ProdVar.t := (N0, N0).
 
-From mathcomp.tarjan Require Import kosaraju.
-
-Definition r (x y : finProdVar) : bool :=
-  false.
-Definition res_r := kosaraju r. 
+Definition r : rel finProdVar :=
+  fun _ _ => false.
+Definition res_r := kosaraju r.
 
 End finProdVar.
 
@@ -2212,3 +2193,4 @@ Section PVMLemmas.
   Qed.
   
 End PVMLemmas.
+   

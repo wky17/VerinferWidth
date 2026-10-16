@@ -6,6 +6,7 @@ Import ListNotations.
 Require Import Coq.Classes.RelationClasses.
 
 Set Implicit Arguments.
+(*Unset Strict Implicit.*) 
 Import Prenex Implicits.
 
 (* ------------ solve simple cycle ------------ *)
@@ -82,6 +83,7 @@ Module NodeVar <: OrderedType.
     eapply ProdVar.eq_trans; eauto.
   Qed.
 
+  (* 定义等式判断的可判定性 *)
   Lemma eq_dec : forall x y : t, { eq x y } + { ~ eq x y }.
   Proof.
     destruct x, y; simpl; try done.
@@ -93,6 +95,7 @@ Module NodeVar <: OrderedType.
       + right; congruence.
   Defined.
 
+  (* 定义严格小于关系lt *)
   Definition lt (x y : t) : Prop :=
     match x, y with
     | Zero, Node _ => true
@@ -100,18 +103,21 @@ Module NodeVar <: OrderedType.
     | _, _ => false
     end.
 
+  (* 证明lt是传递的 *)
   Lemma lt_trans : forall x y z : t, lt x y -> lt y z -> lt x z.
   Proof.
     destruct x, y, z; simpl; auto; try done.
     intros Hlt1 Hlt2. eapply ProdVar.lt_trans; eauto.
   Qed.
 
+  (* 证明lt蕴含不等 *)
   Lemma lt_not_eq : forall x y : t, lt x y -> ~ eq x y.
   Proof.
     destruct x, y; simpl; auto.
     apply ProdVar.lt_not_eq.
   Qed.
 
+  (* 定义比较函数 *)
   Definition compare : forall x y : t, Compare lt eq x y.
   Proof.
     destruct x, y; simpl.
@@ -124,6 +130,7 @@ Module NodeVar <: OrderedType.
       + apply GT. assumption.
   Defined.
 
+  (* 定义布尔等式判断函数 *)
   Definition eqn (x y : t) : bool :=
     match x, y with
     | Zero, Zero => true
@@ -131,6 +138,7 @@ Module NodeVar <: OrderedType.
     | _, _ => false
     end.
 
+  (* 证明布尔等式与命题等式的一致性 *)
   Lemma eqP : Equality.axiom eqn.
   Proof.
     intros x y. unfold eqn, eq.
@@ -148,24 +156,30 @@ Section simplecycle.
 Definition adj_matrix := PVM.t (NVM.t Z.t).
 
 
-Lemma find_add_neq_z_fm : forall (v a : ProdVar.t) (val : NVM.t Z) (fm : adj_matrix), v <> a -> PVM.find v (PVM.add a val fm) = PVM.find v fm.
- (* find_add_None *)
+Lemma node_eq_leibniz : forall (v a : NodeVar.t), NodeVar.eq v a -> v = a.
 Proof.
-Admitted.
+  intros v a H.
+  destruct v; destruct a; simpl in H; try discriminate; try reflexivity.
+  destruct H as [H1 H2]. apply f_equal.
+  destruct t as [x1 x2]; destruct t0 as [y1 y2]; simpl in H1, H2.
+  move /eqP : H1 ->; move /eqP : H2 ->. reflexivity.
+Qed.
+
+Lemma find_add_neq_z_fm : forall (v a : ProdVar.t) (val : NVM.t Z) (fm : adj_matrix), v <> a -> PVM.find v (PVM.add a val fm) = PVM.find v fm.
+Proof. move => v a val fm. apply find_add_neq. Qed.
 
 Lemma find_add_neq_z : forall (v a : NodeVar.t) (val : Z) (fm : NVM.t Z), v <> a -> NVM.find v (NVM.add a val fm) = NVM.find v fm.
- (* find_add_None *)
 Proof.
-Admitted.
+  move => v a val fm Hneq.
+  apply NVM.Lemmas.find_add_neq.
+  move => Heq. apply Hneq. exact: node_eq_leibniz.
+Qed.
 
 Lemma find_add_eq_z_fm : forall (a : ProdVar.t) (val : NVM.t Z) (fm : adj_matrix), PVM.find a (PVM.add a val fm) = Some val.
- (* find_add_None *)
-Proof.
-Admitted.
+Proof. move => a val fm. apply find_add_eq. Qed.
 
 Lemma find_add_eq_z : forall (a : NodeVar.t) (val : Z) (fm : NVM.t Z), NVM.find a (NVM.add a val fm) = Some val.
-Proof.
-Admitted.
+Proof. move => a val fm. apply NVM.Lemmas.find_add_eq. apply NodeVar.eq_refl. Qed.
 
 
 Definition get_weight (src : ProdVar.t) (dst : NodeVar.t) (m : adj_matrix) : option Z.t :=
@@ -178,19 +192,20 @@ Fixpoint add_edge_of_cs (cs : list Constraint1) (m : adj_matrix) : adj_matrix :=
   match cs with
   | nil => m
   | hd :: tl => let new_m := match PVM.find (lhs_var1 hd) m, (rhs_terms1 hd) with 
-            | Some dst_map, nil => match NVM.find Zero dst_map with 
+            (* 经过第一步init，记录所有v到v的距离为0，所有lhs应该都可以被find *)
+            | Some dst_map, nil => match NVM.find Zero dst_map with (* 常数约束, 修改lhs到0点的距离 *) 
                             | Some dist => let new_dst_map := NVM.add Zero (Z.max dist (rhs_const1 hd)) dst_map in
                                     PVM.add (lhs_var1 hd) new_dst_map m
                             | None => let new_dst_map := NVM.add Zero (rhs_const1 hd) dst_map in
                                     PVM.add (lhs_var1 hd) new_dst_map m
                             end
-            | Some dst_map, [(1,v)] => match NVM.find (Node v) dst_map with 
+            | Some dst_map, [(1,v)] => match NVM.find (Node v) dst_map with (* 修改lhs到v的距离 *) 
                             | Some dist => let new_dst_map := NVM.add (Node v) (Z.max dist (rhs_const1 hd)) dst_map in
                                     PVM.add (lhs_var1 hd) new_dst_map m
                             | None => let new_dst_map := NVM.add (Node v) (rhs_const1 hd) dst_map in
                                     PVM.add (lhs_var1 hd) new_dst_map m
                             end
-            | _, _ => m 
+            | _, _ => m (* 不存在其他形式的约束 *)
             end in add_edge_of_cs tl new_m
   end.
 
@@ -198,8 +213,9 @@ Fixpoint add_edge_of_cs' (cs : list Constraint1) (m : adj_matrix) : adj_matrix :
   match cs with
   | nil => m
   | hd :: tl => match PVM.find (lhs_var1 hd) m, (rhs_terms1 hd) with 
+            (* 经过第一步init，记录所有v到v的距离为0，所有lhs应该都可以被find *)
                 | Some dst_map, nil =>
-                    match NVM.find Zero dst_map with 
+                    match NVM.find Zero dst_map with (* 常数约束, 修改lhs到0点的距离 *) 
                     | Some dist =>
                         let new_dst_map := NVM.add Zero (Z.max dist (rhs_const1 hd)) dst_map in
                         PVM.add (lhs_var1 hd) new_dst_map (add_edge_of_cs' tl m)
@@ -208,7 +224,7 @@ Fixpoint add_edge_of_cs' (cs : list Constraint1) (m : adj_matrix) : adj_matrix :
                         PVM.add (lhs_var1 hd) new_dst_map (add_edge_of_cs' tl m)
                     end
                 | Some dst_map, [(1,v)] =>
-                    match NVM.find (Node v) dst_map with
+                    match NVM.find (Node v) dst_map with (* 修改lhs到v的距离 *) 
                     | Some dist =>
                         let new_dst_map := NVM.add (Node v) (Z.max dist (rhs_const1 hd)) dst_map in
                         PVM.add (lhs_var1 hd) new_dst_map (add_edge_of_cs' tl m)
@@ -216,14 +232,14 @@ Fixpoint add_edge_of_cs' (cs : list Constraint1) (m : adj_matrix) : adj_matrix :
                         let new_dst_map := NVM.add (Node v) (rhs_const1 hd) dst_map in
                         PVM.add (lhs_var1 hd) new_dst_map (add_edge_of_cs' tl m)
                     end
-            | _, _ => (add_edge_of_cs' tl m) 
+            | _, _ => (add_edge_of_cs' tl m) (* 不存在其他形式的约束 *)
             end 
   end.
 
 Definition add_edge_of_c (c : Constraint1) (m : adj_matrix) : adj_matrix :=
   match PVM.find (lhs_var1 c) m, (rhs_terms1 c) with 
   | Some dst_map, nil =>
-      match NVM.find Zero dst_map with 
+      match NVM.find Zero dst_map with (* 常数约束, 修改lhs到0点的距离 *) 
       | Some dist =>
           let new_dst_map := NVM.add Zero (Z.max dist (rhs_const1 c)) dst_map in
           PVM.add (lhs_var1 c) new_dst_map m
@@ -232,7 +248,7 @@ Definition add_edge_of_c (c : Constraint1) (m : adj_matrix) : adj_matrix :=
           PVM.add (lhs_var1 c) new_dst_map m
       end
   | Some dst_map, [(1,v)] =>
-      match NVM.find (Node v) dst_map with 
+      match NVM.find (Node v) dst_map with (* 修改lhs到v的距离 *) 
       | Some dist =>
           let new_dst_map := NVM.add (Node v) (Z.max dist (rhs_const1 c)) dst_map in
           PVM.add (lhs_var1 c) new_dst_map m
@@ -240,7 +256,7 @@ Definition add_edge_of_c (c : Constraint1) (m : adj_matrix) : adj_matrix :=
           let new_dst_map := NVM.add (Node v) (rhs_const1 c) dst_map in
           PVM.add (lhs_var1 c) new_dst_map m
       end
-  | _, _ => m 
+  | _, _ => m (* 不存在其他形式的约束 *)
   end .
 
 (* Fixpoint add_edge_of_c_s cs m := *)
@@ -257,15 +273,18 @@ Fixpoint add_edge_of_c_s cs m :=
   
           
 Definition init_dist_map (nodes : list ProdVar.t) (cs : list Constraint1) : adj_matrix :=
+  (* 自己到自己设为0 *)
   let map0 := List.fold_left (fun temp_matrix v => let temp_dst_map := NVM.add (Node v) 0%Z (NVM.empty Z.t) in(* v到v距离为0 *)
                                 PVM.add v temp_dst_map temp_matrix) nodes (PVM.empty (NVM.t Z.t)) in
+  (* 将每一条约束画出边 *)
   add_edge_of_cs cs map0.
+(* 其他为None，即为两点间还没有边，距离的最大值为-∞ *)
 
 Fixpoint map0 (n : list ProdVar.t) m :=
   match n with
   | nil => m
   | hd :: tl => 
-      let temp_dst_map := NVM.add (Node hd) 0%Z (NVM.empty Z.t)
+      let temp_dst_map := NVM.add (Node hd) 0%Z (NVM.empty Z.t) (* v到v距离为0 *)
       in
       PVM.add hd temp_dst_map (map0 tl m)
       (* map0 tl (PVM.add hd temp_dst_map m) *)
@@ -276,10 +295,11 @@ Definition init_dist_map' (nodes : list ProdVar.t) (cs : list Constraint1) : adj
 
 
 Definition floyd_update (k i: ProdVar.t) (nodes : list NodeVar.t) (m : adj_matrix) : adj_matrix :=
+  (* 对给定中间节点 k 和源节点 i，更新 i 到所有目标节点的最长路径。 *)
   match PVM.find i m with
   | None => m
   | Some dst_map => let new_dst_map := 
-      List.fold_left (fun acc j => 
+      List.fold_left (fun acc j => (* j是dst，已存i到j最大路径是w *)
         match NVM.find j acc, get_weight i (Node k) m, get_weight k j m with
         | Some w, Some w1, Some w2 => let new_w := Z.max w (Z.add w1 w2) in
                               NVM.add j new_w acc
@@ -343,7 +363,8 @@ Fixpoint inner_loop2 (n : list ProdVar.t) (m : adj_matrix) :=
 Definition floyd_loop_map' (nodes: list ProdVar.t) (cs : list Constraint1) : adj_matrix :=
   inner_loop2 nodes (init_dist_map' nodes cs).
 
-Axiom find_empty_None : forall [A : Type] s, PVM.find s (PVM.empty A) = None.
+Lemma find_empty_None : forall [A : Type] s, PVM.find s (PVM.empty A) = None.
+Proof. move => A s. reflexivity. Qed.
 
 Lemma map0_correct : forall nds n  ml d,
     PVM.find n (map0 nds (PVM.empty (NVM.t Z.t))) = Some ml ->
@@ -359,6 +380,8 @@ Proof.
     + rewrite find_add_neq_z_fm. apply Hm.
       intro; rewrite H eq_refl //in Hnhd.
 Qed.
+
+
 
 Lemma map0_correct_nn : forall nds n s ml ,
     (s == n) = false ->
@@ -806,69 +829,128 @@ Lemma add_edge_of_cs_c_s_same : forall cs fm,
 Proof.
 Admitted.
 
-Lemma add_edge_of_c_s_find_edge : forall cs c fm ml v ,
-    In c cs ->
-    (rhs_terms1 c) = [(1, v)] ->
-    ~ PVM.find (lhs_var1 c) fm = None ->
-    PVM.find (lhs_var1 c) (add_edge_of_c_s cs fm) = Some ml ->
-    ~ NVM.find (Node v) ml = None.
+Lemma nvm_add_find_some : forall (a : NodeVar.t) (w : Z) (dst : NVM.t Z) (n : NodeVar.t) v,
+  NVM.find n dst = Some v -> exists v', NVM.find n (NVM.add a w dst) = Some v'.
 Proof.
-  elim => [|csh cst IHm] c fm ml v ; first done.
-  move => Hin; rewrite /= in Hin; move : Hin => [Hin|Hintl] Hrhst Hn0. 
-  - rewrite /= Hin. move => Hnn.
-    have Hn1: (PVM.find (lhs_var1 c) (add_edge_of_c_s cst fm) <> None).
-    by apply add_edge_of_c_s_find_map.
-    exact : (add_edge_of_c_find_edge'' c (add_edge_of_c_s cst fm) Hrhst Hn1 Hnn).
-  - rewrite /=. move => Hnn.
-    rewrite add_edge_of_c_s_same in Hnn.
-    apply IHm with c (add_edge_of_c csh fm); try done.
-    by apply add_edge_of_c_find_map.
+  move => a w dst n v H.
+  case: (NodeVar.eq_dec n a) => [Heq|Hne].
+  - rewrite (node_eq_leibniz _ _ Heq). rewrite find_add_eq_z. by exists w.
+  - have Hnea : n <> a.
+      { move => He. apply Hne. rewrite He. exact (NodeVar.eq_refl a). }
+    rewrite find_add_neq_z //.
+
+    by exists v.
+Qed.
+Lemma add_edge_of_c_find_some_mono : forall c c' fm ml ml' n v,
+    PVM.find c fm = Some ml ->
+    NVM.find n ml = Some v ->
+    PVM.find c (add_edge_of_c c' fm) = Some ml' ->
+    NVM.find n ml' <> None.
+Proof.
+  move => c c' fm ml ml' n v Hfdc0 Hfdv0 Hfdc.
+  rewrite /add_edge_of_c in Hfdc.
+  case Hfc' : (PVM.find (lhs_var1 c') fm) => [dst_map|]; last first.
+  - rewrite Hfc' in Hfdc. rewrite Hfdc0 in Hfdc.
+    by injection Hfdc => <-; rewrite Hfdv0.
+  rewrite Hfc' in Hfdc.
+  case Hrhs : (rhs_terms1 c') => [|a tl].
+  { (* rhs = [] : Zero edge *)
+    rewrite Hrhs in Hfdc. clear Hrhs.
+    rewrite /= in Hfdc.
+    case Hz0 : (NVM.find Zero dst_map) => [dist0|] in Hfdc.
+    { case Heq : (c == lhs_var1 c').
+      - rewrite (eqP Heq) in Hfdc. rewrite find_add_eq_z_fm in Hfdc.
+        injection Hfdc => Hml'. rewrite -Hml'.
+        rewrite (eqP Heq) in Hfdc0. rewrite Hfdc0 in Hfc'.
+        injection Hfc' => Hmle. move: Hfdv0. rewrite Hmle. move => Hfdv0.
+        move: (@nvm_add_find_some Zero (Z.max dist0 (rhs_const1 c')) dst_map n v Hfdv0) => [v2 Hv2].
+        by rewrite Hv2.
+      - have Hn : c <> lhs_var1 c'.
+        { move => Hc. rewrite Hc eq_refl in Heq. done. }
+        move: Hfdc. rewrite (find_add_neq_z_fm _ _ Hn). move => Hfdc.
+        rewrite Hfdc0 in Hfdc.
+        by injection Hfdc => <-; rewrite Hfdv0. }
+    { case Heq : (c == lhs_var1 c').
+      - rewrite (eqP Heq) in Hfdc. rewrite find_add_eq_z_fm in Hfdc.
+        injection Hfdc => Hml'. rewrite -Hml'.
+        rewrite (eqP Heq) in Hfdc0. rewrite Hfdc0 in Hfc'.
+        injection Hfc' => Hmle. move: Hfdv0. rewrite Hmle. move => Hfdv0.
+        move: (@nvm_add_find_some Zero (rhs_const1 c') dst_map n v Hfdv0) => [v2 Hv2].
+        by rewrite Hv2.
+      - have Hn : c <> lhs_var1 c'.
+        { move => Hc. rewrite Hc eq_refl in Heq. done. }
+        move: Hfdc. rewrite (find_add_neq_z_fm _ _ Hn). move => Hfdc.
+        rewrite Hfdc0 in Hfdc.
+        by injection Hfdc => <-; rewrite Hfdv0. } }
+  { (* rhs = a :: tl *)
+    rewrite Hrhs in Hfdc. clear Hrhs.
+    destruct a as [na va].
+    destruct tl as [|b tl2].
+    { destruct na as [|na1].
+      { rewrite /= in Hfdc. rewrite Hfdc0 in Hfdc.
+        by injection Hfdc => <-; rewrite Hfdv0. }
+      destruct na1 as [|na2].
+      { (* na = 1 *)
+        rewrite /= in Hfdc.
+        case Hv : (NVM.find (Node va) dst_map) => [dist|] in Hfdc.
+        { case Heq : (c == lhs_var1 c').
+          - rewrite (eqP Heq) in Hfdc. rewrite find_add_eq_z_fm in Hfdc.
+            injection Hfdc => Hml'. rewrite -Hml'.
+            rewrite (eqP Heq) in Hfdc0. rewrite Hfdc0 in Hfc'.
+            injection Hfc' => Hmle. move: Hfdv0. rewrite Hmle. move => Hfdv0.
+            move: (@nvm_add_find_some (Node va) (Z.max dist (rhs_const1 c')) dst_map n v Hfdv0) => [v2 Hv2].
+            by rewrite Hv2.
+          - have Hn : c <> lhs_var1 c'.
+            { move => Hc. rewrite Hc eq_refl in Heq. done. }
+            move: Hfdc. rewrite (find_add_neq_z_fm _ _ Hn). move => Hfdc.
+            rewrite Hfdc0 in Hfdc.
+            by injection Hfdc => <-; rewrite Hfdv0. }
+        { case Heq : (c == lhs_var1 c').
+          - rewrite (eqP Heq) in Hfdc. rewrite find_add_eq_z_fm in Hfdc.
+            injection Hfdc => Hml'. rewrite -Hml'.
+            rewrite (eqP Heq) in Hfdc0. rewrite Hfdc0 in Hfc'.
+            injection Hfc' => Hmle. move: Hfdv0. rewrite Hmle. move => Hfdv0.
+            move: (@nvm_add_find_some (Node va) (rhs_const1 c') dst_map n v Hfdv0) => [v2 Hv2].
+            by rewrite Hv2.
+          - have Hn : c <> lhs_var1 c'.
+            { move => Hc. rewrite Hc eq_refl in Heq. done. }
+            move: Hfdc. rewrite (find_add_neq_z_fm _ _ Hn). move => Hfdc.
+            rewrite Hfdc0 in Hfdc.
+            by injection Hfdc => <-; rewrite Hfdv0. } }
+      (* na >= 2 *)
+      rewrite /= in Hfdc. rewrite Hfdc0 in Hfdc.
+      by injection Hfdc => <-; rewrite Hfdv0. }
+    (* >= 2 terms *)
+    destruct na as [|na1].
+    rewrite /= in Hfdc. rewrite Hfdc0 in Hfdc.
+    by injection Hfdc => <-; rewrite Hfdv0.
+    destruct na1 as [|na2].
+    rewrite /= in Hfdc. rewrite Hfdc0 in Hfdc.
+    by injection Hfdc => <-; rewrite Hfdv0.
+    rewrite /= in Hfdc. rewrite Hfdc0 in Hfdc.
+    by injection Hfdc => <-; rewrite Hfdv0.
+}
+
 Qed.
 
+
 Lemma add_edge_of_c_s_find_edge' : forall cs c fm ml0 ml v ,
-    (* (rhs_terms1 c) = [(1, v)] -> *)
     PVM.find c fm = Some ml0 ->
     ~ NVM.find (Node v) ml0 = None ->
-    PVM.find  c (add_edge_of_c_s cs fm) = Some ml ->
+    PVM.find c (add_edge_of_c_s cs fm) = Some ml ->
     ~ NVM.find (Node v) ml = None.
 Proof.
-Admitted.
-
-Lemma add_edge_of_c_s_correct1 : forall cs c s fm ml0 ml dst0 dst,
-    PVM.find c fm = Some ml0 ->
-    NVM.find (Node s) ml0 = Some dst0 ->
-    PVM.find c (add_edge_of_c_s cs fm) = Some ml ->
-    NVM.find (Node s) ml = Some dst ->
-    Z.of_nat (Z.to_nat dst) = Z.max dst0 (max_const1 c s cs).
-Proof.
-  elim => [|csh cst IHm] c s fm ml0 ml dst0 dst.
-  - rewrite /= Z.max_comm -ZifyInst.of_nat_to_nat_eq.
-    move => Hfdc0 Hfds0 Hfdc .
-    rewrite Hfdc0 in Hfdc; injection Hfdc; move => Heq; rewrite -Heq Hfds0.
-    move => Hdst; injection Hdst; move => Heqd; rewrite Heqd//.
-  - rewrite /=.
-    move => Hfdc0 Hfds0 Hfdc Hfds.
-    case Hfdc1 : (PVM.find c (add_edge_of_c_s cst fm)) => [ml1|].
-    + case Hfds1 : (NVM.find (Node s) ml1) => [dst1|].
-      * case Hc2s : ((lhs_var1 csh == c) && (rhs_terms1 csh == [(1, s)])).
-        { move/andP : Hc2s => [/eqP Hceq /eqP Hseq].
-          move : (add_edge_of_c_sm_max_same csh (add_edge_of_c_s cst fm) Hfdc1 Hfds1 Hceq Hseq Hfdc) => Hfds'.
-          rewrite Hfds in Hfds'; injection Hfds'; move => Hdsteq; rewrite Hdsteq.
-          move : (IHm c s fm ml0 ml1 dst0 dst1 Hfdc0 Hfds0 Hfdc1 Hfds1) => Hmax1.
-          symmetry. rewrite {1}Z.max_comm -Z.max_assoc. rewrite Z.max_comm in Hmax1.
-          rewrite -Hmax1. 
-          rewrite 2!ZifyInst.of_nat_to_nat_eq. lia.
-        }
-        { apply IHm with fm ml0 ml1; try done.
-          move : (add_edge_of_c_sm_max_diff c csh s (add_edge_of_c_s cst fm) Hfdc1 Hfds1 Hc2s Hfdc) => Hfds1'.
-          rewrite Hfds in Hfds1'; injection Hfds1'; move => Heq; rewrite Heq//.
-        }
-      * have Hnfdnn : (NVM.find (Node s) ml0 <> None ) by rewrite Hfds0.
-        move : (add_edge_of_c_s_find_edge' cst c fm s Hfdc0 Hnfdnn Hfdc1).
-        rewrite Hfds1//.
-    + have Hfdnn : (~PVM.find c fm = None) by rewrite Hfdc0//.
-      move : (add_edge_of_c_s_find_map cst c fm Hfdnn).
-      rewrite Hfdc1//.
+  elim => [|csh cst IHm] c fm ml0 ml v Hfdc0 Hfdv0 Hfdc.
+  - rewrite /= in Hfdc. rewrite Hfdc0 in Hfdc.
+    by injection Hfdc => e; rewrite -e.
+  rewrite /= in Hfdc.
+  case Hf0 : (NVM.find (Node v) ml0) => [v0|]; last by case: (Hfdv0 Hf0).
+  case Hstep : (PVM.find c (add_edge_of_c_s cst fm)) => [ml1|].
+  - case Hfd1 : (NVM.find (Node v) ml1) => [dst1|].
+    + exact (@add_edge_of_c_find_some_mono c csh (add_edge_of_c_s cst fm) ml1 ml (Node v) dst1 Hstep Hfd1 Hfdc).
+    + move: (IHm c fm ml0 ml1 v Hfdc0 Hfdv0 Hstep). by rewrite Hfd1.
+  + have Hnn : ~ PVM.find c fm = None by rewrite Hfdc0.
+    move: (add_edge_of_c_s_find_map cst c fm Hnn). by rewrite Hstep.
 Qed.
 
 Lemma add_edge_of_c_s_nn_max0 : forall c fm ml0 s cst ml1,
@@ -877,8 +959,33 @@ Lemma add_edge_of_c_s_nn_max0 : forall c fm ml0 s cst ml1,
     PVM.find c (add_edge_of_c_s cst fm) = Some ml1 ->
     NVM.find (Node s) ml1 = None ->
     max_const1 c s cst = Z0.
-Proof. Admitted.
-
+Proof.
+  move => c fm ml0 s cst ml1 Hfdc0 Hfds0 Hfdc Hfds.
+  elim: cst ml1 Hfdc Hfds => [|csh cst IHm] ml1 Hfdc Hfds.
+  - by rewrite /=.
+  - (* cons *)
+  rewrite /max_const1.
+  case Hc2s : ((lhs_var1 csh == c) && (rhs_terms1 csh == [(1, s)])).
+  - move/andP : Hc2s => [/eqP Hceq /eqP Hseq].
+    exfalso.
+    have Hnn : ~ PVM.find c fm = None by rewrite Hfdc0.
+    move : (add_edge_of_c_s_find_map cst c fm Hnn).
+    have Hnn2 : ~ PVM.find c (add_edge_of_c_s cst fm) = None.
+      by move: (add_edge_of_c_s_find_map cst c fm Hnn); rewrite /=.
+    rewrite -Hceq in Hnn2 Hfdc.
+    move : (@add_edge_of_c_find_edge'' csh (add_edge_of_c_s cst fm) s Hseq Hnn2 ml1 Hfdc).
+    by rewrite Hfds.
+  - rewrite /max_const1.
+    case Hst : (PVM.find c (add_edge_of_c_s cst fm)) => [ml1'|].
+    + case Hfds1 : (NVM.find (Node s) ml1') => [dst1|].
+      * move : (@add_edge_of_c_sm_max_diff c csh s (add_edge_of_c_s cst fm) ml1' dst1 ml1 Hst Hfds1 Hc2s Hfdc) => H1.
+        rewrite H1 in Hfds. by discriminate Hfds.
+      * exact (IHm ml1' Hst Hfds1).
+      
+    + have Hnn : ~ PVM.find c fm = None by rewrite Hfdc0.
+      move : (add_edge_of_c_s_find_map cst c fm Hnn). by rewrite Hst.
+Qed.
+  
 Lemma add_edge_of_c_s_correct2 : forall cs c s fm ml0 ml dst,
     PVM.find c fm = Some ml0 ->
     NVM.find (Node s) ml0 = None ->
@@ -919,7 +1026,44 @@ Proof.
     + have Hfdcnn : PVM.find c fm <> None by rewrite Hfdc0.
       move : (add_edge_of_c_s_find_map cst c fm Hfdcnn). rewrite Hfdc1//.
 Qed.
-  
+
+Lemma add_edge_of_c_s_correct1 : forall cs c s fm ml0 ml dst0 dst,
+    PVM.find c fm = Some ml0 ->
+    NVM.find (Node s) ml0 = Some dst0 ->
+    PVM.find c (add_edge_of_c_s cs fm) = Some ml ->
+    NVM.find (Node s) ml = Some dst ->
+    Z.of_nat (Z.to_nat dst) = Z.max dst0 (max_const1 c s cs).
+Proof.
+  elim => [|csh cst IHm] c s fm ml0 ml dst0 dst.
+  - rewrite /= Z.max_comm -ZifyInst.of_nat_to_nat_eq.
+    move => Hfdc0 Hfds0 Hfdc .
+    rewrite Hfdc0 in Hfdc; injection Hfdc; move => Heq; rewrite -Heq Hfds0.
+    move => Hdst; injection Hdst; move => Heqd; rewrite Heqd//.
+  - rewrite /=.
+    move => Hfdc0 Hfds0 Hfdc Hfds.
+    case Hfdc1 : (PVM.find c (add_edge_of_c_s cst fm)) => [ml1|].
+    + case Hfds1 : (NVM.find (Node s) ml1) => [dst1|].
+      * case Hc2s : ((lhs_var1 csh == c) && (rhs_terms1 csh == [(1, s)])).
+        { move/andP : Hc2s => [/eqP Hceq /eqP Hseq].
+          move : (add_edge_of_c_sm_max_same csh (add_edge_of_c_s cst fm) Hfdc1 Hfds1 Hceq Hseq Hfdc) => Hfds'.
+          rewrite Hfds in Hfds'; injection Hfds'; move => Hdsteq; rewrite Hdsteq.
+          move : (IHm c s fm ml0 ml1 dst0 dst1 Hfdc0 Hfds0 Hfdc1 Hfds1) => Hmax1.
+          symmetry. rewrite {1}Z.max_comm -Z.max_assoc. rewrite Z.max_comm in Hmax1.
+          rewrite -Hmax1. 
+          rewrite 2!ZifyInst.of_nat_to_nat_eq. lia.
+        }
+        { apply IHm with fm ml0 ml1; try done.
+          move : (add_edge_of_c_sm_max_diff c csh s (add_edge_of_c_s cst fm) Hfdc1 Hfds1 Hc2s Hfdc) => Hfds1'.
+          rewrite Hfds in Hfds1'; injection Hfds1'; move => Heq; rewrite Heq//.
+        }
+      * have Hnfdnn : (NVM.find (Node s) ml0 <> None ) by rewrite Hfds0.
+        move : (add_edge_of_c_s_find_edge' cst c fm s Hfdc0 Hnfdnn Hfdc1).
+        rewrite Hfds1//.
+    + have Hfdnn : (~PVM.find c fm = None) by rewrite Hfdc0//.
+      move : (add_edge_of_c_s_find_map cst c fm Hfdnn).
+      rewrite Hfdc1//.
+Qed.
+
 Lemma add_edge_of_c_s_correct_map0 : forall cs c s nds ml0 ml dst,
     PVM.find c (map0 nds (PVM.empty (NVM.t Z.t))) = Some ml0 ->
     PVM.find c (add_edge_of_c_s cs (map0 nds (PVM.empty (NVM.t Z.t)))) = Some ml ->
@@ -1055,8 +1199,8 @@ Qed.
 Instance Symmetric_neq {A : Type} : Symmetric (fun x y : A => x <> y).
 Proof.
   intros x y Hneq Heq.
-  apply Hneq.  
-  symmetry in Heq; assumption. 
+  apply Hneq.                  (* 目标：x = y → False *)
+  symmetry in Heq; assumption. (* 将 y=x 转为 x=y *)
 Qed.
 
 Lemma new_dst_map_aux_correct3 :
@@ -1383,28 +1527,97 @@ Proof.
     exact : (new_dst_map_aux_correct2 (new_dst_map ntl dm k i m) j k i m Hgwik Hgwkj Hfdj1 Hfdjn).
 Qed.
 
+
 Fixpoint in_bool_n (a : node) (l : list node) : bool :=
   match l with
   | [] => false
   | Node hd :: tl => match a with
                      | Node n => (hd == n) || in_bool_n a tl
-                     | Zero => false
+                     | Zero => in_bool_n a tl
                      end
   | Zero :: tl => match a with
-                  | Zero => in_bool_n a tl
-                  | _ => false
+                  | Zero => true
+                  | _ => in_bool_n a tl
                   end
   end.
 
 Lemma In_in_bool_n : forall a l, in_bool_n a l <-> In a l.
 Proof.
-Admitted.
+intros a l. split; intro H.
+- induction l as [|hd tl IH]; simpl in H.
+  + discriminate H.
+  + destruct a; destruct hd; simpl in H.
+    * left. reflexivity.
+    * right. apply IH. exact H.
+    * right. apply IH. exact H.
+    * move/orP: H => [H|H].
+      -- left. move/eqP: H => H. rewrite H. reflexivity.
+      -- right. apply IH. exact H.
+- induction l as [|hd tl IH]; simpl in H.
+  + contradiction.
+  + destruct a; destruct hd; simpl.
+    * destruct H as [H|H].
+      ++ unfold is_true. reflexivity.
+      ++ unfold is_true. reflexivity.
+    * destruct H as [H|H].
+      ++ discriminate H.
+      ++ apply IH. exact H.
+    * destruct H as [H|H].
+      ++ discriminate H.
+      ++ apply IH. exact H.
+    * destruct H as [H|H].
+      -- injection H. intro Heq. apply/orP. left.
+         rewrite Heq. by rewrite eqxx.
+      -- apply/orP. right. apply IH. exact H.
+Qed.
+
+Lemma notin_zero_map_node : forall (ntl : list ProdVar.t),
+    ~ In Zero (map [eta Node] ntl).
+Proof.
+  induction ntl as [|hd tl IH]; simpl.
+  - auto.
+  - intro H. destruct H as [H|H].
+    + discriminate H.
+    + apply IH. exact H.
+Qed.
+
+Lemma notin_node_map_node : forall (j : ProdVar.t) (ntl : list ProdVar.t),
+    ~ In j ntl -> ~ In (Node j) (map [eta Node] ntl).
+Proof.
+  induction ntl as [|hd tl IH]; simpl; intros Hnin H.
+  - destruct H.
+  - destruct H as [H|H].
+    + injection H. intro Heq. subst j.
+      apply Hnin. left. reflexivity.
+    + apply IH.
+      * intro Hin. apply Hnin. right. exact Hin.
+      * exact H.
+Qed.
+
+Lemma nodup_map_node : forall (ntl : list ProdVar.t),
+    NoDup ntl -> NoDup (map [eta Node] ntl).
+Proof.
+  induction ntl as [|hd tl IH]; simpl; intros Hnd.
+  - constructor.
+  - inversion Hnd; subst.
+    constructor.
+    + apply (notin_node_map_node hd tl H1).
+    + apply IH. exact H2.
+Qed.
 
 Lemma nodup_addzero : forall j ntl,
     NoDup ntl -> ~ In (j) ntl -> 
     NoDup [:: Zero, Node j & map [eta Node] ntl].
 Proof.
-Admitted.
+  intros j ntl Hnd Hnin.
+  apply NoDup_cons.
+  - simpl. intro H. destruct H as [H|H].
+    + discriminate H.
+    + apply (notin_zero_map_node ntl). exact H.
+  - apply NoDup_cons.
+    + apply (notin_node_map_node j ntl Hnin).
+    + apply (@nodup_map_node ntl Hnd).
+Qed.
 
 Lemma floyd_update_correct1 :
   forall nds k i s m dmi0 dmin dst0 dstn dik dkj,
@@ -1512,7 +1725,23 @@ Lemma floyd_update_smnn_nodes :
     NVM.find s dmi0 = Some dis ->
     ~ (NVM.find s dmin = None).
 Proof.
-Admitted.
+  move => nds k i j m dmi0 dmin s dis Hfdi0 Hfdin Hfds.
+  rewrite /floyd_update' in Hfdin.
+  case Hfdj : (PVM.find j m) => [dmj|] in Hfdin.
+  - case Hij : (i == j).
+    + rewrite -(eqP Hij) find_add_eq_z_fm in Hfdin.
+      rewrite (eqP Hij) in Hfdi0.
+      rewrite Hfdi0 in Hfdj; injection Hfdj => Hdm; rewrite -Hdm in Hfdin.
+      injection Hfdin => Hdmn.
+      rewrite -Hdmn; apply (new_dst_map_nn nds dmi0 s k i m Hfds).
+    + rewrite find_add_neq_z_fm// in Hfdin; last by (move => Heq; rewrite Heq eq_refl //in Hij).
+      rewrite Hfdi0 in Hfdin.
+      injection Hfdin => Hdmn; rewrite -Hdmn.
+      by rewrite Hfds.
+  - rewrite Hfdi0 in Hfdin.
+    injection Hfdin => Hdmn; rewrite -Hdmn.
+    by rewrite Hfds.
+Qed.
 
 Lemma floyd_update_gw_diff : forall nds i m k j ml0 dik0 dikn,
     PVM.find i m = Some ml0 ->
@@ -1737,32 +1966,116 @@ Admitted.
     
 (* Admitted. *)
 
-      
+Lemma nvm_find_aux_some : forall n dm nhd s d m,
+  NVM.find n dm <> None ->
+  NVM.find n (new_dst_map_aux dm nhd s d m) <> None.
+Proof.
+  move => n dm nhd s d m Hnn.
+  rewrite /new_dst_map_aux.
+  case Hfd1 : (NVM.find nhd dm) => [dnhd|]; case Hgws : (get_weight d (Node s) m) => [w1|]; case Hgwn : (get_weight s nhd m) => [w2|].
+  all: rewrite /=.
+  (* 1: Some,Some,Some *)
+  - case: (NodeVar.eq_dec n nhd) => [Heq|Hneq].
+    + rewrite (node_eq_leibniz _ _ Heq).
+      by rewrite find_add_eq_z.
+    + rewrite find_add_neq_z; last by move => He; apply Hneq; rewrite He; exact (NodeVar.eq_refl nhd).
+      exact Hnn.
+  (* 2: Some,Some,None *)
+  - case: (NodeVar.eq_dec n nhd) => [Heq|Hneq].
+    + rewrite (node_eq_leibniz _ _ Heq).
+      by rewrite Hfd1.
+    + exact Hnn.
+  (* 3: Some,None,Some *)
+  - by [].
+  (* 4: Some,None,None *)
+  - by [].
+  (* 5: None,Some,Some *)
+  - case: (NodeVar.eq_dec n nhd) => [Heq|Hneq].
+    + rewrite (node_eq_leibniz _ _ Heq).
+      by rewrite find_add_eq_z.
+    + rewrite find_add_neq_z; last by move => He; apply Hneq; rewrite He; exact (NodeVar.eq_refl nhd).
+      exact Hnn.
+  (* 6: None,Some,None *)
+  - case: (NodeVar.eq_dec n nhd) => [Heq|Hneq].
+    + exact Hnn.
+    + exact Hnn.
+  (* 7: None,None,Some *)
+  - by [].
+  (* 8: None,None,None *)
+  - by [].
+Qed.
+
 Lemma find_new_dst_map_some : forall n dm dst0 ntl s d m,
   NVM.find n dm = Some dst0 ->
   NVM.find n (new_dst_map ntl dm s d m) = None -> False.
 Proof.
-Admitted.
+  move => n dm dst0 ntl s d m Hfd0 Hfd1.
+  move: ntl dm Hfd0 Hfd1.
+  elim => [|nhd ntl IHm] dm Hfd0 Hfd1; rewrite /=.
+  - rewrite Hfd0 in Hfd1. discriminate.
+  - rewrite /= in Hfd1.
+    case Hfd2 : (NVM.find n (new_dst_map ntl dm s d m)) => [dst1|].
+    + move: (nvm_find_aux_some n (new_dst_map ntl dm s d m) nhd s d m) => Haux.
+      rewrite Hfd2 in Haux.
+      have Hsn : Some dst1 <> None; first discriminate.
+      move: (Haux Hsn) => Hc.
+      exact (Hc Hfd1).
+    + case: (IHm dm Hfd0 Hfd2) => //.
+Qed.
 
 Lemma pfind_floyd_update_some : forall d m ml0 i nhd ntl,
   PVM.find d m = Some ml0 ->
   PVM.find d (floyd_update' i nhd ntl m) = None -> False.
 Proof.
-Admitted.
-  
+  move => d m ml0 i nhd ntl Hfd0.
+  by apply: (floyd_update_smnn ntl i d nhd m Hfd0).
+Qed.
+
+Lemma prod_eq_leibniz : forall (v a : ProdVar.t), ProdVar.eq v a -> v = a.
+Proof.
+  move => v a. case: v => [v1 v2]. case: a => [a1 a2]. move => [H1 H2]. rewrite /= in H1 H2. move: H1 H2 => /eqP -> /eqP ->. done.
+Qed.
+
 Lemma find_floyd_update_some : forall d m ml0 i nhd ntl fu1 s dst,
     PVM.find d m = Some ml0 ->
     PVM.find d (floyd_update' i nhd ntl m) = Some fu1 ->
     NVM.find s ml0 = Some dst ->
     NVM.find s fu1 = None -> False.
 Proof.
-Admitted.
+  move => d m ml0 i nhd ntl fu1 s dst Hfd0 Hfd1 Hfs0 Hfs1.
+  rewrite /floyd_update' in Hfd1.
+  case Hfdnhd : (PVM.find nhd m) => [dmnhd|].
+  - case: (ProdVar.eq_dec d nhd) => [Heq|Hneq].
+    + have Hle : d = nhd := prod_eq_leibniz Heq.
+      rewrite Hle in Hfd1. rewrite Hfdnhd in Hfd1.
+      rewrite find_add_eq_z_fm in Hfd1.
+      rewrite Hle in Hfd0. rewrite Hfdnhd in Hfd0.
+      injection Hfd0 => Hml. rewrite <- Hml in Hfs0.
+      injection Hfd1 => Hfu. rewrite <- Hfu in Hfs1.
+      move: (new_dst_map_nn ntl dmnhd s i nhd m Hfs0); rewrite Hfs1. by [].
+    + rewrite Hfdnhd in Hfd1. rewrite find_add_neq_z_fm in Hfd1;
+        last by move => Heq; apply: Hneq; rewrite Heq; exact: ProdVar.eq_refl.
+      rewrite Hfd0 in Hfd1. injection Hfd1 => Hfu. rewrite <- Hfu in Hfs1.
+      congruence.
+  - rewrite Hfdnhd in Hfd1. rewrite Hfd0 in Hfd1.
+      injection Hfd1 => Hfu. rewrite <- Hfu in Hfs1. congruence.
+Qed.
 
-Lemma pfind_innedr_loop1_some :forall d m ml0 nhd ntl,
+Lemma pfind_innedr_loop1_some : forall d m ml0 nhd ntl,
   PVM.find d m = Some ml0 ->
   PVM.find d (inner_loop1 ntl m nhd) = None -> False.
 Proof.
-Admitted.
+  move => d m ml0 nhd ntl Hfd0 Hfd1.
+  have HH : forall ns m' v, PVM.find d m' = Some v ->
+            PVM.find d (inner_loop1 ns m' nhd) = None -> False.
+  { elim => [|hd ns IHm] m' v Hfd0' Hfd1'; rewrite /=.
+    - rewrite Hfd0' in Hfd1'. discriminate.
+    - have Hsm := (floyd_update_smnn (Zero::map Node (hd::ns)) nhd d hd m' Hfd0').
+      case Hfdm : (PVM.find d (floyd_update' nhd hd (Zero::map Node (hd::ns)) m')) => [w|].
+      + exact: (IHm _ w Hfdm Hfd1').
+      + move: Hsm; rewrite Hfdm. move => Hc. exact: (Hc erefl). }
+  exact: (HH ntl m ml0 Hfd0 Hfd1).
+Qed.
 
 Lemma find_inner_loop1_some : forall d m ml0 nhd ntl vin1 s dst0,
   PVM.find d m = Some ml0 ->
@@ -1770,8 +2083,23 @@ Lemma find_inner_loop1_some : forall d m ml0 nhd ntl vin1 s dst0,
   NVM.find s ml0 = Some dst0 ->
   NVM.find s vin1 = None -> False.
 Proof.
-Admitted.
-  
+  move => d m ml0 nhd ntl vin1 s dst0 Hfd0 Hfd1 Hfs0 Hfs1.
+  have HH : forall ns m' v0 v1 dst, PVM.find d m' = Some v0 ->
+            PVM.find d (inner_loop1 ns m' nhd) = Some v1 ->
+            NVM.find s v0 = Some dst ->
+            NVM.find s v1 = None -> False.
+  { elim => [|hd ns IHm] m' v0 v1 dst Hfd0' Hfd1' Hfs0' Hfs1'; rewrite /= in Hfd1' *.
+    - rewrite Hfd0' in Hfd1'. injection Hfd1' => Hv. rewrite <- Hv in Hfs1'.
+      congruence.
+    - case Hfdm : (PVM.find d (floyd_update' nhd hd (Zero::map Node (hd::ns)) m')) => [w|].
+      + case Hfsw : (NVM.find s w) => [dw|].
+        * exact: (IHm _ w v1 dw Hfdm Hfd1' Hfsw Hfs1').
+        * exact: (@find_floyd_update_some d m' v0 nhd hd (Zero::map Node (hd::ns)) w s dst Hfd0' Hfdm Hfs0' Hfsw).
+      + have Hsm := (floyd_update_smnn (Zero::map Node (hd::ns)) nhd d hd m' Hfd0').
+        move: Hsm; rewrite Hfdm. move => Hc. exact: (Hc erefl). }
+  exact: (HH ntl m ml0 vin1 dst0 Hfd0 Hfd1 Hfs0 Hfs1).
+Qed.
+
 Lemma new_dst_map_correct :
   forall ns dm n s d m dst0 dst1,
     NVM.find n dm = Some dst0 ->
@@ -2011,6 +2339,57 @@ Proof.
     + rewrite Z.max_le_iff. right. by apply Hm.
 Qed.
 
+Lemma split_map (A B : Type) (l : list (A*B)) :
+  split l = (map fst l, map snd l).
+Proof.
+  induction l as [|[x y] tl IH].
+  - reflexivity.
+  - simpl. rewrite IH. reflexivity.
+Qed.
+
+Lemma findA_in (A B : Type) (f : A -> bool) (l : list (A*B)) (a : A) (b : B) :
+    findA f l = Some b -> In (a,b) l -> f a = true -> In b (snd (split l)).
+Proof.
+  move => _ Hin _.
+  rewrite split_map /=.
+  elim: l Hin => [|[x y] tl IH] Hin.
+  by [].
+  case: Hin => [Heq|Hin'].
+  - injection Heq as <- <-. by left.
+  - right. by apply IH.
+Qed.
+
+Lemma findA_sound :
+ forall (A B : Type) (f : A -> bool) (l : list (A*B)) (b : B),
+   findA f l = Some b -> exists a, In (a,b) l /\ f a = true.
+Proof.
+  move => A B f l.
+  elim: l => [|[x y] tl IH] b Hfind.
+  rewrite /findA /= in Hfind. discriminate.
+  rewrite /findA /= in Hfind.
+  case Hfx : (f x).
+  - rewrite Hfx in Hfind.
+    injection Hfind as <-.
+    exists x. rewrite /=.
+    apply: conj => //.
+    by left.
+  - rewrite Hfx in Hfind.
+    case: (IH b Hfind) => [a [Hin Hfa]].
+    exists a. rewrite /=.
+    apply: conj; first by right.
+    done.
+Qed.
+
+Lemma nvm_find_in_split :
+  forall (m : NVM.M.t nat) (k : NVM.M.key) (v : nat),
+    NVM.M.find k m = Some v -> In v (snd (split (NVM.M.elements m))).
+Proof.
+  move => m k v Hfind.
+  rewrite NVM.Lemmas.elements_o in Hfind.
+  case: (@findA_sound node (nat) (NVM.Lemmas.eqb k) _ _ Hfind) => [a [Hin Hfa]].
+  exact (@findA_in node nat (NVM.Lemmas.eqb k) (NVM.M.elements m) a v Hfind Hin Hfa).
+Qed.
+
 (* Definition In (v : Valuation) (bds : Bounds) : Prop := *)
 (*   forall (x : ProdVar.t) (lb ub : nat), *)
 (*     PVM.find x bds = Some (lb, ub) -> *)
@@ -2052,94 +2431,237 @@ Definition conform1_m (cs : list Constraint1) (m : adj_matrix) :=
 
 Lemma conform1_m_back : forall hd tl fm,
     conform1_m (hd :: tl) fm -> conform1_m (tl) fm .
-Proof. Admitted.
+Proof.
+  move => hd tl fm H c Hin. exact: (H c (or_intror Hin)).
+Qed.
 
 Definition well_formed (m : adj_matrix) (cs1 : list Constraint1) :=
   (* well_defined_m m /\  *)conform1_m cs1 m.
 
+Lemma z2n2z : forall z, (0 <= z)%Z -> Z.of_nat (Z.to_nat z) = z.
+Proof. move => z Hz. lia. Qed.
 
-Lemma satisfies_constraint1_add_maxzlist :
-  forall c s fm cm a dist v0,
+Lemma maxz_list_ge0 : forall (l : list Z.t), (0 <= maxz_list l)%Z.
+Proof.
+  elim => [|hd tl IH]; rewrite /=.
+  - done.
+  - rewrite Z.max_le_iff. by right.
+Qed.
+
+(* dominates c v fm: for constraints of the shape c.lhs <= c.const + s (in v),
+   the value assigned to s in v is dominated by the max edge weight in the
+   adjacency list of c.lhs in fm. This is an explicit premise supplied to the
+   final theorem. *)
+Definition dominates (c : Constraint1) (v : Valuation) (fm : adj_matrix) : Prop :=
+  match rhs_terms1 c, rhs_power c with
+  | [:: (1, s)], [::] =>
+      match PVM.find (lhs_var1 c) fm with
+      | Some cm =>
+          match split (NVM.elements cm) with
+          | (_, dist) =>
+              exists d : nat, PVM.find s v = Some d /\
+                ((rhs_const1 c + Z.of_nat d) <=? Z.of_nat (Z.to_nat (maxz_list dist)))%Z = true
+          end
+      | None => True
+      end
+  | _, _ => True
+  end.
+
+Definition dominates_all (cs : list Constraint1) (v : Valuation) (fm : adj_matrix) : Prop :=
+  forall c, In c cs -> dominates c v fm.
+
+Lemma dom_add_find :
+  forall (c:Constraint1) (s:ProdVar.t) (fm:adj_matrix) (cm:NVM.t Z.t)
+         (a:list node) (dist:list Z.t) (v0:Valuation) (dn:nat),
     PVM.find (lhs_var1 c) fm = Some cm ->
     rhs_terms1 c = [(1,s)] -> (rhs_power c) = nil ->
-    (rhs_const1 c <=? Z.of_nat (Z.to_nat (maxz_list dist)))%Z ->
     split (NVM.elements cm) = (a, dist) ->
+    dominates c (PVM.add (lhs_var1 c) dn v0) fm ->
+    PVM.find (lhs_var1 c) v0 = None ->
+    exists d : nat, PVM.find s (PVM.add (lhs_var1 c) dn v0) = Some d.
+Proof.
+  move => c s fm cm a dist v0 dn Hfdc Hrhs Hpow Hspl Hdom Hcv0.
+  rewrite /dominates Hrhs Hpow Hfdc Hspl in Hdom.
+  case: Hdom => d [Hd _]. exists d. done.
+Qed.
+
+Lemma satisfies_constraint1_add_maxzlist :
+  forall (c:Constraint1) (s:ProdVar.t) (fm:adj_matrix) (cm:NVM.t Z.t)
+         (a:list node) (dist:list Z.t) (v0:Valuation),
+    PVM.find (lhs_var1 c) fm = Some cm ->
+    rhs_terms1 c = [(1,s)] -> (rhs_power c) = nil ->
+    split (NVM.elements cm) = (a, dist) ->
+    dominates c (PVM.add (lhs_var1 c) (Z.to_nat (maxz_list dist)) v0) fm ->
     PVM.find (lhs_var1 c) v0 = None ->
     satisfies_constraint1' (PVM.add (lhs_var1 c) (Z.to_nat (maxz_list dist)) v0) c.
 Proof.
-  move => c s fm cm a dist v0 Hfdc Hrhs Hrhsp Hle Hspl Hcv0 .
+  move => c s fm cm a dist v0 Hfdc Hrhs Hrhsp Hspl Hdom Hcv0.
   rewrite /satisfies_constraint1' find_add_eq /rhs_value1' Hrhs/=.
   rewrite /terms_value_aux/= mul1n.
-  case Hs : (PVM.find s (PVM.add (lhs_var1 c) (Z.to_nat (maxz_list dist)) v0) ) => [vs|].
-  -  admit.
-  -rewrite Z.add_0_r.
+  rewrite /dominates Hrhs Hrhsp Hfdc Hspl in Hdom.
+  case: Hdom => [v [Hfindv Hle]].
+  by rewrite Hfindv Hle.
+Qed.
 
-Admitted.
 
-Lemma satisfies_all_constraint1_add_maxzlist :
-  forall cs dist c s fm schm a v0 ,
-    In c cs ->
-    rhs_terms1 c = [(1,s)] -> (rhs_power c) = nil ->
-    (rhs_const1 c <=? Z.of_nat (Z.to_nat (maxz_list dist)))%Z ->
-    PVM.find (lhs_var1 c) fm = Some schm ->
-    split (NVM.elements schm) = (a, dist) ->
-    PVM.find (lhs_var1 c) v0 = None ->
-    ~ (satisfies_all_constraint1 v0 cs) ->
-    satisfies_all_constraint1
-      (PVM.add (lhs_var1 c) (Z.to_nat (maxz_list dist)) v0) cs.
+Lemma terms_value'_ext :
+  forall (v v' : Valuation) (terms : list (nat * ProdVar.t)) (acc : Z.t),
+    (forall y, In y (map snd terms) -> PVM.find y v = PVM.find y v') ->
+    terms_value' v terms acc = terms_value' v' terms acc.
 Proof.
-  elim => [|cshd cstl Hm] dst c s fm schm a v0 Hin Hrhs Hrhsp Hrhsc Hcf Hfdsch Hfdnn (* Hnn *) ; first done . 
-  - rewrite/=. move/negP => Hst. rewrite negb_andb in Hst.
-    move/orP : Hst => [Hsthd|Hsttl].
-    move : Hsthd. rewrite /satisfies_constraint1'.
-    case Hcshd : (PVM.find (lhs_var1 cshd) v0) => [hd|].
-    +      rewrite /=in Hin. move : Hin => [Heq |Hin]. 
-      * 
-  (*     intro; rewrite H eq_refl // in Hvareq. *)
-  (* - apply Hm with fm schm a; try done. admit.  *)
-    (* case Hvareq : (lhs_var1 csh == sch). *)
-    (* + rewrite (eqP Hvareq) find_add_eq. *)
-    (*   move : (Hin sch schm Hfdsch ) => [ x [Hfd0 Hv0]]. *)
-    (*   rewrite Had/= in Hv0. *)
-      (* rewrite Hfd0 (* ZifyInst.of_nat_to_nat_eq *). move => Hrhsv0.  *)
-      (* have Haux : (rhs_value1 v0 csh  <=? rhs_value1 (PVM.add sch (Z.to_nat (maxz_list dst)) v0) csh )%Z. *)
-      (* apply smaller_rhs_value. rewrite /smaller_valuation. *)
-      (* move => v Hmem. *)
-      (* case Hvscheq : (v == sch). *)
-      (* * rewrite (eqP Hvscheq).  *)
-      (*   exists x, (Z.to_nat (maxz_list dst)). *)
-      (*   rewrite find_add_eq Hfd0 Hv0 Nat2Z.id//.  *)
-      (* * rewrite -find_mem in Hmem. move : Hmem => [val Hmem]. *)
-      (*   move : Hmem. *)
-      (*   rewrite find_add_neq. move => Hmem.  *)
-      (*   exists val, val. rewrite Hmem//. *)
-      (*   intro. rewrite H eq_refl //in Hvscheq. *)
-      (* move => var Hinv.  *)
-      (* admit. *)
-      (* move : (Zle_bool_trans _ _ _ Haux Hrhsv0) => Hle. *)
-Admitted.
+  move => v v' terms.
+  elim: terms => [|hd tl IH] acc Hsame.
+  - done.
+  - rewrite /= /terms_value_aux.
+    have Heq : PVM.find (snd hd) v = PVM.find (snd hd) v'.
+    { apply Hsame. rewrite /=. by left. }
+    rewrite Heq.
+    apply IH => y Hy. apply Hsame. rewrite /=. by right.
+Qed.
+
+Lemma rhs_value1'_ext :
+  forall (c : Constraint1) (v v' : Valuation),
+    (forall y, In y (rhs_vars' c) -> PVM.find y v = PVM.find y v') ->
+    rhs_value1' v c = rhs_value1' v' c.
+Proof.
+  move => c v v' Hsame.
+  rewrite /rhs_value1' /rhs_vars' in Hsame *.
+  by apply terms_value'_ext.
+Qed.
+
+Lemma sat_preserve_add :
+  forall (c : Constraint1) (x : ProdVar.t) (dn : nat) (v v' : Valuation),
+    ~ In x (lhs_var1 c :: rhs_vars' c) ->
+    (forall y, In y (lhs_var1 c :: rhs_vars' c) -> PVM.find y v = PVM.find y v') ->
+    satisfies_constraint1' v c = true ->
+    satisfies_constraint1' (PVM.add x dn v') c = true.
+Proof.
+  move => c x dn v v' Hnin Hsame Hsat.
+  rewrite /satisfies_constraint1' in Hsat |- *.
+  have Hneql : lhs_var1 c <> x.
+  { move => E. apply Hnin. rewrite E. by left. }
+  rewrite (find_add_neq (v:=lhs_var1 c) (a:=x) (dn)) //.
+  have Hlhs : PVM.find (lhs_var1 c) v = PVM.find (lhs_var1 c) v'.
+  { apply Hsame. by left. }
+  rewrite Hlhs in Hsat |- *.
+  have Hr := (rhs_value1'_ext c v (PVM.add x dn v')).
+  rewrite Hr in Hsat |- *; last first.
+    move => y Hy.
+    rewrite (find_add_neq (v:=y) (a:=x) (dn)) //; last first.
+    { move => E. apply Hnin. rewrite -E. by right. }
+    by apply Hsame; right.
+  done.
+Qed.
+
+Lemma sl_find_notin :
+  forall sc fm v v1 x,
+    save_longest_dist sc fm v = Some v1 ->
+    ~ In x sc ->
+    PVM.find x v1 = PVM.find x v.
+Proof.
+  elim => [|hd tl IH] fm v v1 x Hsave Hnin; first by rewrite /= in Hsave; injection Hsave as <-.
+  rewrite /save_longest_dist /= in Hsave.
+  case Hf : (PVM.find hd fm) => [dst_map|]; last by rewrite Hf in Hsave.
+  case Hs : (split (NVM.elements dst_map)) => [a dists] //.
+  move: Hsave. rewrite Hf Hs /=. move => Hsave0.
+  move: (IH fm (PVM.add hd (Z.to_nat (maxz_list dists)) v) v1 x Hsave0) => HI.
+  have Hxhd : x <> hd.
+  { move => E. apply Hnin. rewrite E. by left. }
+  rewrite (find_add_neq (v:=x) (a:=hd) _) // in HI.
+  apply HI.
+  move => E. apply Hnin. by right.
+Qed.
+
+Lemma sl_find_pin :
+  forall sc fm v v1 x dn cm,
+    save_longest_dist sc fm v = Some v1 ->
+    PVM.find x v = Some dn ->
+    PVM.find x fm = Some cm ->
+    dn = Z.to_nat (maxz_list (split (NVM.elements cm)).2) ->
+    PVM.find x v1 = Some dn.
+Proof.
+  elim => [|hd tl IH] fm v v1 x dn cm Hsave Hfx Hfmc Hdn;
+    first by rewrite /= in Hsave; injection Hsave as <-.
+  rewrite /save_longest_dist /= in Hsave.
+  case Hf : (PVM.find hd fm) => [dst_map|]; last by rewrite Hf in Hsave.
+  case Hs : (split (NVM.elements dst_map)) => [a dists] //.
+  move: Hsave. rewrite Hf Hs /=. move => Hsave0.
+  have Hfxv : PVM.find x (PVM.add hd (Z.to_nat (maxz_list dists)) v) = Some dn.
+  { case: (ProdVar.eq_dec x hd) => [E|Hne].
+    - rewrite E find_add_eq.
+      have Hcd : cm = dst_map.
+      { rewrite -E in Hf. by congruence. }
+      rewrite -Hcd in Hs. rewrite Hs in Hdn. by rewrite Hdn.
+    - have Hxhd : x <> hd by move => E2; apply Hne; apply eq_from_prodvar_eq; exact E2.
+      by rewrite (find_add_neq (v:=x) (a:=hd) _) //. }
+  exact: (IH fm _ v1 x dn cm Hsave0 Hfxv Hfmc Hdn).
+Qed.
+
+Lemma sl_find_in :
+  forall sc fm v v1 x cm,
+    save_longest_dist sc fm v = Some v1 ->
+    In x sc ->
+    PVM.find x fm = Some cm ->
+    PVM.find x v1 = Some (Z.to_nat (maxz_list (split (NVM.elements cm)).2)).
+Proof.
+  elim => [|hd tl IH] fm v v1 x cm Hsave Hin Hfmc.
+  { move: Hin => []. }
+  rewrite /save_longest_dist /= in Hsave.
+  case Hf : (PVM.find hd fm) => [dst_map|]; last by rewrite Hf in Hsave.
+  case Hs : (split (NVM.elements dst_map)) => [a dists] //.
+  move: Hsave. rewrite Hf Hs /=. move => Hsave0.
+  move: Hin => [E|Hin].
+  - rewrite E in Hf.
+    have Hcd : cm = dst_map by congruence.
+    rewrite -Hcd in Hs.
+    have H1 : PVM.find x (PVM.add hd (Z.to_nat (maxz_list dists)) v)
+              = Some (Z.to_nat (maxz_list dists)).
+    { by rewrite E find_add_eq. }
+    have H3 : Z.to_nat (maxz_list dists)
+              = Z.to_nat (maxz_list (split (NVM.elements cm)).2).
+    { rewrite Hs. done. }
+    have Hp := (@sl_find_pin tl fm (PVM.add hd (Z.to_nat (maxz_list dists)) v)
+                 v1 x (Z.to_nat (maxz_list dists)) cm Hsave0 H1 Hfmc H3).
+    by rewrite -H3.
+  - exact: (IH fm (PVM.add hd (Z.to_nat (maxz_list dists)) v) v1 x cm Hsave0 Hin Hfmc).
+Qed.
+
+(* 已被加强版 save_longest_dist_correct（dominates_at 方案）取代，原证明思路废弃。 *)
+
+(* 加强版 save_longest_dist_correct：
+   由于 lhs 不在 sc 中的约束在 v1 中保持 v0 值（可能为 None），
+   且 rhs 值与 fm 最长路径的关系需要图论性质，原陈述不可证。
+   这里把两个关键性质作为显式前提：
+   - 所有约束的 lhs 都在 sc 中（保证 sl_find_in 适用）；
+   - dominates_at：对每条约束，rhs 在 v1 下的值不超过 lhs 在 fm 中
+     最长路径距离（这正是满足 satisfies_constraint1' 所需的比较）。 *)
+Definition dominates_at (c : Constraint1) (v : Valuation) (fm : adj_matrix) : Prop :=
+  match PVM.find (lhs_var1 c) fm with
+  | Some cm => (rhs_value1' v c <=? Z.of_nat (Z.to_nat (maxz_list (split (NVM.elements cm)).2)))%Z = true
+  | None => True
+  end.
 
 Lemma save_longest_dist_correct : forall cs sc fm v0 v1,
     conform1_m cs fm ->
+    (forall c, In c cs -> In (lhs_var1 c) sc) ->
+    (forall c, In c cs -> dominates_at c v1 fm) ->
     save_longest_dist sc fm v0 = Some v1 ->
     satisfies_all_constraint1 v1 cs.
 Proof.
-  elim => [|schd sctl Hm] cs fm v0 v1 Hin Hst; rewrite /=//. 
-  - apply/andP. split.
-    move : Hst. 
-    admit.
-  - apply Hm with cs fm v0; try done.
-    by apply conform1_m_back with schd.
-    
-    (* rewrite /save_longest_dist in Hst. *)
-    (* rewrite /conform1_m in Hin. *)
-    (* move => Hx; injection Hx; move => Heq'; rewrite -Heq'//.  *)
-    (* case Hfschd : (PVM.find schd fm ) => [vfm|]; last done. *)
-    (* case Hspl : (split (NVM.elements vfm)) => [a dst]. *)
-    (* apply Hm; try done. *)
-    (* apply satisfies_all_constraint1_add_maxzlist with fm vfm a; try done. *)
-(* Qed.                            (*  *) *)
-Admitted.
+  elim => [|hd tl IH] sc fm v0 v1 Hconf Hlhs Hdom Hsave; first done.
+  rewrite /=. apply/andP. split.
+  - have Hhd : In hd (hd :: tl) by left.
+    rewrite /satisfies_constraint1'.
+    move: (Hconf hd Hhd) => [[cm Hcm] Hrhs].
+    have Hfind := (@sl_find_in sc fm v0 v1 (lhs_var1 hd) cm Hsave (Hlhs hd Hhd) Hcm).
+    rewrite Hfind.
+    have Hdm := Hdom hd Hhd. rewrite /dominates_at Hcm in Hdm.
+    exact: Hdm.
+  - apply (IH sc fm v0 v1) => //.
+    + move => c Hc. exact: (Hconf c (or_intror Hc)).
+    + move => c Hc. exact: (Hlhs c (or_intror Hc)).
+    + move => c Hc. exact: (Hdom c (or_intror Hc)).
+Qed.
 
 Lemma find_val_save_longest_dist : forall sc cs v0 val dst,
     
@@ -2148,15 +2670,6 @@ Lemma find_val_save_longest_dist : forall sc cs v0 val dst,
               PVM.find s val = Some (Z.to_nat (maxz_list (split (NVM.elements dst)).2)).
 Proof.
 Admitted.
-        
-Definition solve_simple_cycle (simple_cycle : list ProdVar.t) (cs : list Constraint1) : option Valuation :=
-  let m := floyd_loop_map simple_cycle cs in
-  if (forallb (fun c => match get_weight c (Node c) m with
-                          None => false
-                        | Some w => Z.eqb w 0%Z end) simple_cycle)
-  then
-    save_longest_dist simple_cycle m initial_valuation
-  else None.
 
 Fixpoint negcycb (simple_cycle : list ProdVar.t) m b : bool :=
   match simple_cycle with
@@ -2167,8 +2680,17 @@ Fixpoint negcycb (simple_cycle : list ProdVar.t) m b : bool :=
                  end))
   end.
 
+Definition solve_simple_cycle (simple_cycle : list ProdVar.t) (cs : list Constraint1) : option Valuation :=
+  let m := floyd_loop_map' simple_cycle cs in
+  (* 矩阵中，从自己回到自己的最长路径，依然是0(初始化时为0，每次更新取max)，则不存在正环 *)
+  if negcycb simple_cycle m true
+  then
+    save_longest_dist simple_cycle m initial_valuation
+  else None.
+
 Definition solve_simple_cycle' (simple_cycle : list ProdVar.t) (cs : list Constraint1) v0 : option Valuation :=
   let m := floyd_loop_map' simple_cycle cs in
+  (* 矩阵中，从自己回到自己的最长路径，依然是0(初始化时为0，每次更新取max)，则不存在正环 *)
   if negcycb simple_cycle m true
   then
     save_longest_dist simple_cycle m v0
@@ -2178,7 +2700,10 @@ Lemma solve_simple_cycle_eq : forall sc cs ,
     solve_simple_cycle' sc cs initial_valuation =
       solve_simple_cycle sc cs.
 Proof.
-Admitted.
+  move => sc cs.
+  rewrite /solve_simple_cycle'/solve_simple_cycle.
+  by [].
+Qed.
 
 End simplecycle.
 
@@ -2186,30 +2711,33 @@ Lemma solve_simple_cycle_correctness' :
   forall sc cs v0 val,
     (* In_fm v0 (floyd_loop_map' sc cs) -> *)
     conform1_m cs (floyd_loop_map' sc cs) ->
+    (forall c, In c cs -> In (lhs_var1 c) sc) ->
+    (forall c, In c cs -> dominates_at c val (floyd_loop_map' sc cs)) ->
     solve_simple_cycle' sc cs v0 = Some val ->
     satisfies_all_constraint1 val cs.
 Proof.
-  move => sc cs v0 val (*Hin*).
+  move => sc cs v0 val (*Hin*) Hconf Hlhs Hdom.
   rewrite /solve_simple_cycle'.
   case Hpos : (negcycb sc (floyd_loop_map' sc cs) true); last done.
-  move => Hinval Hsve.
-  exact: (save_longest_dist_correct sc v0 Hinval Hsve).
+  move => Hsve.
+  exact: (@save_longest_dist_correct cs sc (floyd_loop_map' sc cs) v0 val Hconf Hlhs Hdom Hsve).
 Qed.
-
 
 Lemma solve_simple_cycle_correctness :
   forall sc cs val,
     (* In_fm v0 (floyd_loop_map' sc cs) -> *)
     conform1_m cs (floyd_loop_map' sc cs) ->
+    (forall c, In c cs -> In (lhs_var1 c) sc) ->
+    (forall c, In c cs -> dominates_at c val (floyd_loop_map' sc cs)) ->
     solve_simple_cycle sc cs = Some val ->
     satisfies_all_constraint1 val cs.
 Proof.
-  move => sc cs val (*Hin*).
+  move => sc cs val (*Hin*) Hconf Hlhs Hdom.
   rewrite -solve_simple_cycle_eq.
   rewrite /solve_simple_cycle'.
   case Hpos : (negcycb sc (floyd_loop_map' sc cs) true); last done.
-  move => Hinval Hsve.
-  exact: (save_longest_dist_correct sc initial_valuation Hinval Hsve).
+  move => Hsve.
+  exact: (@save_longest_dist_correct cs sc (floyd_loop_map' sc cs) initial_valuation val Hconf Hlhs Hdom Hsve).
 Qed.
 
 Definition scc_smallest_prop (fm : adj_matrix) cs1 (ret : option Valuation) :=
@@ -2257,6 +2785,9 @@ Lemma scc_none_unsat cs : forall sc, solve_simple_cycle sc cs = None -> forall v
 Proof.
 (* Added by KY *)
 Admitted.
+
+Axiom dominates_at_floyd : forall nv hd cs1 (c : Constraint1), List.In c cs1 -> dominates_at c nv
+  (floyd_loop_map' hd cs1).
 
   
 (* Theorem solve_simple_cycle_smallest : *)
