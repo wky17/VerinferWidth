@@ -566,7 +566,7 @@ Proof.
   apply add_edge_of_c_find_map. by apply Hfdc.
 Qed.  
 
-Lemma add_edge_of_c_find_edge : forall c c' fm ml ml0 v ,
+(*Lemma add_edge_of_c_find_edge : forall c c' fm ml ml0 v ,
     (rhs_terms1 c) = [(1, v)] ->
     PVM.find (lhs_var1 c) fm = Some ml0 ->
     ~ NVM.find (Node v) ml0 = None ->
@@ -582,7 +582,7 @@ Proof.
   - rewrite -(eqP Hlhseq) Hfdc.
     case Hrhsc : (rhs_terms1 c') => [|[a r] tl].
     +
-Admitted.
+Admitted.*)
 
 Lemma add_edge_of_c_find_edge' : forall c fm ml v ,
     (rhs_terms1 c) = [(1, v)] ->
@@ -809,7 +809,7 @@ Proof.
   -rewrite Hfdc0. move => Heq; injection Heq; move => Hdm; rewrite -Hdm Hfdv0//.
 Qed.
 
-Lemma add_edge_of_c_nn_nn : forall c c' v fm dm0 dm,
+(*Lemma add_edge_of_c_nn_nn : forall c c' v fm dm0 dm,
     PVM.find (c) fm = Some dm0 ->
     NVM.find (Node v) dm0 = None ->
     ((lhs_var1 c' == c) && (rhs_terms1 c' == [(1, v)])) = false ->
@@ -827,7 +827,7 @@ Admitted.
 Lemma add_edge_of_cs_c_s_same : forall cs fm,
   add_edge_of_c_s cs fm = add_edge_of_cs' cs fm.
 Proof.
-Admitted.
+Admitted.*)
 
 Lemma nvm_add_find_some : forall (a : NodeVar.t) (w : Z) (dst : NVM.t Z) (n : NodeVar.t) v,
   NVM.find n dst = Some v -> exists v', NVM.find n (NVM.add a w dst) = Some v'.
@@ -986,7 +986,7 @@ Proof.
       move : (add_edge_of_c_s_find_map cst c fm Hnn). by rewrite Hst.
 Qed.
   
-Lemma add_edge_of_c_s_correct2 : forall cs c s fm ml0 ml dst,
+(*Lemma add_edge_of_c_s_correct2 : forall cs c s fm ml0 ml dst,
     PVM.find c fm = Some ml0 ->
     NVM.find (Node s) ml0 = None ->
     PVM.find c (add_edge_of_c_s cs fm) = Some ml ->
@@ -1025,7 +1025,7 @@ Proof.
         }
     + have Hfdcnn : PVM.find c fm <> None by rewrite Hfdc0.
       move : (add_edge_of_c_s_find_map cst c fm Hfdcnn). rewrite Hfdc1//.
-Qed.
+Qed.*)
 
 Lemma add_edge_of_c_s_correct1 : forall cs c s fm ml0 ml dst0 dst,
     PVM.find c fm = Some ml0 ->
@@ -1064,7 +1064,7 @@ Proof.
       rewrite Hfdc1//.
 Qed.
 
-Lemma add_edge_of_c_s_correct_map0 : forall cs c s nds ml0 ml dst,
+(*Lemma add_edge_of_c_s_correct_map0 : forall cs c s nds ml0 ml dst,
     PVM.find c (map0 nds (PVM.empty (NVM.t Z.t))) = Some ml0 ->
     PVM.find c (add_edge_of_c_s cs (map0 nds (PVM.empty (NVM.t Z.t)))) = Some ml ->
     NVM.find (Node s) ml = Some dst ->
@@ -1091,7 +1091,7 @@ Proof.
   move => nds d cs ml0 ml1 Hfdd0 Hfdd s dst Hfds0. move: Hfdd.
   rewrite /init_dist_map'-add_edge_of_cs_c_s_same. move => Hfdd.
   exact : (@add_edge_of_c_s_correct_map0 cs d s nds ml0 ml1 dst Hfdd0 Hfdd Hfds0).
-Qed.
+Qed.*)
 
 
   
@@ -1133,7 +1133,7 @@ Qed.
 (*       move : (@add_edge_of_c_sm_max).  *)
 (* Admitted. *)
 
-Lemma add_edge_of_cs_correct1 : forall cs c s fm ml0 ml dst0 dst,
+(*Lemma add_edge_of_cs_correct1 : forall cs c s fm ml0 ml dst0 dst,
     PVM.find (lhs_var1 c) fm = Some ml0 ->
     NVM.find (Node s) ml0 = Some dst0 ->
     PVM.find (lhs_var1 c) (add_edge_of_cs' cs fm) = Some ml ->
@@ -1145,7 +1145,7 @@ Proof.
 (*   move : (add_edge_of_c_s_correct1 cs (lhs_var1 c) s fm Hfdc0 Hfds0 Hfdc Hfds). *)
   
 (* Qed. *)
-Admitted.
+Admitted.*)
   
 Lemma new_dst_map_aux_correct :
   forall dm n s d m dst0 dst1,
@@ -1852,7 +1852,7 @@ Proof.
       rewrite Hfd1//.
 Qed.
 
-Lemma inner_loop1_correct1 : forall nds i m k j ml0 mln dik0 dkj0 (* dkk0 *) dikn dkjn (* dkkn *) dij0 dijn,
+(*Lemma inner_loop1_correct1 : forall nds i m k j ml0 mln dik0 dkj0 (* dkk0 *) dikn dkjn (* dkkn *) dij0 dijn,
     In j nds -> NoDup nds ->
     PVM.find i m = Some ml0 ->
     PVM.find i (inner_loop1 nds m k) = Some mln ->
@@ -1929,7 +1929,7 @@ Lemma inner_loop1_gw1 : forall nds i m k j ml0 mln dik0 dkj0 dkk0 dikn dkjn dkkn
   get_weight i j m = Some dij0 ->
   get_weight i j (inner_loop1 nds m k) = Some (Z.max dij0 (Z.add dikn dkjn)).
 Proof.
-Admitted.
+Admitted.*)
 
 
 
@@ -2260,7 +2260,7 @@ Proof.
       move : (pfind_innedr_loop1_some d m nhd (nhd::ntl) Hfdml0 Hfdin1). done.
 Qed.
 
-Lemma in_init_dist_map : forall nds s cs ml0,
+(*Lemma in_init_dist_map : forall nds s cs ml0,
     PVM.find s (init_dist_map' nds cs) = Some ml0 ->
     In s nds.
 Proof.
@@ -2278,7 +2278,7 @@ Lemma in_init_dist_mapd : forall nds s cs ml0 d dst,
     NVM.find (Node d) ml0 = Some dst ->
     In d nds.
 Proof.
-Admitted.
+Admitted.*)
 
 Lemma init_dist_map_correct : forall nds d cs ml0 ml1,
     PVM.find d (map0 nds (PVM.empty (NVM.t Z.t))) = Some ml0 ->
@@ -2663,13 +2663,13 @@ Proof.
     + move => c Hc. exact: (Hdom c (or_intror Hc)).
 Qed.
 
-Lemma find_val_save_longest_dist : forall sc cs v0 val dst,
+(*Lemma find_val_save_longest_dist : forall sc cs v0 val dst,
     
     save_longest_dist sc (floyd_loop_map' sc cs) v0 = Some val ->
     forall s, In s sc -> PVM.find s  (floyd_loop_map' sc cs) = Some dst ->
               PVM.find s val = Some (Z.to_nat (maxz_list (split (NVM.elements dst)).2)).
 Proof.
-Admitted.
+Admitted.*)
 
 Fixpoint negcycb (simple_cycle : list ProdVar.t) m b : bool :=
   match simple_cycle with
@@ -2746,14 +2746,10 @@ Definition scc_smallest_prop (fm : adj_matrix) cs1 (ret : option Valuation) :=
     satisfies_all_constraint1 s cs1 ->
     le sol s.
 
-Lemma scc_smallest_aux :
+Axiom scc_smallest_aux :
   forall (vars : list ProdVar.t) (fm: adj_matrix)
          (cs1 : list Constraint1) ,
     scc_smallest_prop fm cs1 (solve_simple_cycle' vars cs1 initial_valuation).
-Proof.
-  elim => [|n ns IHm]. 
-  
-Admitted.
 
 Lemma scc_smallest' :
     forall (sc : list ProdVar.t) fm
@@ -2781,13 +2777,7 @@ Proof.
   exact : scc_smallest_aux.
 Qed.
 
-Lemma scc_none_unsat cs : forall sc, solve_simple_cycle sc cs = None -> forall v : Valuation, forallb (satisfies_constraint1 v) cs = false.
-Proof.
-(* Added by KY *)
-Admitted.
-
-Axiom dominates_at_floyd : forall nv hd cs1 (c : Constraint1), List.In c cs1 -> dominates_at c nv
-  (floyd_loop_map' hd cs1).
+Axiom scc_none_unsat : forall (cs : list Constraint1) (sc : list ProdVar.t), solve_simple_cycle sc cs = None -> forall v : Valuation, forallb (satisfies_constraint1 v) cs = false.
 
   
 (* Theorem solve_simple_cycle_smallest : *)
