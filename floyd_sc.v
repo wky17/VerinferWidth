@@ -2777,9 +2777,888 @@ Proof.
   exact : scc_smallest_aux.
 Qed.
 
-Axiom scc_none_unsat : forall (cs : list Constraint1) (sc : list ProdVar.t), solve_simple_cycle sc cs = None -> forall v : Valuation, forallb (satisfies_constraint1 v) cs = false.
+Module SccNoneUnsatProof.
 
-  
+Definition getv (v : Valuation) (x : ProdVar.t) : nat :=
+  match PVM.find x v with Some n => n | None => 0 end.
+
+Definition node_potential (v : Valuation) (x : NodeVar.t) : Z.t :=
+  match x with
+  | Zero => 0%Z
+  | Node p => Z.of_nat (getv v p)
+  end.
+
+Definition matrix_bounded (v : Valuation) (m : adj_matrix) : Prop :=
+  forall i dm, PVM.find i m = Some dm ->
+  forall j w, NVM.find j dm = Some w ->
+    (w <= Z.of_nat (getv v i) - node_potential v j)%Z.
+
+Definition row_bounded (v : Valuation) (i : ProdVar.t) (dm : NVM.t Z.t) : Prop :=
+  forall j w, NVM.find j dm = Some w ->
+    (w <= Z.of_nat (getv v i) - node_potential v j)%Z.
+
+Definition row_diag_nonneg (i : ProdVar.t) (dm : NVM.t Z.t) : Prop :=
+  exists w, NVM.find (Node i) dm = Some w /\ (0 <= w)%Z.
+
+Definition diag_nonneg (nodes : list ProdVar.t) (m : adj_matrix) : Prop :=
+  forall i, In i nodes -> exists w,
+    get_weight i (Node i) m = Some w /\ (0 <= w)%Z.
+
+Definition rows_present (nodes : list ProdVar.t) (m : adj_matrix) : Prop :=
+  forall i, In i nodes -> exists dm, PVM.find i m = Some dm.
+
+Lemma NodeVar_inj : forall a b, NodeVar.eq (Node a) (Node b) -> ProdVar.eq a b.
+Proof. move => a b H. exact H. Qed.
+
+Lemma find_add_neq_z_fm' : forall (i j : ProdVar.t) (dm : NVM.t Z.t) (m : adj_matrix),
+    i <> j -> PVM.find i (PVM.add j dm m) = PVM.find i m.
+Proof. move => i j dm m Hij. exact: find_add_neq_z_fm Hij. Qed.
+
+Lemma find_add_eq_z_fm' : forall (j : ProdVar.t) (dm : NVM.t Z.t) (m : adj_matrix),
+    PVM.find j (PVM.add j dm m) = Some dm.
+Proof. move => j dm m. exact: find_add_eq_z_fm. Qed.
+
+Lemma nvm_find_add_other : forall (x y : NodeVar.t) (w : Z.t) (dm : NVM.t Z.t),
+    ~ NodeVar.eq x y -> NVM.find x (NVM.add y w dm) = NVM.find x dm.
+Proof.
+  move => x y w dm Hne.
+  apply find_add_neq_z.
+  move => Heq. rewrite Heq in Hne.
+  exact (Hne (NodeVar.eq_refl y)).
+Qed.
+
+Lemma map0_ub : forall (k : Z.t) (nodes : list ProdVar.t) v,
+    (0 <= k)%Z ->
+    forall i x w dm,
+      PVM.find i (map0 nodes (PVM.empty (NVM.t Z.t))) = Some dm ->
+      NVM.find (Node x) dm = Some w ->
+      (0 <= w)%Z /\
+      (w <= Z.of_nat (getv v i) - Z.of_nat (getv v x) + k)%Z.
+Proof.
+  move => k nodes v Hk.
+  elim: nodes => [|nhd ntl IH] /=.
+  - move => i x w dm Hfind. by rewrite find_empty_None in Hfind.
+  - move => i x w dm Hfind Hinner.
+    case: (ProdVar.eq_dec i nhd) => [Ei|Hne].
+    + have Ein : i = nhd by (apply eq_from_prodvar_eq; exact Ei).
+      rewrite Ein find_add_eq_z_fm in Hfind.
+      injection Hfind => Hfind'.
+      case: (NodeVar.eq_dec (Node x) (Node nhd)) => [E|Hne2].
+      * have Hxb : x = nhd by (apply eq_from_prodvar_eq; exact (@NodeVar_inj x nhd E)).
+        rewrite Hxb in Hinner. rewrite -Hfind' in Hinner.
+        rewrite find_add_eq_z in Hinner.
+        injection Hinner => Hw. rewrite <- Hw.
+        rewrite Ein Hxb. by rewrite Z.sub_diag; lia.
+      * rewrite -Hfind' in Hinner.
+        have Hneq : NVM.find (Node x) (NVM.add (Node nhd) 0%Z (NVM.empty Z.t))
+                    = NVM.find (Node x) (NVM.empty Z.t).
+        { apply find_add_neq_z. move => He. apply Hne2.
+          rewrite He. exact (NodeVar.eq_refl (Node nhd)). }
+        rewrite Hneq in Hinner.
+        change (NVM.find (Node x) (NVM.empty Z.t)) with (@None Z.t) in Hinner.
+        by discriminate.
+    + have Hinneq : i <> nhd.
+      { move => He. apply Hne. apply eq_from_prodvar_eq. exact He. }
+      rewrite (@find_add_neq_z_fm' i nhd _ _ Hinneq) in Hfind.
+      exact (IH i x w dm Hfind Hinner).
+Qed.
+
+Lemma get_weight_bounded : forall v m i j w,
+    matrix_bounded v m -> get_weight i j m = Some w ->
+    (w <= Z.of_nat (getv v i) - node_potential v j)%Z.
+Proof.
+  move => v m i j w Hm Hw.
+  rewrite /get_weight in Hw.
+  case Hrow : (PVM.find i m) => [dm|].
+  - rewrite Hrow in Hw. exact: (Hm i dm Hrow j w Hw).
+  - rewrite Hrow in Hw. simpl in Hw. discriminate.
+Qed.
+
+Lemma row_bounded_add : forall v i dm j w,
+    row_bounded v i dm ->
+    (w <= Z.of_nat (getv v i) - node_potential v j)%Z ->
+    row_bounded v i (NVM.add j w dm).
+Proof.
+  move => v i dm j w Hrow Hw t wt Hfind.
+  case E : (NodeVar.eq_dec t j) => [Et|Et].
+  - have Htj : t = j by exact: node_eq_leibniz.
+    rewrite Htj find_add_eq_z in Hfind.
+    injection Hfind => <-. rewrite Htj. exact Hw.
+  - have Hfind' : NVM.find t dm = Some wt.
+    { rewrite (nvm_find_add_other t j w dm Et) in Hfind. exact Hfind. }
+    exact: Hrow t wt Hfind'.
+Qed.
+
+Lemma new_dst_map_aux_bounded : forall v i k j dm m,
+    row_bounded v i dm ->
+    matrix_bounded v m ->
+    row_bounded v i (new_dst_map_aux dm j k i m).
+Proof.
+  move => v i k j dm m Hrow Hm.
+  rewrite /new_dst_map_aux.
+  case Hprev : (NVM.find j dm) => [old|].
+  - case Hik : (get_weight i (Node k) m) => [w1|].
+    + case Hkj : (get_weight k j m) => [w2|].
+      * apply row_bounded_add.
+        -- exact Hrow.
+        -- have Hold : (old <= Z.of_nat (getv v i) - node_potential v j)%Z.
+           { exact: (@Hrow j old Hprev). }
+           have H1 := @get_weight_bounded v m i (Node k) w1 Hm Hik.
+           have H2 := @get_weight_bounded v m k j w2 Hm Hkj.
+           rewrite /node_potential /= in H1.
+           apply Z.max_lub; [exact Hold | lia].
+      * exact Hrow.
+    + exact Hrow.
+  - case Hik : (get_weight i (Node k) m) => [w1|].
+    + case Hkj : (get_weight k j m) => [w2|].
+      * apply row_bounded_add.
+        -- exact Hrow.
+        -- have H1 := @get_weight_bounded v m i (Node k) w1 Hm Hik.
+           have H2 := @get_weight_bounded v m k j w2 Hm Hkj.
+           rewrite /node_potential /= in H1. lia.
+      * exact Hrow.
+    + exact Hrow.
+Qed.
+
+Lemma new_dst_map_bounded : forall v i ks dm k m,
+    row_bounded v i dm ->
+    matrix_bounded v m ->
+    row_bounded v i (new_dst_map ks dm k i m).
+Proof.
+  move => v i ks.
+  elim: ks => [|j tl IH] dm k m Hrow Hm //=.
+  apply new_dst_map_aux_bounded.
+  - exact: IH dm k m Hrow Hm.
+  - exact Hm.
+Qed.
+
+Lemma floyd_update'_bounded : forall v k i nodes m,
+    matrix_bounded v m ->
+    matrix_bounded v (floyd_update' k i nodes m).
+Proof.
+  move => v k i nodes m Hm.
+  rewrite /floyd_update'.
+  case Hrow : (PVM.find i m) => [dm|].
+  - move => s out Hfind j w Hinner.
+    case E : (ProdVar.eq_dec s i) => [Es|Es].
+    + have Hsi : s = i by (apply eq_from_prodvar_eq; exact Es).
+      rewrite Hsi find_add_eq_z_fm' in Hfind.
+      injection Hfind => Hout. rewrite <- Hout in Hinner.
+      have Hnew : row_bounded v i (new_dst_map nodes dm k i m).
+      { apply new_dst_map_bounded.
+        - move => a wa Ha. exact: (Hm i dm Hrow a wa Ha).
+        - exact Hm. }
+      rewrite Hsi. apply Hnew. exact Hinner.
+    + rewrite find_add_neq_z_fm' in Hfind.
+      * exact: (Hm s out Hfind j w Hinner).
+      * move => Hsi. apply Es. apply eq_from_prodvar_eq. exact Hsi.
+  - move => s out Hfind j w Hinner. exact: (Hm s out Hfind j w Hinner).
+Qed.
+
+Lemma terms_value_ge_init : forall v ts z,
+    (z <= terms_value v ts z)%Z.
+Proof.
+  move => v ts.
+  elim: ts => [|[a x] tl IH] z /=.
+  - lia.
+  - case Hv : (PVM.find x v) => [n|].
+    + have Hstep : (z <= z + Z.of_nat (a * n))%Z by lia.
+      eapply Z.le_trans; [exact Hstep | apply IH].
+    + have Hstep : (z <= z + Z.of_nat (a * 0))%Z by lia.
+      eapply Z.le_trans; [exact Hstep | apply IH].
+Qed.
+
+Lemma power_value_nonneg : forall v p, (0 <= power_value v p)%Z.
+Proof.
+  move => v p. rewrite /power_value.
+  case: p => [|[n pv] tl]; first by lia.
+  have := Z.pow_nonneg 2 (terms_value v ([:: (n, pv)] ++ tl) 0%Z).
+  by move => _; lia.
+Qed.
+
+Lemma rhs_value1_ge_const : forall v c,
+    (rhs_const1 c <= rhs_value1 v c)%Z.
+Proof.
+  move => v c. rewrite /rhs_value1.
+  have Hterms := terms_value_ge_init v (rhs_terms1 c) (rhs_const1 c).
+  have Hpow := power_value_nonneg v (rhs_power c). lia.
+Qed.
+
+Lemma terms_value_singleton : forall v x (z : Z.t),
+    terms_value v [:: (1, x)] z = (z + Z.of_nat (getv v x))%Z.
+Proof.
+  move => v x z. rewrite /terms_value /= /getv.
+  case: (PVM.find x v) => [n|] //=.
+  f_equal. f_equal. by rewrite mul1n.
+Qed.
+
+Lemma satisfies_edge_bound_nil : forall v c,
+    satisfies_constraint1 v c = true ->
+    rhs_terms1 c = nil ->
+    (rhs_const1 c <= Z.of_nat (getv v (lhs_var1 c)) -
+                      node_potential v Zero)%Z.
+Proof.
+  move => v c Hsat Hterms.
+  unfold satisfies_constraint1 in Hsat.
+  case Hlhs : (PVM.find (lhs_var1 c) v) => [n|] in Hsat.
+  - apply Z.leb_le in Hsat.
+    rewrite /rhs_value1 Hterms /= in Hsat.
+    have Hpow := power_value_nonneg v (rhs_power c).
+    have Hconst := rhs_value1_ge_const v c.
+    unfold getv. rewrite Hlhs. simpl node_potential. lia.
+  - discriminate.
+Qed.
+
+Lemma satisfies_edge_bound_singleton : forall v c x,
+    satisfies_constraint1 v c = true ->
+    rhs_terms1 c = [:: (1, x)] ->
+    (rhs_const1 c <= Z.of_nat (getv v (lhs_var1 c)) -
+                      node_potential v (Node x))%Z.
+Proof.
+  move => v c x Hsat Hterms.
+  unfold satisfies_constraint1 in Hsat.
+  case Hlhs : (PVM.find (lhs_var1 c) v) => [n|] in Hsat.
+  - apply Z.leb_le in Hsat.
+    rewrite /rhs_value1 Hterms terms_value_singleton in Hsat.
+    have Hpow := power_value_nonneg v (rhs_power c).
+    unfold getv. rewrite Hlhs. simpl node_potential. lia.
+  - discriminate.
+Qed.
+
+Lemma matrix_bounded_add_row : forall v m i dm,
+    matrix_bounded v m ->
+    row_bounded v i dm ->
+    matrix_bounded v (PVM.add i dm m).
+Proof.
+  move => v m i dm Hm Hrow s out Hfind j w Hinner.
+  case E : (ProdVar.eq_dec s i) => [Es|Es].
+  - have Hsi : s = i by (apply eq_from_prodvar_eq; exact Es).
+    rewrite Hsi find_add_eq_z_fm' in Hfind.
+    injection Hfind => Hout. rewrite <- Hout in Hinner.
+    rewrite Hsi. exact: Hrow j w Hinner.
+  - rewrite find_add_neq_z_fm' in Hfind.
+    + exact: (Hm s out Hfind j w Hinner).
+    + move => Hsi. apply Es. apply eq_from_prodvar_eq. exact Hsi.
+Qed.
+
+Lemma map0_zero_none : forall nodes i dm,
+    PVM.find i (map0 nodes (PVM.empty (NVM.t Z.t))) = Some dm ->
+    NVM.find Zero dm = None.
+Proof.
+  elim => [|hd tl IH] i dm /=.
+  - move => Hfind. rewrite find_empty_None in Hfind. discriminate.
+  - move => Hfind.
+    case E : (ProdVar.eq_dec i hd) => [Ei|Ei].
+    + have Hih : i = hd by (apply eq_from_prodvar_eq; exact Ei).
+      rewrite Hih find_add_eq_z_fm' in Hfind.
+      injection Hfind => Hdm. rewrite <- Hdm.
+      apply find_add_neq_z. discriminate.
+    + have Hne : i <> hd by move => He; apply Ei; apply eq_from_prodvar_eq; exact He.
+      rewrite find_add_neq_z_fm' in Hfind; last exact Hne.
+      exact: IH i dm Hfind.
+Qed.
+
+Lemma map0_matrix_bounded : forall v nodes,
+    matrix_bounded v (map0 nodes (PVM.empty (NVM.t Z.t))).
+Proof.
+  move => v nodes i dm Hfind j w Hinner.
+  have Hub := @map0_ub 0%Z nodes v (Z.le_refl 0).
+  case: j Hinner => [|x] Hinner.
+  - have Hz := @map0_zero_none nodes i dm Hfind.
+    rewrite Hz in Hinner. discriminate.
+  - have Hbounds := @Hub i x w dm Hfind Hinner.
+    simpl node_potential. lia.
+Qed.
+
+Lemma row_bounded_add_max : forall v i dm j old cst,
+    row_bounded v i dm ->
+    NVM.find j dm = Some old ->
+    (cst <= Z.of_nat (getv v i) - node_potential v j)%Z ->
+    row_bounded v i (NVM.add j (Z.max old cst) dm).
+Proof.
+  move => v i dm j old cst Hrow Hprev Hcst.
+  apply row_bounded_add.
+  - exact Hrow.
+  - have Hold : (old <= Z.of_nat (getv v i) - node_potential v j)%Z.
+    { exact: (@Hrow j old Hprev). }
+    apply Z.max_lub; lia.
+Qed.
+
+Lemma row_bounded_add_new : forall v i dm j cst,
+    row_bounded v i dm ->
+    NVM.find j dm = None ->
+    (cst <= Z.of_nat (getv v i) - node_potential v j)%Z ->
+    row_bounded v i (NVM.add j cst dm).
+Proof.
+  move => v i dm j cst Hrow Hnone Hcst.
+  exact: row_bounded_add Hrow Hcst.
+Qed.
+
+Lemma add_edge_of_cs'_bounded : forall v cs,
+    (forall c, In c cs -> satisfies_constraint1 v c = true) ->
+    forall m, matrix_bounded v m ->
+    matrix_bounded v (add_edge_of_cs' cs m).
+Proof.
+  move => v cs.
+  elim: cs => [|hd tl IH] Hsat m Hm.
+  - exact Hm.
+  - have Htail : matrix_bounded v (add_edge_of_cs' tl m).
+    { apply IH.
+      - move => c Hc. exact: (Hsat c (or_intror Hc)).
+      - exact Hm. }
+    rewrite /add_edge_of_cs' /=.
+    case Hfind : (PVM.find (lhs_var1 hd) m) => [dm|].
+    2: exact Htail.
+    case Hterms : (rhs_terms1 hd) => [|[a x] rest].
+    + case Hzero : (NVM.find Zero dm) => [old|].
+      * apply matrix_bounded_add_row.
+        -- exact Htail.
+        -- apply row_bounded_add_max.
+           ++ move => j w Hj. exact: (Hm (lhs_var1 hd) dm Hfind j w Hj).
+           ++ exact Hzero.
+           ++ exact: (satisfies_edge_bound_nil v hd
+                       (Hsat hd (or_introl erefl)) Hterms).
+      * apply matrix_bounded_add_row.
+        -- exact Htail.
+        -- apply row_bounded_add_new.
+           ++ move => j w Hj. exact: (Hm (lhs_var1 hd) dm Hfind j w Hj).
+           ++ exact Hzero.
+           ++ exact: (satisfies_edge_bound_nil v hd
+                       (Hsat hd (or_introl erefl)) Hterms).
+    + case rest as [|t rest'].
+      * case a as [|a'].
+        -- simpl. exact Htail.
+        -- case a' as [|a''].
+           ++ case Hx : (NVM.find (Node x) dm) => [old|].
+              ** apply matrix_bounded_add_row.
+                 --- exact Htail.
+                 --- apply row_bounded_add_max.
+                     +++ move => j w Hj. exact: (Hm (lhs_var1 hd) dm Hfind j w Hj).
+                     +++ exact Hx.
+                     +++ apply satisfies_edge_bound_singleton with (c := hd) (x := x).
+                         ** exact: (Hsat hd (or_introl erefl)).
+                         ** exact Hterms.
+              ** apply matrix_bounded_add_row.
+                 --- exact Htail.
+                 --- apply row_bounded_add_new.
+                     +++ move => j w Hj. exact: (Hm (lhs_var1 hd) dm Hfind j w Hj).
+                     +++ exact Hx.
+                     +++ apply satisfies_edge_bound_singleton with (c := hd) (x := x).
+                         ** exact: (Hsat hd (or_introl erefl)).
+                         ** exact Hterms.
+           ++ simpl. exact Htail.
+      * case a as [|a'].
+        -- simpl. exact Htail.
+        -- case a' as [|a''].
+           ++ simpl. exact Htail.
+           ++ simpl. exact Htail.
+Qed.
+
+Lemma init_dist_map'_bounded : forall v nodes cs,
+    (forall c, In c cs -> satisfies_constraint1 v c = true) ->
+    matrix_bounded v (init_dist_map' nodes cs).
+Proof.
+  move => v nodes cs Hsat.
+  rewrite /init_dist_map'.
+  apply add_edge_of_cs'_bounded.
+  - exact Hsat.
+  - exact: map0_matrix_bounded.
+Qed.
+
+Lemma inner_loop1_bounded : forall v nodes m k,
+    matrix_bounded v m ->
+    matrix_bounded v (inner_loop1 nodes m k).
+Proof.
+  move => v nodes.
+  elim: nodes => [|hd tl IH] m k Hm //=.
+  apply IH.
+  exact: floyd_update'_bounded Hm.
+Qed.
+
+Lemma inner_loop2_bounded : forall v nodes m,
+    matrix_bounded v m ->
+    matrix_bounded v (inner_loop2 nodes m).
+Proof.
+  move => v nodes.
+  elim: nodes => [|hd tl IH] m Hm //=.
+  apply IH.
+  exact: (@inner_loop1_bounded v (hd :: tl) m hd Hm).
+Qed.
+
+Lemma floyd_loop_map'_bounded : forall v nodes cs,
+    (forall c, In c cs -> satisfies_constraint1 v c = true) ->
+    matrix_bounded v (floyd_loop_map' nodes cs).
+Proof.
+  move => v nodes cs Hsat.
+  rewrite /floyd_loop_map'.
+  apply inner_loop2_bounded.
+  exact: init_dist_map'_bounded Hsat.
+Qed.
+
+Lemma map0_self : forall nodes i,
+    In i nodes ->
+    get_weight i (Node i) (map0 nodes (PVM.empty (NVM.t Z.t))) = Some 0%Z.
+Proof.
+  elim => [|hd tl IH] i Hin //=.
+  case E : (ProdVar.eq_dec i hd) => [Ei|Ei].
+  - have Hih : i = hd by (apply eq_from_prodvar_eq; exact Ei).
+    rewrite /get_weight Hih find_add_eq_z_fm'.
+    rewrite find_add_eq_z. reflexivity.
+  - have Hne : i <> hd by move => He; apply Ei; apply eq_from_prodvar_eq; exact He.
+    rewrite /get_weight find_add_neq_z_fm'; last exact Hne.
+    case: Hin => [Heq|Hin].
+    + subst i. apply False_ind. apply Ei. apply ProdVar.eq_refl.
+    + exact: IH Hin.
+Qed.
+
+Lemma row_diag_nonneg_add_other : forall i dm j w,
+    row_diag_nonneg i dm ->
+    ~ NodeVar.eq (Node i) j ->
+    row_diag_nonneg i (NVM.add j w dm).
+Proof.
+  move => i dm j w [d [Hd Hd0]] Hneq.
+  exists d. split; first by rewrite nvm_find_add_other.
+  exact Hd0.
+Qed.
+
+Lemma row_diag_nonneg_add_max_self : forall i dm old cst,
+    row_diag_nonneg i dm ->
+    NVM.find (Node i) dm = Some old ->
+    row_diag_nonneg i (NVM.add (Node i) (Z.max old cst) dm).
+Proof.
+  move => i dm old cst [d [Hd Hd0]] Hfind.
+  have Hold : old = d by rewrite Hfind in Hd; injection Hd.
+  exists (Z.max old cst). split.
+  - rewrite find_add_eq_z. reflexivity.
+  - apply Z.le_trans with old; [rewrite Hold; exact Hd0 | apply Z.le_max_l].
+Qed.
+
+Lemma map0_diag_nonneg : forall nodes,
+    diag_nonneg nodes (map0 nodes (PVM.empty (NVM.t Z.t))).
+Proof.
+  move => nodes i Hin.
+  exists 0%Z. split.
+  - exact: map0_self Hin.
+  - lia.
+Qed.
+
+Lemma new_dst_map_aux_diag_nonneg : forall i j k dm m,
+    row_diag_nonneg i dm ->
+    row_diag_nonneg i (new_dst_map_aux dm j k i m).
+Proof.
+  move => i j k dm m Hdiag.
+  destruct Hdiag as [d [Hdiag Hd0]].
+  rewrite /new_dst_map_aux.
+  case Hprev : (NVM.find j dm) => [old|].
+  - case Hik : (get_weight i (Node k) m) => [w1|].
+    + case Hkj : (get_weight k j m) => [w2|].
+      * case E : (NodeVar.eq_dec (Node i) j) => [Eij|Eij].
+        -- have Hkey : Node i = j by exact: node_eq_leibniz.
+           have Hself : NVM.find (Node i) dm = Some old.
+           { rewrite Hkey. exact Hprev. }
+           rewrite <- Hkey.
+           apply row_diag_nonneg_add_max_self; [by exists d | exact Hself].
+        -- apply row_diag_nonneg_add_other.
+           ++ by exists d.
+           ++ exact Eij.
+      * exact: (ex_intro _ d (conj Hdiag Hd0)).
+    + exact: (ex_intro _ d (conj Hdiag Hd0)).
+  - case Hik : (get_weight i (Node k) m) => [w1|].
+    + case Hkj : (get_weight k j m) => [w2|].
+      * case E : (NodeVar.eq_dec (Node i) j) => [Eij|Eij].
+        -- have Hkey : Node i = j by exact: node_eq_leibniz.
+           rewrite <- Hkey in Hprev.
+           rewrite Hdiag in Hprev. discriminate.
+        -- apply row_diag_nonneg_add_other.
+           ++ by exists d.
+           ++ exact Eij.
+      * exact: (ex_intro _ d (conj Hdiag Hd0)).
+    + exact: (ex_intro _ d (conj Hdiag Hd0)).
+Qed.
+
+Lemma new_dst_map_diag_nonneg : forall i nodes dm k m,
+    row_diag_nonneg i dm ->
+    row_diag_nonneg i (new_dst_map nodes dm k i m).
+Proof.
+  move => i nodes.
+  elim: nodes => [|j tl IH] dm k m Hdiag //=.
+  apply new_dst_map_aux_diag_nonneg.
+  exact: IH dm k m Hdiag.
+Qed.
+
+Lemma floyd_update'_diag_nonneg : forall tracked targets k i m,
+    diag_nonneg tracked m ->
+    diag_nonneg tracked (floyd_update' k i targets m).
+Proof.
+  move => tracked targets k i m Hdiag.
+  rewrite /floyd_update'.
+  case Hrow : (PVM.find i m) => [dm|].
+  - move => x Hin.
+    case E : (ProdVar.eq_dec x i) => [Ex|Ex].
+    + have Hxi : x = i by (apply eq_from_prodvar_eq; exact Ex).
+      have [w [Hw Hw0]] := Hdiag x Hin.
+      rewrite Hxi /get_weight Hrow in Hw.
+      rewrite Hxi /get_weight find_add_eq_z_fm'.
+      have Hnew : row_diag_nonneg i (new_dst_map targets dm k i m).
+      { apply new_dst_map_diag_nonneg. exists w. split; assumption. }
+      exact Hnew.
+    + have Hne : x <> i by move => He; apply Ex; apply eq_from_prodvar_eq; exact He.
+      have [w [Hw Hw0]] := Hdiag x Hin.
+      rewrite /get_weight find_add_neq_z_fm'; last exact Hne.
+      by exists w.
+  - move => x Hin. exact: Hdiag x Hin.
+Qed.
+
+Lemma inner_loop1_diag_nonneg : forall tracked nodes m k,
+    diag_nonneg tracked m ->
+    diag_nonneg tracked (inner_loop1 nodes m k).
+Proof.
+  move => tracked nodes.
+  elim: nodes => [|hd tl IH] m k Hdiag //=.
+  apply IH.
+  exact: (@floyd_update'_diag_nonneg tracked
+            (Zero :: map (fun p => Node p) (hd :: tl)) k hd m Hdiag).
+Qed.
+
+Lemma inner_loop2_diag_nonneg : forall tracked nodes m,
+    diag_nonneg tracked m ->
+    diag_nonneg tracked (inner_loop2 nodes m).
+Proof.
+  move => tracked nodes.
+  elim: nodes => [|hd tl IH] m Hdiag //=.
+  apply IH.
+  exact: (@inner_loop1_diag_nonneg tracked (hd :: tl) m hd Hdiag).
+Qed.
+
+Lemma diag_nonneg_add_row : forall nodes m i dm,
+    diag_nonneg nodes m ->
+    row_diag_nonneg i dm ->
+    diag_nonneg nodes (PVM.add i dm m).
+Proof.
+  move => nodes m i dm Hdiag Hrow x Hin.
+  case E : (ProdVar.eq_dec x i) => [Ex|Ex].
+  - have Hxi : x = i by (apply eq_from_prodvar_eq; exact Ex).
+    rewrite Hxi /get_weight find_add_eq_z_fm'.
+    destruct Hrow as [w [Hw Hw0]]. by exists w.
+  - have Hne : x <> i by move => He; apply Ex; apply eq_from_prodvar_eq; exact He.
+    have [w [Hw Hw0]] := Hdiag x Hin.
+    rewrite /get_weight find_add_neq_z_fm'; last exact Hne.
+    by exists w.
+Qed.
+
+Lemma diag_nonneg_replace_row : forall nodes m i dm,
+    diag_nonneg nodes m ->
+    (In i nodes -> row_diag_nonneg i dm) ->
+    diag_nonneg nodes (PVM.add i dm m).
+Proof.
+  move => nodes m i dm Hdiag Hrow x Hin.
+  case E : (ProdVar.eq_dec x i) => [Ex|Ex].
+  - have Hxi : x = i by (apply eq_from_prodvar_eq; exact Ex).
+    rewrite Hxi /get_weight find_add_eq_z_fm'.
+    have Hin_i : In i nodes by rewrite -Hxi; exact Hin.
+    exact: (Hrow Hin_i).
+  - have Hne : x <> i by move => He; apply Ex; apply eq_from_prodvar_eq; exact He.
+    have [w [Hw Hw0]] := Hdiag x Hin.
+    rewrite /get_weight find_add_neq_z_fm'; last exact Hne.
+    by exists w.
+Qed.
+
+Lemma add_edge_of_cs'_diag_nonneg : forall nodes cs m,
+    diag_nonneg nodes m ->
+    diag_nonneg nodes (add_edge_of_cs' cs m).
+Proof.
+  move => nodes cs.
+  elim: cs => [|hd tl IH] m Hdiag.
+  - exact Hdiag.
+  - have Htail : diag_nonneg nodes (add_edge_of_cs' tl m).
+    { exact: IH m Hdiag. }
+    rewrite /add_edge_of_cs' /=.
+    case Hfind : (PVM.find (lhs_var1 hd) m) => [dm|].
+    2: exact Htail.
+    case Hterms : (rhs_terms1 hd) => [|[a x] rest].
+    + case Hzero : (NVM.find Zero dm) => [old|].
+      * apply diag_nonneg_replace_row.
+        -- exact Htail.
+        -- move => Hin.
+           have [d [Hd Hd0]] := Hdiag (lhs_var1 hd) Hin.
+           rewrite /get_weight Hfind in Hd.
+           apply row_diag_nonneg_add_other.
+           ++ by exists d.
+           ++ by move => Heq; discriminate.
+      * apply diag_nonneg_replace_row.
+        -- exact Htail.
+        -- move => Hin.
+           have [d [Hd Hd0]] := Hdiag (lhs_var1 hd) Hin.
+           rewrite /get_weight Hfind in Hd.
+           apply row_diag_nonneg_add_other.
+           ++ by exists d.
+           ++ by move => Heq; discriminate.
+    + case rest as [|t rest'].
+      * case a as [|a'].
+        -- exact Htail.
+        -- case a' as [|a''].
+           ++ case Hx : (NVM.find (Node x) dm) => [old|].
+              ** apply diag_nonneg_replace_row.
+                 --- exact Htail.
+                 --- move => Hin.
+                     have [d [Hd Hd0]] := Hdiag (lhs_var1 hd) Hin.
+                     rewrite /get_weight Hfind in Hd.
+                     case Exq : (ProdVar.eq_dec x (lhs_var1 hd)) => [Ex|Hneqx].
+                     +++ have Hxl : x = lhs_var1 hd by
+                           (apply eq_from_prodvar_eq; exact Ex).
+                         rewrite Hxl in Hx. rewrite Hxl.
+                         apply row_diag_nonneg_add_max_self.
+                         *** by exists d.
+                         *** exact Hx.
+                     +++ apply row_diag_nonneg_add_other.
+                         *** by exists d.
+                         *** move => Heq.
+                             apply Hneqx.
+                             exact (@NodeVar_inj x (lhs_var1 hd)
+                                      (@NodeVar.eq_sym (Node (lhs_var1 hd)) (Node x) Heq)).
+              ** apply diag_nonneg_replace_row.
+                 --- exact Htail.
+                 --- move => Hin.
+                     have [d [Hd Hd0]] := Hdiag (lhs_var1 hd) Hin.
+                     rewrite /get_weight Hfind in Hd.
+                     case Exq : (ProdVar.eq_dec x (lhs_var1 hd)) => [Ex|Hneqx].
+                     +++ have Hxl : x = lhs_var1 hd by
+                           (apply eq_from_prodvar_eq; exact Ex).
+                         rewrite Hxl in Hx. rewrite Hd in Hx. discriminate.
+                     +++ apply row_diag_nonneg_add_other.
+                         *** by exists d.
+                         *** move => Heq.
+                             apply Hneqx.
+                             exact (@NodeVar_inj x (lhs_var1 hd)
+                                      (@NodeVar.eq_sym (Node (lhs_var1 hd)) (Node x) Heq)).
+           ++ exact Htail.
+      * case a as [|a'].
+        -- exact Htail.
+        -- case a' as [|a''].
+           ++ exact Htail.
+           ++ exact Htail.
+Qed.
+
+Lemma floyd_loop_map'_diag_nonneg : forall nodes cs,
+    diag_nonneg nodes (floyd_loop_map' nodes cs).
+Proof.
+  move => nodes cs.
+  rewrite /floyd_loop_map'.
+  apply inner_loop2_diag_nonneg.
+  apply add_edge_of_cs'_diag_nonneg.
+  exact: map0_diag_nonneg.
+Qed.
+
+Lemma bounded_diag_zero : forall v nodes m,
+    matrix_bounded v m ->
+    diag_nonneg nodes m ->
+    forall i, In i nodes ->
+      get_weight i (Node i) m = Some 0%Z.
+Proof.
+  move => v nodes m Hbound Hdiag i Hin.
+  have [w [Hw Hw0]] := Hdiag i Hin.
+  have Hwbound : (w <= Z.of_nat (getv v i) -
+                        node_potential v (Node i))%Z.
+  { exact: (@get_weight_bounded v m i (Node i) w Hbound Hw). }
+  rewrite /node_potential /= in Hwbound.
+  have Hwzero : w = 0%Z by lia.
+  rewrite Hw. by rewrite Hwzero.
+Qed.
+
+Lemma negcycb_all_zero : forall nodes m,
+    (forall i, In i nodes -> get_weight i (Node i) m = Some 0%Z) ->
+    negcycb nodes m true = true.
+Proof.
+  elim => [|hd tl IH] m Hall //=.
+  rewrite (Hall hd (or_introl erefl)).
+  simpl.
+  rewrite IH.
+  - reflexivity.
+  - move => i Hi. exact: (Hall i (or_intror Hi)).
+Qed.
+
+Lemma map0_rows_present : forall nodes,
+    rows_present nodes (map0 nodes (PVM.empty (NVM.t Z.t))).
+Proof.
+  elim => [|hd tl IH] i Hin //=.
+  case E : (ProdVar.eq_dec i hd) => [Ei|Ei].
+  - have Hih : i = hd by (apply eq_from_prodvar_eq; exact Ei).
+    exists (NVM.add (Node hd) 0%Z (NVM.empty Z.t)).
+    by rewrite Hih find_add_eq_z_fm'.
+  - case: Hin => [Heq|Hin].
+    + subst i. apply False_ind. apply Ei. apply ProdVar.eq_refl.
+    + have [dm Hdm] := IH i Hin.
+      exists dm.
+      rewrite find_add_neq_z_fm'; last by move => He; apply Ei; apply eq_from_prodvar_eq; exact He.
+      exact Hdm.
+Qed.
+
+Lemma add_edge_of_cs'_preserves_row : forall cs m i dm,
+    PVM.find i m = Some dm ->
+    exists dm', PVM.find i (add_edge_of_cs' cs m) = Some dm'.
+Proof.
+  move => cs m i dm Hrow.
+  induction cs as [|hd cstl IH]; simpl in *.
+  - exists dm. exact Hrow.
+  - have Htail : exists dm', PVM.find i (add_edge_of_cs' cstl m) = Some dm'.
+    { exact IH. }
+    rewrite /add_edge_of_cs' /=.
+    case Hlhs : (PVM.find (lhs_var1 hd) m) => [dst|].
+    + case Hterms : (rhs_terms1 hd) => [|[a x] rest].
+      * case Hzero : (NVM.find Zero dst) => [old|].
+        -- case E : (ProdVar.eq_dec i (lhs_var1 hd)) => [Ei|Ei].
+           ++ have Hieq : i = lhs_var1 hd by (apply eq_from_prodvar_eq; exact Ei).
+              exists (NVM.add Zero (Z.max old (rhs_const1 hd)) dst).
+              by rewrite Hieq find_add_eq_z_fm'.
+           ++ have Hne : i <> lhs_var1 hd by
+                move => He; apply Ei; apply eq_from_prodvar_eq; exact He.
+              have [dm' Hdm'] := Htail.
+              exists dm'. rewrite find_add_neq_z_fm'; [exact Hdm'|exact Hne].
+        -- case E : (ProdVar.eq_dec i (lhs_var1 hd)) => [Ei|Ei].
+           ++ have Hieq : i = lhs_var1 hd by (apply eq_from_prodvar_eq; exact Ei).
+              exists (NVM.add Zero (rhs_const1 hd) dst).
+              by rewrite Hieq find_add_eq_z_fm'.
+           ++ have Hne : i <> lhs_var1 hd by
+                move => He; apply Ei; apply eq_from_prodvar_eq; exact He.
+              have [dm' Hdm'] := Htail.
+              exists dm'. rewrite find_add_neq_z_fm'; [exact Hdm'|exact Hne].
+      * case rest as [|t rest'].
+        -- case a as [|a'].
+           ++ exact Htail.
+           ++ case a' as [|a''].
+              ** case Hx : (NVM.find (Node x) dst) => [old|].
+                 --- case E : (ProdVar.eq_dec i (lhs_var1 hd)) => [Ei|Ei].
+                     +++ have Hieq : i = lhs_var1 hd by
+                           (apply eq_from_prodvar_eq; exact Ei).
+                         exists (NVM.add (Node x) (Z.max old (rhs_const1 hd)) dst).
+                         by rewrite Hieq find_add_eq_z_fm'.
+                     +++ have Hne : i <> lhs_var1 hd by
+                           move => He; apply Ei; apply eq_from_prodvar_eq; exact He.
+                         have [dm' Hdm'] := Htail.
+                         exists dm'. rewrite find_add_neq_z_fm'; [exact Hdm'|exact Hne].
+                 --- case E : (ProdVar.eq_dec i (lhs_var1 hd)) => [Ei|Ei].
+                     +++ have Hieq : i = lhs_var1 hd by
+                           (apply eq_from_prodvar_eq; exact Ei).
+                         exists (NVM.add (Node x) (rhs_const1 hd) dst).
+                         by rewrite Hieq find_add_eq_z_fm'.
+                     +++ have Hne : i <> lhs_var1 hd by
+                           move => He; apply Ei; apply eq_from_prodvar_eq; exact He.
+                         have [dm' Hdm'] := Htail.
+                         exists dm'. rewrite find_add_neq_z_fm'; [exact Hdm'|exact Hne].
+              ** exact Htail.
+        -- case a as [|a'].
+           ++ exact Htail.
+           ++ case a' as [|a''].
+              ** exact Htail.
+              ** exact Htail.
+    + exact Htail.
+Qed.
+
+Lemma add_edge_of_cs'_rows_present : forall nodes cs m,
+    rows_present nodes m ->
+    rows_present nodes (add_edge_of_cs' cs m).
+Proof.
+  move => nodes cs m Hrows i Hin.
+  have [dm Hdm] := Hrows i Hin.
+  exact: add_edge_of_cs'_preserves_row Hdm.
+Qed.
+
+Lemma floyd_update'_rows_present : forall nodes k i targets m,
+    rows_present nodes m ->
+    rows_present nodes (floyd_update' k i targets m).
+Proof.
+  move => nodes k i targets m Hrows.
+  rewrite /floyd_update'.
+  case Hrow : (PVM.find i m) => [dm|].
+  - move => x Hin.
+    case E : (ProdVar.eq_dec x i) => [Ex|Ex].
+    + have Hxi : x = i by (apply eq_from_prodvar_eq; exact Ex).
+      exists (new_dst_map targets dm k i m).
+      by rewrite Hxi find_add_eq_z_fm'.
+    + have Hne : x <> i by move => He; apply Ex; apply eq_from_prodvar_eq; exact He.
+      have [out Hout] := Hrows x Hin.
+      exists out.
+      rewrite find_add_neq_z_fm'; [exact Hout|exact Hne].
+  - exact Hrows.
+Qed.
+
+Lemma inner_loop1_rows_present : forall tracked steps m k,
+    rows_present tracked m ->
+    rows_present tracked (inner_loop1 steps m k).
+Proof.
+  move => tracked steps.
+  elim: steps => [|hd tl IH] m k Hrows //=.
+  apply IH.
+  exact: (@floyd_update'_rows_present tracked k hd
+            (Zero :: map (fun p => Node p) (hd :: tl)) m Hrows).
+Qed.
+
+Lemma inner_loop2_rows_present : forall tracked steps m,
+    rows_present tracked m ->
+    rows_present tracked (inner_loop2 steps m).
+Proof.
+  move => tracked steps.
+  elim: steps => [|hd tl IH] m Hrows //=.
+  apply IH.
+  exact: (@inner_loop1_rows_present tracked (hd :: tl) m hd Hrows).
+Qed.
+
+Lemma floyd_loop_map'_rows_present : forall nodes cs,
+    rows_present nodes (floyd_loop_map' nodes cs).
+Proof.
+  move => nodes cs.
+  rewrite /floyd_loop_map'.
+  apply inner_loop2_rows_present.
+  apply add_edge_of_cs'_rows_present.
+  exact: map0_rows_present.
+Qed.
+
+Lemma save_longest_dist_some : forall sc m values,
+    rows_present sc m ->
+    exists result, save_longest_dist sc m values = Some result.
+Proof.
+  move => sc.
+  elim: sc => [|hd tl IH] m values Hrows.
+  - exists values. reflexivity.
+  - simpl.
+    have [dm Hdm] := Hrows hd (or_introl erefl).
+    rewrite Hdm.
+    case: (List.split (NVM.elements dm)) => [keys dists] /=.
+    apply IH.
+    move => i Hin. exact: (Hrows i (or_intror Hin)).
+Qed.
+
+Theorem scc_none_unsat_proof :
+  forall (cs : list Constraint1) (sc : list ProdVar.t),
+    solve_simple_cycle sc cs = None ->
+    forall v : Valuation,
+      forallb (satisfies_constraint1 v) cs = false.
+Proof.
+  move => cs sc Hnone v.
+  case Hall : (forallb (satisfies_constraint1 v) cs); last reflexivity.
+  have Hsat : forall c, In c cs -> satisfies_constraint1 v c = true.
+  { apply (proj1 (forallb_forall (satisfies_constraint1 v) cs)). exact Hall. }
+  have Hbound := @floyd_loop_map'_bounded v sc cs Hsat.
+  have Hdiag := floyd_loop_map'_diag_nonneg sc cs.
+  have Hzero := @bounded_diag_zero v sc (floyd_loop_map' sc cs) Hbound Hdiag.
+  have Hneg := negcycb_all_zero sc (floyd_loop_map' sc cs) Hzero.
+  have Hrows := floyd_loop_map'_rows_present sc cs.
+  have [result Hsave] :=
+    @save_longest_dist_some sc (floyd_loop_map' sc cs) initial_valuation Hrows.
+  unfold solve_simple_cycle in Hnone.
+  rewrite Hneg Hsave in Hnone.
+  discriminate.
+Qed.
+End SccNoneUnsatProof.
+
+Theorem scc_none_unsat (cs : list Constraint1) :
+    forall sc, solve_simple_cycle sc cs = None ->
+    forall v : Valuation,
+      forallb (satisfies_constraint1 v) cs = false.
+Proof.
+  exact: SccNoneUnsatProof.scc_none_unsat_proof.
+Qed.
+
 (* Theorem solve_simple_cycle_smallest : *)
 (*   forall (sc : list ProdVar.t)  *)
 (*          (cs : list Constraint1) (v0 val : Valuation), *)
