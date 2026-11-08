@@ -12,26 +12,22 @@ Import Prenex Implicits.
 (* ------------ solve simple cycle ------------ *)
 
 
-Definition terms_value_aux (v : Valuation) (ax : (nat * ProdVar.t)) (acc : Z.t) : Z.t :=
-  let vi := match PVM.find ax.2 v with
-            | Some val => val
-            | None => 0
-            end in
-  Z.add acc (Z.of_nat (ax.1 * vi)).
-  
-Fixpoint terms_value' (v : Valuation) (terms : list (nat * ProdVar.t)) (acc : Z.t) : Z.t :=
-  match terms with
-  | nil => acc
-  | hd::tl => terms_value' v tl (terms_value_aux v hd acc) 
+Definition terms_value_aux (v : Valuation) (ax : (nat * ProdVar.t)) (acc : Z.t) : option Z.t :=
+  match PVM.find ax.2 v with
+  | Some val => Some (Z.add acc (Z.of_nat (ax.1 * val)))
+  | None => None
   end.
 
-Definition power_value' (v : Valuation) (terms : list (nat * ProdVar.t)) : Z.t :=
+Fixpoint terms_value' (v : Valuation) (terms : list (nat * ProdVar.t)) (acc : Z.t) : option Z.t :=
   match terms with
-  | nil => 0
-  | _ => let n := terms_value' v terms 0 in Z.pow 2 n
+  | nil => Some acc
+  | hd::tl => match terms_value_aux v hd acc with
+                | Some val => terms_value' v tl val
+                | None => None
+                end
   end.
 
-Definition rhs_value1' (v: Valuation) (c : Constraint1) : Z.t :=
+Definition rhs_value1' (v: Valuation) (c : Constraint1) : option Z.t :=
   terms_value' v c.(rhs_terms1) c.(rhs_const1) (* + power_value' v c.(rhs_power) *) .
 
 Definition rhs_vars' (c : Constraint1) : list ProdVar.t :=
@@ -39,7 +35,10 @@ Definition rhs_vars' (c : Constraint1) : list ProdVar.t :=
 
 Definition satisfies_constraint1' (v: Valuation) (c: Constraint1) : bool :=
   match PVM.find c.(lhs_var1) v with
-  | Some val => Z.leb (rhs_value1' v c) (Z.of_nat val)
+  | Some val => match rhs_value1' v c with
+                  | Some rhs_val => Z.leb rhs_val (Z.of_nat val)
+                  | None => false
+                end
   | None => false
   end.
 
@@ -2497,10 +2496,11 @@ Lemma satisfies_constraint1_add_maxzlist :
 Proof.
   move => c s fm cm a dist v0 Hfdc Hrhs Hrhsp Hspl Hdom Hcv0.
   rewrite /satisfies_constraint1' find_add_eq /rhs_value1' Hrhs/=.
-  rewrite /terms_value_aux/= mul1n.
+  rewrite /terms_value_aux/=.
   rewrite /dominates Hrhs Hrhsp Hfdc Hspl in Hdom.
   case: Hdom => [v [Hfindv Hle]].
-  by rewrite Hfindv Hle.
+  rewrite Hfindv /= mul1n Hle.
+  reflexivity.
 Qed.
 
 
@@ -2516,7 +2516,9 @@ Proof.
     have Heq : PVM.find (snd hd) v = PVM.find (snd hd) v'.
     { apply Hsame. rewrite /=. by left. }
     rewrite Heq.
-    apply IH => y Hy. apply Hsame. rewrite /=. by right.
+    case Hfind : (PVM.find (snd hd) v') => [n|] /=.
+    + apply IH => y Hy. apply Hsame. rewrite /=. by right.
+    + reflexivity.
 Qed.
 
 Lemma rhs_value1'_ext :
@@ -2637,7 +2639,10 @@ Qed.
      最长路径距离（这正是满足 satisfies_constraint1' 所需的比较）。 *)
 Definition dominates_at (c : Constraint1) (v : Valuation) (fm : adj_matrix) : Prop :=
   match PVM.find (lhs_var1 c) fm with
-  | Some cm => (rhs_value1' v c <=? Z.of_nat (Z.to_nat (maxz_list (split (NVM.elements cm)).2)))%Z = true
+  | Some cm => match rhs_value1' v c with
+                  | Some rhs_val => (rhs_val <=? Z.of_nat (Z.to_nat (maxz_list (split (NVM.elements cm)).2)))%Z = true
+                  | None => false
+                end
   | None => True
   end.
 
@@ -2656,7 +2661,9 @@ Proof.
     have Hfind := (@sl_find_in sc fm v0 v1 (lhs_var1 hd) cm Hsave (Hlhs hd Hhd) Hcm).
     rewrite Hfind.
     have Hdm := Hdom hd Hhd. rewrite /dominates_at Hcm in Hdm.
-    exact: Hdm.
+    case: (rhs_value1' v1 hd) Hdm => [rhs|] Hdm /=.
+    + exact Hdm.
+    + done.
   - apply (IH sc fm v0 v1) => //.
     + move => c Hc. exact: (Hconf c (or_intror Hc)).
     + move => c Hc. exact: (Hlhs c (or_intror Hc)).
@@ -2738,43 +2745,6 @@ Proof.
   case Hpos : (negcycb sc (floyd_loop_map' sc cs) true); last done.
   move => Hsve.
   exact: (@save_longest_dist_correct cs sc (floyd_loop_map' sc cs) initial_valuation val Hconf Hlhs Hdom Hsve).
-Qed.
-
-Definition scc_smallest_prop (fm : adj_matrix) cs1 (ret : option Valuation) :=
-  forall (sol : Valuation), well_formed fm cs1 -> ret = Some sol ->
-  forall (s : Valuation), 
-    satisfies_all_constraint1 s cs1 ->
-    le sol s.
-
-Axiom scc_smallest_aux :
-  forall (vars : list ProdVar.t) (fm: adj_matrix)
-         (cs1 : list Constraint1) ,
-    scc_smallest_prop fm cs1 (solve_simple_cycle' vars cs1 initial_valuation).
-
-Lemma scc_smallest' :
-    forall (sc : list ProdVar.t) fm
-           (cs : list Constraint1) (val : Valuation),
-       well_formed fm cs ->
-       solve_simple_cycle' sc cs initial_valuation = Some val ->
-       forall (s : Valuation), 
-         satisfies_all_constraint1 s cs ->
-         le val s.
-Proof.
-  exact scc_smallest_aux.
-Qed.
-
-Lemma scc_smallest :
-    forall (sc : list ProdVar.t) fm
-           (cs : list Constraint1) (val : Valuation),
-       well_formed fm cs ->
-       solve_simple_cycle sc cs = Some val ->
-       forall (s : Valuation), 
-         satisfies_all_constraint1 s cs ->
-         le val s.
-Proof.
-  move => sc fm cs val.
-  rewrite -solve_simple_cycle_eq. 
-  exact : scc_smallest_aux.
 Qed.
 
 Module SccNoneUnsatProof.
@@ -2956,36 +2926,60 @@ Proof.
 Qed.
 
 Lemma terms_value_ge_init : forall v ts z,
-    (z <= terms_value v ts z)%Z.
+    match terms_value v ts (Some z) with
+    | Some val => (z <= val)%Z
+    | None => True
+    end.
 Proof.
   move => v ts.
   elim: ts => [|[a x] tl IH] z /=.
   - lia.
   - case Hv : (PVM.find x v) => [n|].
-    + have Hstep : (z <= z + Z.of_nat (a * n))%Z by lia.
-      eapply Z.le_trans; [exact Hstep | apply IH].
-    + have Hstep : (z <= z + Z.of_nat (a * 0))%Z by lia.
-      eapply Z.le_trans; [exact Hstep | apply IH].
+    + have Htail := IH (z + Z.of_nat (a * n))%Z.
+      case Hresult : (terms_value v tl
+        (Some (z + Z.of_nat (a * n))%Z)) => [result|] /=.
+      * rewrite Hresult in Htail. lia.
+      * exact I.
+    + exact I.
 Qed.
 
-Lemma power_value_nonneg : forall v p, (0 <= power_value v p)%Z.
+Lemma power_value_nonneg : forall v p,
+  match power_value v p with
+  | Some val => (0 <= val)%Z
+  | None => True
+  end.
 Proof.
   move => v p. rewrite /power_value.
   case: p => [|[n pv] tl]; first by lia.
-  have := Z.pow_nonneg 2 (terms_value v ([:: (n, pv)] ++ tl) 0%Z).
-  by move => _; lia.
+  case Hterms : (terms_value v ((n, pv) :: tl) (Some 0%Z)) => [exponent|] /=.
+  - apply Z.pow_nonneg. lia.
+  - exact I.
 Qed.
 
 Lemma rhs_value1_ge_const : forall v c,
-    (rhs_const1 c <= rhs_value1 v c)%Z.
+  match rhs_value1 v c with
+  | Some val => (rhs_const1 c <= val)%Z
+  | None => True
+  end.
 Proof.
   move => v c. rewrite /rhs_value1.
-  have Hterms := terms_value_ge_init v (rhs_terms1 c) (rhs_const1 c).
-  have Hpow := power_value_nonneg v (rhs_power c). lia.
+  case Hterms : (terms_value v (rhs_terms1 c) (Some (rhs_const1 c))) =>
+    [linear|] /=.
+  - case Hpower : (power_value v (rhs_power c)) => [power|] /=.
+    + have Hlinear := terms_value_ge_init v (rhs_terms1 c) (rhs_const1 c).
+      rewrite Hterms in Hlinear.
+      have Hpower_nonneg := power_value_nonneg v (rhs_power c).
+      rewrite Hpower in Hpower_nonneg.
+      lia.
+    + exact I.
+  - exact I.
 Qed.
 
 Lemma terms_value_singleton : forall v x (z : Z.t),
-    terms_value v [:: (1, x)] z = (z + Z.of_nat (getv v x))%Z.
+    match terms_value v [:: (1, x)] (Some z) with
+    | Some val => val = (z + Z.of_nat (getv v x))%Z
+    | None => True
+    end.
 Proof.
   move => v x z. rewrite /terms_value /= /getv.
   case: (PVM.find x v) => [n|] //=.
@@ -3000,13 +2994,18 @@ Lemma satisfies_edge_bound_nil : forall v c,
 Proof.
   move => v c Hsat Hterms.
   unfold satisfies_constraint1 in Hsat.
-  case Hlhs : (PVM.find (lhs_var1 c) v) => [n|] in Hsat.
-  - apply Z.leb_le in Hsat.
-    rewrite /rhs_value1 Hterms /= in Hsat.
-    have Hpow := power_value_nonneg v (rhs_power c).
-    have Hconst := rhs_value1_ge_const v c.
-    unfold getv. rewrite Hlhs. simpl node_potential. lia.
-  - discriminate.
+  destruct (PVM.find (lhs_var1 c) v) as [n|] eqn:Hlhs; try discriminate.
+  destruct (rhs_value1 v c) as [rhs|] eqn:Hrhs; try discriminate.
+  apply Z.leb_le in Hsat.
+  unfold rhs_value1 in Hrhs.
+  rewrite Hterms in Hrhs.
+  destruct (power_value v (rhs_power c)) as [pow|] eqn:Hpow;
+    simpl in Hrhs; try discriminate.
+  injection Hrhs as Hrhs_value.
+  have Hpow_nonneg := power_value_nonneg v (rhs_power c).
+  rewrite Hpow in Hpow_nonneg.
+  unfold getv. rewrite Hlhs. simpl node_potential.
+  lia.
 Qed.
 
 Lemma satisfies_edge_bound_singleton : forall v c x,
@@ -3017,12 +3016,21 @@ Lemma satisfies_edge_bound_singleton : forall v c x,
 Proof.
   move => v c x Hsat Hterms.
   unfold satisfies_constraint1 in Hsat.
-  case Hlhs : (PVM.find (lhs_var1 c) v) => [n|] in Hsat.
-  - apply Z.leb_le in Hsat.
-    rewrite /rhs_value1 Hterms terms_value_singleton in Hsat.
-    have Hpow := power_value_nonneg v (rhs_power c).
-    unfold getv. rewrite Hlhs. simpl node_potential. lia.
-  - discriminate.
+  destruct (PVM.find (lhs_var1 c) v) as [n|] eqn:Hlhs; try discriminate.
+  destruct (rhs_value1 v c) as [rhs|] eqn:Hrhs; try discriminate.
+  apply Z.leb_le in Hsat.
+  unfold rhs_value1 in Hrhs.
+  rewrite Hterms in Hrhs.
+  simpl in Hrhs.
+  destruct (PVM.find x v) as [vx|] eqn:Hx; simpl in Hrhs; try discriminate.
+  destruct (power_value v (rhs_power c)) as [pow|] eqn:Hpow;
+    simpl in Hrhs; try discriminate.
+  injection Hrhs as Hrhs_value.
+  rewrite mul1n in Hrhs_value.
+  have Hpow_nonneg := power_value_nonneg v (rhs_power c).
+  rewrite Hpow in Hpow_nonneg.
+  unfold getv. rewrite Hlhs. simpl node_potential.
+  unfold getv. rewrite Hx. lia.
 Qed.
 
 Lemma matrix_bounded_add_row : forall v m i dm,
@@ -3694,3 +3702,410 @@ Qed.
 (*     admit. done. *)
           
 (* Admitted. *)
+
+
+Definition scc_smallest_prop (fm : adj_matrix) cs1 (ret : option Valuation) :=
+  forall (sol : Valuation), well_formed fm cs1 -> ret = Some sol ->
+  forall (s : Valuation), 
+    satisfies_all_constraint1 s cs1 ->
+    le sol s.
+
+Definition scc_smallest_prop_strengthened
+    (fm : adj_matrix) (cs : list Constraint1) (ret : option Valuation) :=
+  forall sol, well_formed fm cs -> ret = Some sol ->
+  forall s, satisfies_all_constraint1 s cs ->
+    (forall x, PVM.mem x sol -> PVM.mem x s) ->
+    le sol s.
+
+Lemma nvm_entry_in_elements : forall (m : NVM.t Z.t) k w,
+  List.In (k, w) (NVM.elements m) ->
+  NVM.find k m = Some w.
+Proof.
+  move => m k w Hin.
+  have HinA :
+      InA (NVM.M.eq_key_elt (elt := Z.t)) (k, w) (NVM.elements m).
+  {
+    apply (proj2 (InA_alt _ _ _)).
+    exists (k, w). split.
+    - split; [exact: NodeVar.eq_refl | reflexivity].
+    - exact Hin.
+  }
+  apply NVM.Lemmas.find_mapsto_iff.
+  apply NVM.Lemmas.elements_mapsto_iff.
+  exact HinA.
+Qed.
+
+Lemma maxz_list_le_bound : forall xs bound,
+  (0 <= bound)%Z ->
+  (forall w, List.In w xs -> (w <= bound)%Z) ->
+  (maxz_list xs <= bound)%Z.
+Proof.
+  elim => [|hd tl IH] bound Hnonneg Hall /=.
+  - exact Hnonneg.
+  - apply Z.max_lub.
+    + apply Hall. by left.
+    + apply IH; [exact Hnonneg |].
+      move => w Hin. apply Hall. by right.
+Qed.
+
+Definition prodvar_eq_dec : forall x y : ProdVar.t, {x = y} + {x <> y}.
+Proof.
+  move => x y.
+  case: (ProdVar.eq_dec x y) => [Heq|Hneq].
+  - left. exact: (proj1 (eq_from_prodvar_eq x y) Heq).
+  - right. move => Hxy. apply Hneq.
+    rewrite Hxy. exact: ProdVar.eq_refl.
+Defined.
+
+Lemma max_row_bounded_by_valuation :
+    forall s m i dm,
+      SccNoneUnsatProof.matrix_bounded s m ->
+      PVM.find i m = Some dm ->
+      (maxz_list (split (NVM.elements dm)).2 <=
+        Z.of_nat (SccNoneUnsatProof.getv s i))%Z.
+Proof.
+  move => s m i dm Hbounded Hrow.
+  apply maxz_list_le_bound.
+  - lia.
+  - move => w Hw.
+  rewrite split_map /= in Hw.
+  apply in_map_iff in Hw.
+  destruct Hw as [[j w'] [Hw Hin]].
+  simpl in Hw. subst w'.
+  have Hfind := nvm_entry_in_elements dm j w Hin.
+  have Hentry := Hbounded i dm Hrow j w Hfind.
+  have Hnonneg : (0 <= SccNoneUnsatProof.node_potential s j)%Z.
+  {
+    destruct j; rewrite /SccNoneUnsatProof.node_potential /=;
+      try rewrite /SccNoneUnsatProof.getv; lia.
+  }
+  lia.
+Qed.
+
+Module SccSmallestProof.
+Import SccNoneUnsatProof.
+
+Lemma satisfies_all_prime_in : forall s cs c,
+  satisfies_all_constraint1 s cs ->
+  List.In c cs ->
+  satisfies_constraint1' s c = true.
+Proof.
+  move => s cs.
+  elim: cs => [|hd tl IH] c /= Hsat Hc.
+  - by destruct Hc.
+  - move/andP: Hsat => [Hhd Htl].
+    move: Hc => [E|Hc].
+    + subst c. exact Hhd.
+    + exact: (IH c Htl Hc).
+Qed.
+
+Lemma rhs_value1'_singleton : forall v c x,
+  rhs_terms1 c = [:: (1, x)] ->
+  match rhs_value1' v c with
+  | Some w => w = (rhs_const1 c + Z.of_nat (getv v x))%Z
+  | None => True
+  end.
+Proof.
+  move => v c x Hterms.
+  rewrite /rhs_value1' Hterms /= /terms_value_aux.
+  case Hfind : (PVM.find x v) => [n|] /=.
+  - rewrite /getv Hfind /= mul1n. reflexivity.
+  - exact I.
+Qed.
+
+Lemma satisfies_edge_bound_nil_prime : forall v c,
+  satisfies_constraint1' v c = true ->
+  rhs_terms1 c = nil ->
+  (rhs_const1 c <= Z.of_nat (getv v (lhs_var1 c)) -
+    node_potential v Zero)%Z.
+Proof.
+  move => v c Hsat Hterms.
+  rewrite /satisfies_constraint1' in Hsat.
+  case Hlhs : (PVM.find (lhs_var1 c) v) => [n|] in Hsat;
+    last by discriminate.
+  rewrite /rhs_value1' Hterms /= in Hsat.
+  apply Z.leb_le in Hsat.
+  rewrite /getv Hlhs /node_potential /=.
+  lia.
+Qed.
+
+Lemma satisfies_edge_bound_singleton_prime : forall v c x,
+  satisfies_constraint1' v c = true ->
+  rhs_terms1 c = [:: (1, x)] ->
+  (rhs_const1 c <= Z.of_nat (getv v (lhs_var1 c)) -
+    node_potential v (Node x))%Z.
+Proof.
+  move => v c x Hsat Hterms.
+  rewrite /satisfies_constraint1' in Hsat.
+  case Hlhs : (PVM.find (lhs_var1 c) v) => [n|] in Hsat;
+    last by discriminate.
+  case Hr : (rhs_value1' v c) => [rhs|] in Hsat;
+    last by discriminate.
+  have Hrhs := rhs_value1'_singleton v c Hterms.
+  rewrite Hr in Hrhs.
+  rewrite Hrhs in Hsat.
+  apply Z.leb_le in Hsat.
+  rewrite /getv Hlhs /node_potential /=.
+  lia.
+Qed.
+
+Lemma add_edge_of_cs'_bounded_prime : forall v cs,
+  (forall c, List.In c cs -> satisfies_constraint1' v c = true) ->
+  forall m, matrix_bounded v m ->
+  matrix_bounded v (add_edge_of_cs' cs m).
+Proof.
+  move => v cs.
+  elim: cs => [|hd tl IH] Hsat m Hm.
+  - exact Hm.
+  - have Htail : matrix_bounded v (add_edge_of_cs' tl m).
+    { apply IH.
+      - move => c Hc. exact: (Hsat c (or_intror Hc)).
+      - exact Hm. }
+    rewrite /add_edge_of_cs' /=.
+    case Hfind : (PVM.find (lhs_var1 hd) m) => [dm|].
+    2: exact Htail.
+    case Hterms : (rhs_terms1 hd) => [|[a x] rest].
+    + case Hzero : (NVM.find Zero dm) => [old|].
+      * apply matrix_bounded_add_row.
+        -- exact Htail.
+        -- apply row_bounded_add_max.
+           ++ move => j w Hj. exact: (Hm (lhs_var1 hd) dm Hfind j w Hj).
+           ++ exact Hzero.
+           ++ exact: (satisfies_edge_bound_nil_prime v hd
+                       (Hsat hd (or_introl erefl)) Hterms).
+      * apply matrix_bounded_add_row.
+        -- exact Htail.
+        -- apply row_bounded_add_new.
+           ++ move => j w Hj. exact: (Hm (lhs_var1 hd) dm Hfind j w Hj).
+           ++ exact Hzero.
+           ++ exact: (satisfies_edge_bound_nil_prime v hd
+                       (Hsat hd (or_introl erefl)) Hterms).
+    + case rest as [|t rest'].
+      * case a as [|a'].
+        -- simpl. exact Htail.
+        -- case a' as [|a''].
+           ++ case Hx : (NVM.find (Node x) dm) => [old|].
+              ** apply matrix_bounded_add_row.
+                 --- exact Htail.
+                 --- apply row_bounded_add_max.
+                     +++ move => j w Hj. exact: (Hm (lhs_var1 hd) dm Hfind j w Hj).
+                     +++ exact Hx.
+                     +++ apply satisfies_edge_bound_singleton_prime
+                           with (c := hd) (x := x).
+                         ** exact: (Hsat hd (or_introl erefl)).
+                         ** exact Hterms.
+              ** apply matrix_bounded_add_row.
+                 --- exact Htail.
+                 --- apply row_bounded_add_new.
+                     +++ move => j w Hj. exact: (Hm (lhs_var1 hd) dm Hfind j w Hj).
+                     +++ exact Hx.
+                     +++ apply satisfies_edge_bound_singleton_prime
+                           with (c := hd) (x := x).
+                         ** exact: (Hsat hd (or_introl erefl)).
+                         ** exact Hterms.
+           ++ simpl. exact Htail.
+      * case a as [|a'].
+        -- simpl. exact Htail.
+        -- case a' as [|a''].
+           ++ simpl. exact Htail.
+           ++ simpl. exact Htail.
+Qed.
+
+Lemma floyd_loop_map'_bounded_prime : forall v nodes cs,
+  (forall c, List.In c cs -> satisfies_constraint1' v c = true) ->
+  matrix_bounded v (floyd_loop_map' nodes cs).
+Proof.
+  move => v nodes cs Hsat.
+  rewrite /floyd_loop_map'.
+  apply inner_loop2_bounded.
+  rewrite /init_dist_map'.
+  apply add_edge_of_cs'_bounded_prime.
+  - exact Hsat.
+  - exact: map0_matrix_bounded.
+Qed.
+
+Lemma scc_smallest_aux_strengthened :
+  forall vars fm cs,
+    scc_smallest_prop_strengthened fm cs
+      (solve_simple_cycle' vars cs initial_valuation).
+Proof.
+  move => vars fm cs sol Hwf Hsolve s Hsat Hdomain.
+  have Hsave :
+      save_longest_dist vars (floyd_loop_map' vars cs)
+        initial_valuation = Some sol.
+  {
+    rewrite /solve_simple_cycle' in Hsolve.
+    case Hneg : (negcycb vars (floyd_loop_map' vars cs) true) in Hsolve;
+      last by discriminate.
+    exact Hsolve.
+  }
+  have Hsat_each : forall c, List.In c cs ->
+      satisfies_constraint1' s c = true.
+  {
+    move => c Hc.
+    exact: (satisfies_all_prime_in s cs c Hsat Hc).
+  }
+  have Hbounded :=
+    floyd_loop_map'_bounded_prime s vars cs Hsat_each.
+  rewrite /le.
+  move => x nx Hfind_sol.
+  have Hmem_sol : PVM.mem x sol.
+  { apply find_mem. by exists nx. }
+  have Hmem_s := Hdomain x Hmem_sol.
+  have [ns Hfind_s] : exists ns, PVM.find x s = Some ns.
+  { apply find_mem. exact Hmem_s. }
+  exists ns. split; first exact Hfind_s.
+  have Hxvars : List.In x vars.
+  {
+    case: (in_dec prodvar_eq_dec x vars) => [Hin|Hnot].
+    - exact Hin.
+    - exfalso.
+      have Hsame := @sl_find_notin
+        vars (floyd_loop_map' vars cs) initial_valuation sol x Hsave Hnot.
+      rewrite /initial_valuation find_empty_None in Hsame.
+      rewrite Hsame in Hfind_sol. discriminate.
+  }
+  have Hrows := SccNoneUnsatProof.floyd_loop_map'_rows_present vars cs.
+  destruct (Hrows x Hxvars) as [dm Hrow].
+  have Hstored := @sl_find_in
+    vars (floyd_loop_map' vars cs) initial_valuation sol x dm
+    Hsave Hxvars Hrow.
+  rewrite Hfind_sol in Hstored.
+  injection Hstored as Hnx.
+  have Hmax := max_row_bounded_by_valuation x Hbounded Hrow.
+  have Hgetv : SccNoneUnsatProof.getv s x = ns.
+  { rewrite /SccNoneUnsatProof.getv Hfind_s. reflexivity. }
+  rewrite Hgetv in Hmax.
+  apply /leP.
+  rewrite Hnx.
+  apply (proj2 (Nat2Z.inj_le _ _)).
+  rewrite z2n2z.
+  - exact Hmax.
+  - apply maxz_list_ge0.
+Qed.
+
+Lemma prodvar_eq_dec : forall x y : ProdVar.t, {x = y} + {x <> y}.
+Proof.
+  move => x y.
+  case: (ProdVar.eq_dec x y) => [Heq|Hneq].
+  - left. exact: (proj1 (eq_from_prodvar_eq x y) Heq).
+  - right. move => Hxy. apply Hneq.
+    rewrite Hxy. exact: ProdVar.eq_refl.
+Defined.
+
+Lemma sol_mem_in_vars vars cs1 sol:
+  solve_simple_cycle'
+         vars cs1
+         initial_valuation =
+       Some sol -> forall x, PVM.mem x sol -> In x vars.
+Proof.
+  move => Hsolve x Hmem.
+  have [nx Hfind_sol] : exists nx, PVM.find x sol = Some nx.
+  { apply find_mem. exact Hmem. }
+  case: (in_dec prodvar_eq_dec x vars) => [Hin|Hnot].
+  { exact: Hin. }
+  exfalso.
+  have Hsave :
+    save_longest_dist vars (floyd_loop_map' vars cs1)
+      initial_valuation = Some sol.
+  { rewrite /solve_simple_cycle' in Hsolve.
+    case Hneg : (negcycb vars (floyd_loop_map' vars cs1) true) in Hsolve;
+      last by discriminate.
+    exact Hsolve. }
+  have Hsame := @sl_find_notin
+    vars (floyd_loop_map' vars cs1) initial_valuation sol x Hsave Hnot.
+  rewrite /initial_valuation find_empty_None in Hsame.
+  rewrite Hsame in Hfind_sol. discriminate.
+Qed.
+
+Lemma terms_value'_vars_mem : forall v terms acc result,
+    terms_value' v terms acc = Some result ->
+    forall x, In x (map snd terms) -> PVM.mem x v.
+Proof.
+  move => v terms.
+  elim: terms => [|[coef var] tl IH] acc result Hvalue x Hin.
+  - by [].
+  - rewrite /= /terms_value_aux in Hvalue.
+    case Hfind : (PVM.find var v) => [n|] in Hvalue;
+      last by discriminate.
+    simpl in Hin.
+    move: Hin => [<-|Hin].
+    + apply find_mem. by exists n.
+    + exact: (IH (Z.add acc (Z.of_nat (coef * n))) result Hvalue x Hin).
+Qed.
+
+Lemma satisfies_all_constraint1_vars s cs1 :
+  (forall c, In c cs1 -> (rhs_power c) = nil) ->
+  satisfies_all_constraint1
+         s cs1 -> forall x, In x
+      (constraints1_vars cs1) -> PVM.mem x s.
+Proof.
+  move => Hpowers.
+  elim: cs1 Hpowers => [|c tl IH] Hpowers /= Hsat x Hin.
+  - by [].
+  - move/andP: Hsat => [Hc Htl].
+    have Hpower : rhs_power c = nil.
+    { apply Hpowers. by left. }
+    have Hpowers_tl : forall c', In c' tl -> rhs_power c' = nil.
+    { move => c' Hc'. apply Hpowers. by right. }
+    rewrite /satisfies_constraint1' in Hc.
+    case Hlhs : (PVM.find (lhs_var1 c) s) => [n|] in Hc;
+      last by discriminate.
+    case Hr : (rhs_value1' s c) => [rhs|] in Hc;
+      last by discriminate.
+    rewrite /constraints1_vars /= Hpower /= in Hin.
+    move: Hin => [Hlhs_var|Hin].
+    + subst x. apply find_mem. by exists n.
+    + apply in_app_or in Hin.
+      move: Hin => [Hrhs_var|Htl_vars].
+      * rewrite /rhs_value1' in Hr.
+        apply in_app_or in Hrhs_var.
+        move: Hrhs_var => [Hterm_var|Hpower_var].
+        -- exact (@terms_value'_vars_mem s (rhs_terms1 c) (rhs_const1 c)
+                    rhs Hr x Hterm_var).
+        -- by destruct Hpower_var.
+      * exact: (IH Hpowers_tl Htl x Htl_vars).
+Qed.
+
+Lemma scc_smallest_aux vars fm cs1 :
+    (forall x, In x vars -> In x (constraints1_vars cs1)) ->
+    (forall c, In c cs1 -> (rhs_power c) = nil) ->
+    scc_smallest_prop fm cs1 (solve_simple_cycle' vars cs1 initial_valuation).
+Proof.
+  intros Hin Hpowers. unfold scc_smallest_prop. move => sol Hwf Hret s Hsat.
+  apply (@scc_smallest_aux_strengthened vars fm cs1); try done.
+  intros. apply (sol_mem_in_vars vars cs1 Hret x) in H.
+  apply Hin in H; clear Hin.
+  apply (satisfies_all_constraint1_vars s cs1 Hpowers Hsat x) in H.
+  done.
+Qed.
+
+Lemma scc_smallest' sc fm cs val :
+    (forall x, In x sc -> In x (constraints1_vars cs)) ->
+    (forall c, In c cs -> (rhs_power c) = nil) ->
+       well_formed fm cs ->
+       solve_simple_cycle' sc cs initial_valuation = Some val ->
+       forall (s : Valuation), 
+         satisfies_all_constraint1 s cs ->
+         le val s.
+Proof.
+  intros Hin Hpowers.
+  specialize (@scc_smallest_aux sc fm cs Hin Hpowers) as H.
+  exact: H. 
+Qed.
+
+Lemma scc_smallest sc fm cs val :
+    (forall x, In x sc -> In x (constraints1_vars cs)) ->
+    (forall c, In c cs -> (rhs_power c) = nil) ->
+       well_formed fm cs ->
+       solve_simple_cycle sc cs = Some val ->
+       forall (s : Valuation), 
+         satisfies_all_constraint1 s cs ->
+         le val s.
+Proof.
+  intros Hin Hpowers.
+  rewrite -solve_simple_cycle_eq. 
+  exact : scc_smallest_aux.
+Qed.
+
+End SccSmallestProof.

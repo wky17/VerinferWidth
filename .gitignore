@@ -56,3 +56,6 @@ ocaml_try/extraction
 */.DS_Store
 */output.out
 */output.txt
+.DS_Store
+.vscode/settings.json
+ocaml/.DS_Store

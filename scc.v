@@ -155,6 +155,146 @@ Proof.
         intros; apply Hterm; right; done.
 Qed.
 
+Lemma terms_value_some_fold valuation : forall terms init result,
+  terms_value valuation terms (Some init) = Some result ->
+  result =
+    fold_left
+      (fun (acc : Z) (ax : nat * ProdVar.t) =>
+        (acc +
+        Z.of_nat
+          (ax.1 *
+            match PVM.find (elt:=nat) ax.2 valuation with
+            | Some val => val
+            | None => 0
+            end))%Z) terms init.
+Proof.
+  elim => [|[coe var] tl IH] init result Hvalue /=.
+  - injection Hvalue as Heq. subst result. reflexivity.
+  - change
+      (match PVM.find var valuation with
+       | Some val =>
+           terms_value valuation tl (Some (init + Z.of_nat (coe * val))%Z)
+       | None => None
+       end = Some result) in Hvalue.
+    destruct (PVM.find var valuation) as [val|] eqn:Hfind.
+    + have Htail := IH (init + Z.of_nat (coe * val))%Z result Hvalue.
+      simpl. exact Htail.
+    + discriminate.
+Qed.
+
+Definition terms_value_default (valuation : Valuation)
+    (terms : list term) (init : Z) : Z :=
+  fold_left
+    (fun (acc : Z) (ax : term) =>
+      (acc +
+       Z.of_nat
+         (ax.1 *
+          match PVM.find (elt:=nat) ax.2 valuation with
+          | Some val => val
+          | None => 0
+          end))%Z) terms init.
+
+Lemma terms_value_default_cst_add valuation : forall terms cst cst0,
+  terms_value_default valuation terms (cst + cst0)%Z =
+  (terms_value_default valuation terms cst + cst0)%Z.
+Proof.
+  elim => [|[coe var] terms IH] cst cst0.
+  - reflexivity.
+  - change
+      (terms_value_default valuation terms
+         (cst + cst0 +
+          Z.of_nat
+            (coe *
+             match PVM.find (elt:=nat) var valuation with
+             | Some val => val
+             | None => 0
+             end))%Z =
+       terms_value_default valuation terms
+         (cst +
+          Z.of_nat
+            (coe *
+             match PVM.find (elt:=nat) var valuation with
+             | Some val => val
+             | None => 0
+             end))%Z + cst0)%Z.
+    replace (cst + cst0 +
+       Z.of_nat
+         (coe *
+          match PVM.find (elt:=nat) var valuation with
+          | Some val => val
+          | None => 0
+          end))%Z with
+      ((cst +
+        Z.of_nat
+          (coe *
+           match PVM.find (elt:=nat) var valuation with
+           | Some val => val
+           | None => 0
+           end)) + cst0)%Z by ring.
+    rewrite (IH _ cst0).
+    f_equal.
+Qed.
+
+Lemma terms_value_default_app valuation : forall terms0 terms1 cst,
+  terms_value_default valuation (terms0 ++ terms1) cst =
+  terms_value_default valuation terms1
+    (terms_value_default valuation terms0 cst).
+Proof.
+  move => terms0 terms1 cst.
+  rewrite /terms_value_default fold_left_app.
+  reflexivity.
+Qed.
+
+Lemma terms_value_default_remove valuation (hd : ProdVar.t) :
+  forall terms coe cst,
+  NoDup terms ->
+  List.find (fun p : term => p.2 == hd) terms = Some (coe, hd) ->
+  terms_value_default valuation terms cst =
+    (terms_value_default valuation
+       (List.remove term_dec (coe, hd) terms) cst +
+     Z.of_nat
+       (coe *
+        match PVM.find (elt:=nat) hd valuation with
+        | Some val => val
+        | None => 0
+        end))%Z.
+Proof.
+  elim => [|[coe' var'] terms IH] coe cst Hnodup Hfind.
+  - simpl in Hfind. discriminate.
+  - simpl in Hfind.
+    case Heq : (var' == hd).
+    + move /eqP : Heq => Heq. subst var'.
+      rewrite eq_refl /= in Hfind.
+      injection Hfind as E. subst coe'.
+      apply NoDup_cons_iff in Hnodup.
+      destruct Hnodup as [Hnotin Hnodup].
+      have Hremove :
+        List.remove term_dec (coe, hd) ((coe, hd) :: terms) = terms.
+      { simpl. case: (term_dec (coe, hd) (coe, hd)) => [Hequal|Hneq].
+        - by rewrite notin_remove.
+        - exfalso. apply Hneq. reflexivity. }
+      rewrite Hremove /= terms_value_default_cst_add.
+      reflexivity.
+    + have Hneq : var' <> hd by (move /eqP: Heq; exact).
+      apply NoDup_cons_iff in Hnodup.
+      destruct Hnodup as [_ Hnodup].
+      rewrite Heq /= in Hfind.
+      have Hremove :
+        List.remove term_dec (coe, hd) ((coe', var') :: terms) =
+        (coe', var') :: List.remove term_dec (coe, hd) terms.
+      { simpl. case: (term_dec (coe, hd) (coe', var')) => [Hequal|Hnotequal].
+        - inversion Hequal. subst. exfalso. apply Hneq. reflexivity.
+        - reflexivity. }
+      rewrite Hremove /=.
+      exact: (IH coe
+        (cst + Z.of_nat
+          (coe' *
+           match PVM.find (elt:=nat) var' valuation with
+           | Some val => val
+           | None => 0
+           end))%Z Hnodup Hfind).
+Qed.
+
 Lemma reduce_constraints1 valuation : forall cl (hd : ProdVar.t), forallb (fun c => lhs_var1 c == hd) cl ->
   (forall c, List.In c cl -> good_terms (rhs_terms1 c) /\ Z.le (rhs_const1 c) 0 /\ (rhs_power c) = nil) -> 
   match fold_left (fun (ub : option Z.t) (c : Constraint1) => 
@@ -211,7 +351,7 @@ Proof.
     intro H; move : c; apply forallb_forall; done).
   clear Hcl. 
   move /eqP : H0 => H0; subst. 
-  unfold satisfies_constraint1, rhs_value1, terms_value.
+  unfold satisfies_constraint1, rhs_value1.
 
   assert (Hm : (0 <= m)%Z).
   move : H Hcoe; clear; intros.
@@ -239,6 +379,8 @@ Proof.
   assert (Hpower : (rhs_power c) = nil) by (apply Hterm in Hin; clear Hterm; exact Hin.2.2).
   assert (Hcst : Z.le (rhs_const1 c) 0) by (apply Hterm in Hin; clear Hterm; exact Hin.2.1).
   rewrite Hpower; clear Hpower; simpl. clear Hin.
+  case Hvalue : (terms_value valuation (rhs_terms1 c) (Some (rhs_const1 c))) => [rhs|] /=.
+  2: reflexivity.
   apply Z.leb_gt.
   rewrite Z.add_0_r.
   assert ((((rhs_const1 c) + (Z.of_nat (coe * (Z.to_nat m)))) <= fold_left
@@ -333,8 +475,12 @@ Proof.
     apply ltnW; done.
     done.
 
-  move : H1 H0; apply Z.lt_le_trans.
-  intros; apply Hterm in H; exact H.1.
+  have Hfold := @terms_value_some_fold valuation (rhs_terms1 c)
+    (rhs_const1 c) rhs Hvalue.
+  rewrite -Hfold in H0.
+  exact: (Z.lt_le_trans _ _ _ H1 H0).
+  move => c' Hin'.
+  exact: ((Hterm c' Hin').1).
 Qed.
 
 Lemma good_terms_tl : forall a l, good_terms (a :: l) -> good_terms l.
@@ -421,100 +567,185 @@ Proof.
         rewrite /good_terms in Hgoodtl. rewrite Hsplit in Hgoodtl; simpl in Hgoodtl; exact Hgoodtl.2.
 Qed.
 
-Lemma substitute_constraint_rhs valuation (hd : ProdVar.t) hd_val coe : forall (terms_hd terms_tl : list term) cst_hd cst_tl,
+Definition substitute_rhs_terms (hd : ProdVar.t) (coe : nat)
+    (terms_hd terms_tl : list term) : list term :=
+  fold_right
+    (fun '(coe', var) (acc : list term) =>
+      match List.find (fun p : term => p.2 == var) acc with
+      | Some t =>
+          let (existing_coef, _) := t in
+          (existing_coef + coe * coe', var)
+            :: List.remove term_dec (existing_coef, var) acc
+      | None => (coe * coe', var) :: acc
+      end)
+    (List.remove term_dec (coe, hd) terms_tl) terms_hd.
+
+Lemma substitute_constraint_rhs_default valuation
+    (hd : ProdVar.t) hd_val coe :
+  forall (terms_hd terms_tl : list term) (cst_hd cst_tl : Z),
   good_terms terms_tl -> good_terms terms_hd ->
   List.find (fun p : term => snd p == hd) terms_tl = Some (coe, hd) ->
-  PVM.find hd valuation = Some hd_val -> 
-  terms_value valuation
-    (fold_right
+  PVM.find hd valuation = Some hd_val ->
+  terms_value_default valuation (substitute_rhs_terms hd coe terms_hd terms_tl)
+    (cst_tl + Z.of_nat coe * cst_hd)%Z =
+  (terms_value_default valuation terms_tl cst_tl -
+   Z.of_nat (coe * hd_val) +
+   Z.of_nat coe * terms_value_default valuation terms_hd cst_hd)%Z.
+Proof.
+  elim => [|[coe_hd var_hd] terms_hd' IH]
+      terms_tl cst_hd cst_tl Hgood_tl Hgood_hd Hfind Hlookup.
+  - rewrite /substitute_rhs_terms /= terms_value_default_cst_add.
+    have Hremove := @terms_value_default_remove valuation hd
+      terms_tl coe cst_tl (good_terms_NoDup Hgood_tl) Hfind.
+    rewrite Hlookup in Hremove.
+    rewrite Hremove.
+    unfold terms_value_default.
+    simpl.
+    rewrite Nat2Z.inj_mul.
+    ring.
+  - rewrite /substitute_rhs_terms /=.
+    rewrite (terms_value_default_cst_add valuation
+      terms_hd' cst_hd
+      (Z.of_nat
+        (coe_hd *
+         match PVM.find (elt:=nat) var_hd valuation with
+         | Some val => val
+         | None => 0
+         end))).
+    remember (fold_right
       (fun '(coe', var) (acc : list term) =>
         match List.find (fun p : term => p.2 == var) acc with
         | Some t =>
             let (existing_coef, _) := t in
-            (existing_coef + coe * coe', var) :: (List.remove term_dec (existing_coef, var) acc)
+            (existing_coef + coe * coe', var)
+              :: List.remove term_dec (existing_coef, var) acc
         | None => (coe * coe', var) :: acc
-        end) (remove term_dec (coe, hd) terms_tl)
-      terms_hd)
-    (cst_tl + Z.of_nat coe * cst_hd) =
-  (terms_value valuation terms_tl cst_tl -
-  Z.of_nat (coe * hd_val) +
-  Z.of_nat coe *
-  terms_value valuation terms_hd cst_hd)%Z.
-Proof.
-  elim.
-  - simpl; intros terms_tl cst_hd cst_tl Hnodup_tl Hnodup_hd; intros.
-    specialize terms_value_remove with (hd_val := hd_val); intros.
-    rewrite H1; try done; clear H1.
-    rewrite terms_value_cst_add Nat2Z.inj_mul.
-    apply Z.add_sub_swap. apply (good_terms_NoDup Hnodup_tl). (* NoDup *) rewrite H0 //.
-  - simpl; intros [coe_hd var_hd] terms_hd' H terms_tl cst_hd cst_tl Hnodup_tl Hnodup_hd; intros.
-    simpl; simpl in H.
-    rewrite (terms_value_cst_add _ _ cst_hd (Z.of_nat
-      (coe_hd *
-       match PVM.find (elt:=nat) var_hd valuation with
-       | Some val => val
-       | None => 0
-       end))).
-    remember (fold_right
-      (fun '(coe', var) (acc : list term) =>
-      match List.find (fun p : term => p.2 == var) acc with
-      | Some t => let (existing_coef, _) := t in (existing_coef + coe * coe', var) :: (List.remove term_dec (existing_coef, var) acc)
-      | None => (coe * coe', var) :: acc
-      end) (remove term_dec (coe, hd) terms_tl) terms_hd') as combined_hd'.
+        end) (List.remove term_dec (coe, hd) terms_tl) terms_hd')
+      as combined_hd'.
     rewrite -Heqcombined_hd'.
-    case Hfind : (List.find (fun p : term => p.2 == var_hd) combined_hd') => [[existing_coef var_hd']|]; try done.
-    - rewrite Z.mul_add_distr_l Z.add_assoc.
-      assert ((existing_coef + coe * coe_hd, var_hd) :: remove term_dec (existing_coef, var_hd) combined_hd' 
-        = [(existing_coef + coe * coe_hd, var_hd)] ++ remove term_dec (existing_coef, var_hd) combined_hd') by (simpl; done).
-      rewrite H2. rewrite (terms_value_app (cst_tl + Z.of_nat coe * cst_hd)%Z valuation [(existing_coef + coe * coe_hd, var_hd)] 
-        (remove term_dec (existing_coef, var_hd) combined_hd')). clear H2; simpl.
-      rewrite Z.add_comm. 
-      rewrite -> mult_plus_distr_r.
-      rewrite Nat2Z.inj_add.
-      rewrite (Nat2Z.inj_mul (coe * coe_hd) (match PVM.find (elt:=nat) var_hd valuation with
-        | Some val => val
-        | None => 0
-        end)).
-      rewrite (Nat2Z.inj_mul coe coe_hd).
-      rewrite (Nat2Z.inj_mul coe_hd (match PVM.find (elt:=nat) var_hd valuation with
-        | Some val => val
-        | None => 0
-        end)) Z.mul_assoc.
-      rewrite Z.add_assoc.
-      apply Z.add_cancel_r.
-      specialize terms_value_remove with (hd_val := (match PVM.find (elt:=nat) var_hd valuation with
-        | Some val => val
-        | None => 0
-        end)); intros.
-      rewrite H2; try done; clear H2.
-      rewrite Z.sub_add.
-      rewrite Heqcombined_hd'; apply H; try done.
-      (* NoDup start *)
-      move : Hnodup_hd; clear. unfold good_terms in *; intros. move : Hnodup_hd => [H0 H1]. split. intros. 
-      assert (List.In  (coe, var) ((coe_hd, var_hd) :: terms_hd')) by (simpl; right; done). clear H; apply H0 in H2; try done.
-      destruct (List.split terms_hd') as [coes vars] eqn : Hsplit; simpl. simpl in H1; rewrite Hsplit in H1; simpl in H1.
-      apply NoDup_cons_iff in H1; exact H1.2.
-      apply good_terms_NoDup. rewrite Heqcombined_hd'; apply substitute_good_terms; try done.
-      apply good_terms_remove; done. move : Hnodup_hd; apply good_terms_tl.
-
-      rewrite /good_terms in Hnodup_tl. apply (Hnodup_tl.1 _ hd). apply find_some in H0. exact H0.1.
-      generalize Hfind; apply find_some in Hfind; simpl in Hfind; intros. move : Hfind => [Hin Heq]; move /eqP : Heq => Heq. rewrite Heq in Hfind0; done.
-
-    - assert ((coe * coe_hd, var_hd) :: combined_hd' = [(coe * coe_hd, var_hd)] ++ combined_hd') by (simpl; done).
-      rewrite H2. rewrite (terms_value_app (cst_tl + Z.of_nat coe * cst_hd)%Z valuation [(coe * coe_hd, var_hd)] (combined_hd')). clear H2; simpl.
-      rewrite Z.add_comm.
+    have Hfind_in := find_some _ _ Hfind.
+    have Hcoe_nonzero : coe <> 0.
+    { exact: (Hgood_tl.1 coe hd Hfind_in.1). }
+    have Hgood_comb : good_terms combined_hd'.
+    {
+        rewrite Heqcombined_hd'.
+        apply substitute_good_terms.
+        - apply good_terms_remove. exact Hgood_tl.
+        - apply good_terms_tl with (a := (coe_hd, var_hd)).
+          exact Hgood_hd.
+        - exact Hcoe_nonzero.
+    }
+    case Hfind_hd :
+      (List.find (fun p : term => p.2 == var_hd) combined_hd')
+      => [[existing_coef var_hd']|].
+    + have Hvar_eq : var_hd' = var_hd.
+      {
+        have [_ Hkey] := find_some _ _ Hfind_hd.
+        move /eqP : Hkey => Hkey. simpl in Hkey. exact Hkey.
+      }
+      subst var_hd'.
       rewrite Z.mul_add_distr_l Z.add_assoc.
+      have Hcons :
+        (existing_coef + coe * coe_hd, var_hd)
+          :: List.remove term_dec (existing_coef, var_hd) combined_hd' =
+        [(existing_coef + coe * coe_hd, var_hd)]
+          ++ List.remove term_dec (existing_coef, var_hd) combined_hd'
+        by reflexivity.
+      rewrite Hcons.
+      rewrite (terms_value_default_app valuation
+        [(existing_coef + coe * coe_hd, var_hd)]
+        (remove term_dec (existing_coef, var_hd) combined_hd')
+        (cst_tl + Z.of_nat coe * cst_hd)%Z).
+      clear Hcons. simpl.
+      set (val_hd := match PVM.find (elt:=nat) var_hd valuation with
+                     | Some val => val | None => 0 end).
+      have Hdist :
+        ((existing_coef + coe * coe_hd) * val_hd)%nat =
+        (existing_coef * val_hd + (coe * coe_hd) * val_hd)%nat.
+      { apply Nat.mul_add_distr_r. }
+      rewrite Hdist.
+      rewrite Nat2Z.inj_add.
+      rewrite (Nat2Z.inj_mul (coe * coe_hd)
+        val_hd).
+      rewrite (Nat2Z.inj_mul coe coe_hd).
+      rewrite (Nat2Z.inj_mul coe_hd val_hd) Z.mul_assoc Z.add_assoc.
+      have Hremove := @terms_value_default_remove valuation var_hd
+        combined_hd' existing_coef
+        (cst_tl + Z.of_nat coe * cst_hd)%Z
+        (good_terms_NoDup Hgood_comb) Hfind_hd.
+      fold val_hd in Hremove.
+      rewrite Nat2Z.inj_mul in Hremove.
       rewrite Nat2Z.inj_mul.
-      rewrite Nat2Z.inj_mul.
-      rewrite (Nat2Z.inj_mul coe_hd (match PVM.find (elt:=nat) var_hd valuation with
-        | Some val => val
-        | None => 0
-        end)) Z.mul_assoc.
-      apply Z.add_cancel_r.
-      rewrite Heqcombined_hd'; apply H; try done.
-      (* NoDup start *)
-      move : Hnodup_hd; apply good_terms_tl.
-      (* Nodup end*)
+      rewrite -Z.add_assoc.
+      rewrite (terms_value_default_cst_add valuation
+        (remove term_dec (existing_coef, var_hd) combined_hd')
+        (cst_tl + Z.of_nat coe * cst_hd)
+        (Z.of_nat existing_coef * Z.of_nat val_hd +
+         Z.of_nat coe * Z.of_nat coe_hd * Z.of_nat val_hd)).
+      rewrite Z.add_assoc.
+      rewrite -Hremove.
+      have HIH := IH terms_tl cst_hd cst_tl Hgood_tl
+        (good_terms_tl Hgood_hd) Hfind Hlookup.
+      rewrite Heqcombined_hd'.
+      rewrite HIH.
+      ring.
+    + have Hcons :
+        (coe * coe_hd, var_hd) :: combined_hd' =
+        [(coe * coe_hd, var_hd)] ++ combined_hd'
+        by reflexivity.
+      rewrite Hcons.
+      rewrite (terms_value_default_app valuation
+        [(coe * coe_hd, var_hd)] combined_hd'
+        (cst_tl + Z.of_nat coe * cst_hd)%Z).
+      clear Hcons. simpl.
+      set (val_hd := match PVM.find (elt:=nat) var_hd valuation with
+                     | Some val => val | None => 0 end).
+      rewrite Nat2Z.inj_mul Nat2Z.inj_mul.
+      rewrite (terms_value_default_cst_add valuation combined_hd'
+        (cst_tl + Z.of_nat coe * cst_hd)
+        (Z.of_nat coe * Z.of_nat coe_hd * Z.of_nat val_hd)).
+      have HIH := IH terms_tl cst_hd cst_tl Hgood_tl
+        (good_terms_tl Hgood_hd) Hfind Hlookup.
+      rewrite /substitute_rhs_terms in HIH.
+      rewrite Heqcombined_hd'.
+      rewrite HIH.
+      rewrite (Nat2Z.inj_mul coe_hd val_hd).
+      ring.
+Qed.
+
+Lemma substitute_constraint_rhs valuation
+    (hd : ProdVar.t) hd_val coe :
+  forall (terms_hd terms_tl : list term) (cst_hd cst_tl result tail hd_rhs : Z),
+  good_terms terms_tl -> good_terms terms_hd ->
+  List.find (fun p : term => snd p == hd) terms_tl = Some (coe, hd) ->
+  PVM.find hd valuation = Some hd_val ->
+  terms_value valuation
+    (substitute_rhs_terms hd coe terms_hd terms_tl)
+    (Some (cst_tl + Z.of_nat coe * cst_hd)%Z) = Some result ->
+  terms_value valuation terms_tl (Some cst_tl) = Some tail ->
+  terms_value valuation terms_hd (Some cst_hd) = Some hd_rhs ->
+  result =
+    (tail - Z.of_nat (coe * hd_val) + Z.of_nat coe * hd_rhs)%Z.
+Proof.
+  move => terms_hd terms_tl cst_hd cst_tl result tail hd_rhs
+    Hgood_tl Hgood_hd Hfind Hlookup Hresult Htail Hhd.
+  have Hresult_fold := @terms_value_some_fold valuation
+    (substitute_rhs_terms hd coe terms_hd terms_tl)
+    (cst_tl + Z.of_nat coe * cst_hd)%Z result Hresult.
+  have Htail_fold := @terms_value_some_fold valuation terms_tl
+    cst_tl tail Htail.
+  have Hhd_fold := @terms_value_some_fold valuation terms_hd
+    cst_hd hd_rhs Hhd.
+  change (result = terms_value_default valuation
+      (substitute_rhs_terms hd coe terms_hd terms_tl)
+      (cst_tl + Z.of_nat coe * cst_hd)%Z) in Hresult_fold.
+  change (tail = terms_value_default valuation terms_tl cst_tl) in Htail_fold.
+  change (hd_rhs = terms_value_default valuation terms_hd cst_hd) in Hhd_fold.
+  rewrite (@substitute_constraint_rhs_default valuation hd hd_val coe
+    terms_hd terms_tl cst_hd cst_tl Hgood_tl Hgood_hd Hfind Hlookup)
+    in Hresult_fold.
+  rewrite -Htail_fold -Hhd_fold in Hresult_fold.
+  exact Hresult_fold.
 Qed.
 
 Definition G := PVM.t (list ProdVar.t).

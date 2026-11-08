@@ -1549,54 +1549,221 @@ Proof.
   apply PVM.Lemmas.find_some_in in H. left; done.
 Qed.
 
-Lemma smaller_valuation_terms_value_le_l s s' ts init' init : (init' <= init)%Z -> (terms_value (smaller_valuation s s') ts init' <= terms_value s ts init)%Z.
+Lemma smaller_valuation_terms_value_le_l s s' ts init' init : (init' <= init)%Z ->
+  match terms_value (smaller_valuation s s') ts (Some init'), terms_value s ts (Some init) with
+  | Some v1, Some v2 => (v1 <= v2)%Z
+  | _, _ => True
+  end.
 Proof.
-  move : ts init init'. elim. simpl. done.
-  simpl; intros [coe var] tl; intros. apply H; clear H.
-  apply Z.add_le_mono; try done. simpl. unfold smaller_valuation. destruct (PVM.find var s) eqn : Hfind. 
-  rewrite PVM.map2_1. rewrite Hfind. destruct (PVM.find var s') eqn : Hfind'. apply inj_le.
-  apply (elimT leP). apply leq_mul; try done. apply geq_minl.
-  rewrite muln0. simpl. intuition. apply PVM.Lemmas.find_some_in in Hfind. left; done.
-  rewrite PVM.Lemmas.F.map2_1bis; try done. rewrite Hfind. apply Z.le_refl.
+  revert init' init.
+  induction ts as [|[coe var] tl IH]; intros init' init Hinit; simpl.
+  - exact Hinit.
+  - destruct (PVM.find var s) as [val|] eqn:Hfind_s.
+    + destruct (PVM.find var s') as [val'|] eqn:Hfind_s'; simpl.
+      * rewrite (@smaller_valuation_find_eq_min var s s' val val'
+          Hfind_s Hfind_s').
+        apply IH.
+        apply Z.add_le_mono; first exact Hinit.
+        apply Nat2Z.inj_le.
+        apply Nat.mul_le_mono_l.
+        apply (elimT leP). exact: geq_minl.
+      * case Hsmall : (PVM.find var (smaller_valuation s s')) => [vsmall|].
+        -- have Hle := smaller_val_le_r s s'.
+           move: (Hle var vsmall Hsmall) => [v [Hfind _]].
+           rewrite Hfind_s' in Hfind. discriminate.
+        -- exact I.
+    + case Hsmall : (PVM.find var (smaller_valuation s s')) => [vsmall|].
+      * have Hle := smaller_val_le_l s s'.
+        move: (Hle var vsmall Hsmall) => [v [Hfind _]].
+        rewrite Hfind_s in Hfind. discriminate.
+      * exact I.
 Qed.
 
-Lemma smaller_valuation_power_value_le_l s s' ts : (power_value (smaller_valuation s s') ts <= power_value s ts)%Z.
+Lemma smaller_valuation_power_value_le_l s s' ts :
+  match power_value (smaller_valuation s s') ts, power_value s ts with
+  | Some v1, Some v2 => (v1 <= v2)%Z
+  | _, _ => True
+  end.
 Proof.
-  unfold power_value. destruct ts; try done.
-  apply Z.pow_le_mono_r; try done.
-  apply smaller_valuation_terms_value_le_l; try done.
+  unfold power_value.
+  destruct ts as [|[coe var] tl]; [exact (Z.le_refl 0) |].
+  destruct (terms_value (smaller_valuation s s')
+    ((coe, var) :: tl) (Some 0%Z)) as [v1|] eqn:Hvalue1; [|exact I].
+  destruct (terms_value s ((coe, var) :: tl) (Some 0%Z))
+    as [v2|] eqn:Hvalue2; [|exact I].
+  have Hexp := @smaller_valuation_terms_value_le_l s s'
+    ((coe, var) :: tl) 0 0 (Z.le_refl 0).
+  rewrite Hvalue1 Hvalue2 in Hexp. simpl in Hexp.
+  apply Z.pow_le_mono_r; first exact Z.lt_0_2.
+  exact Hexp.
 Qed.
 
-Lemma smaller_valuation_rhs_value1_le_l s s' c : (rhs_value1 (smaller_valuation s s') c <= rhs_value1 s c)%Z.
+Lemma smaller_valuation_rhs_value1_le_l s s' c :
+  match rhs_value1 (smaller_valuation s s') c, rhs_value1 s c with
+  | Some v1, Some v2 => (v1 <= v2)%Z
+  | _, _ => True
+  end.
 Proof.
-  unfold rhs_value1. apply Z.add_le_mono.
-  apply smaller_valuation_terms_value_le_l. apply Z.le_refl.
-  apply smaller_valuation_power_value_le_l.
+  unfold rhs_value1.
+  case Hlinear1 : (terms_value (smaller_valuation s s')
+    (rhs_terms1 c) (Some (rhs_const1 c))) => [linear1|] //=.
+  case Hpower1 : (power_value (smaller_valuation s s')
+    (rhs_power c)) => [power1|] //=.
+  case Hlinear2 : (terms_value s (rhs_terms1 c)
+    (Some (rhs_const1 c))) => [linear2|] //=.
+  case Hpower2 : (power_value s (rhs_power c)) => [power2|] //=.
+  apply Z.add_le_mono.
+  - have Hlinear := @smaller_valuation_terms_value_le_l s s'
+      (rhs_terms1 c) (rhs_const1 c) (rhs_const1 c) (Z.le_refl _).
+    rewrite Hlinear1 Hlinear2 in Hlinear. simpl in Hlinear. exact Hlinear.
+  - have Hpower := @smaller_valuation_power_value_le_l s s'
+      (rhs_power c).
+    rewrite Hpower1 Hpower2 in Hpower. exact Hpower.
 Qed.
 
-Lemma smaller_valuation_terms_value_le_r s s' ts init' init : (init' <= init)%Z -> (terms_value (smaller_valuation s s') ts init' <= terms_value s' ts init)%Z.
+Lemma smaller_valuation_terms_value_le_r s s' ts init' init : (init' <= init)%Z ->
+  match terms_value (smaller_valuation s s') ts (Some init'), terms_value s' ts (Some init) with
+  | Some v1, Some v2 => (v1 <= v2)%Z
+  | _, _ => True
+  end.
 Proof.
-  move : ts init init'. elim. simpl. done.
-  simpl; intros [coe var] tl; intros. apply H; clear H.
-  apply Z.add_le_mono; try done. simpl. unfold smaller_valuation. destruct (PVM.find var s') eqn : Hfind. 
-  rewrite PVM.map2_1. rewrite Hfind. destruct (PVM.find var s) eqn : Hfind'. apply inj_le.
-  apply (elimT leP). apply leq_mul; try done. apply geq_minr.
-  rewrite muln0. simpl. intuition. apply PVM.Lemmas.find_some_in in Hfind. right; done.
-  rewrite PVM.Lemmas.F.map2_1bis; try done. rewrite Hfind. destruct (PVM.M.find var s); simpl; apply Z.le_refl.
+  revert init' init.
+  induction ts as [|[coe var] tl IH]; intros init' init Hinit; simpl.
+  - exact Hinit.
+  - destruct (PVM.find var s') as [val'|] eqn:Hfind_s'.
+    + destruct (PVM.find var s) as [val|] eqn:Hfind_s; simpl.
+      * rewrite (@smaller_valuation_find_eq_min var s s' val val'
+          Hfind_s Hfind_s').
+        apply IH.
+        apply Z.add_le_mono; first exact Hinit.
+        apply Nat2Z.inj_le.
+        apply Nat.mul_le_mono_l.
+        apply (elimT leP). exact: geq_minr.
+      * case Hsmall : (PVM.find var (smaller_valuation s s')) => [vsmall|].
+        -- have Hle := smaller_val_le_l s s'.
+           move: (Hle var vsmall Hsmall) => [v [Hfind _]].
+           rewrite Hfind_s in Hfind. discriminate.
+        -- exact I.
+    + case Hsmall : (PVM.find var (smaller_valuation s s')) => [vsmall|].
+      * have Hle := smaller_val_le_r s s'.
+        move: (Hle var vsmall Hsmall) => [v [Hfind _]].
+        rewrite Hfind_s' in Hfind. discriminate.
+      * exact I.
 Qed.
 
-Lemma smaller_valuation_power_value_le_r s s' ts : (power_value (smaller_valuation s s') ts <= power_value s' ts)%Z.
+Lemma smaller_valuation_power_value_le_r s s' ts :
+  match power_value (smaller_valuation s s') ts, power_value s' ts with
+  | Some v1, Some v2 => (v1 <= v2)%Z
+  | _, _ => True
+  end.
 Proof.
-  unfold power_value. destruct ts; try done.
-  apply Z.pow_le_mono_r; try done.
-  apply smaller_valuation_terms_value_le_r; try done.
+  unfold power_value.
+  destruct ts as [|[coe var] tl]; [exact (Z.le_refl 0) |].
+  destruct (terms_value (smaller_valuation s s')
+    ((coe, var) :: tl) (Some 0%Z)) as [v1|] eqn:Hvalue1; [|exact I].
+  destruct (terms_value s' ((coe, var) :: tl) (Some 0%Z))
+    as [v2|] eqn:Hvalue2; [|exact I].
+  have Hexp := @smaller_valuation_terms_value_le_r s s'
+    ((coe, var) :: tl) 0 0 (Z.le_refl 0).
+  rewrite Hvalue1 Hvalue2 in Hexp. simpl in Hexp.
+  apply Z.pow_le_mono_r; first exact Z.lt_0_2.
+  exact Hexp.
 Qed.
 
-Lemma smaller_valuation_rhs_value1_le_r s s' c : (rhs_value1 (smaller_valuation s s') c <= rhs_value1 s' c)%Z.
+Lemma smaller_valuation_rhs_value1_le_r s s' c :
+  match rhs_value1 (smaller_valuation s s') c, rhs_value1 s' c with
+  | Some v1, Some v2 => (v1 <= v2)%Z
+  | _, _ => True
+  end.
 Proof.
-  unfold rhs_value1. apply Z.add_le_mono.
-  apply smaller_valuation_terms_value_le_r. apply Z.le_refl.
-  apply smaller_valuation_power_value_le_r.
+  unfold rhs_value1.
+  case Hlinear1 : (terms_value (smaller_valuation s s')
+    (rhs_terms1 c) (Some (rhs_const1 c))) => [linear1|] //=.
+  case Hpower1 : (power_value (smaller_valuation s s')
+    (rhs_power c)) => [power1|] //=.
+  case Hlinear2 : (terms_value s' (rhs_terms1 c)
+    (Some (rhs_const1 c))) => [linear2|] //=.
+  case Hpower2 : (power_value s' (rhs_power c)) => [power2|] //=.
+  apply Z.add_le_mono.
+  - have Hlinear := @smaller_valuation_terms_value_le_r s s'
+      (rhs_terms1 c) (rhs_const1 c) (rhs_const1 c) (Z.le_refl _).
+    rewrite Hlinear1 Hlinear2 in Hlinear. simpl in Hlinear. exact Hlinear.
+  - have Hpower := @smaller_valuation_power_value_le_r s s'
+      (rhs_power c).
+    rewrite Hpower1 Hpower2 in Hpower. exact Hpower.
+Qed.
+
+Lemma terms_value_some_smaller s s' ts :
+  forall init init_s init_s' result_s result_s',
+  terms_value s ts (Some init_s) = Some result_s ->
+  terms_value s' ts (Some init_s') = Some result_s' ->
+  exists result,
+    terms_value (smaller_valuation s s') ts (Some init) = Some result.
+Proof.
+  intros init init_s init_s' result_s result_s'.
+  revert init init_s init_s' result_s result_s'.
+  induction ts as [|[coe var] tl IH];
+    intros init init_s init_s' result_s result_s' Hs Hs'; simpl in *.
+  - by exists init.
+  - destruct (PVM.find var s) as [val|] eqn:Hfind_s; try discriminate.
+    destruct (PVM.find var s') as [val'|] eqn:Hfind_s'; try discriminate.
+    rewrite (@smaller_valuation_find_eq_min var s s' val val'
+      Hfind_s Hfind_s').
+    apply (IH (init + Z.of_nat (coe * minn val val'))%Z
+      (init_s + Z.of_nat (coe * val))%Z
+      (init_s' + Z.of_nat (coe * val'))%Z result_s result_s');
+      assumption.
+Qed.
+
+Lemma power_value_some_smaller s s' ts :
+  forall value_s value_s',
+  power_value s ts = Some value_s ->
+  power_value s' ts = Some value_s' ->
+  exists value,
+    power_value (smaller_valuation s s') ts = Some value.
+Proof.
+  intros value_s value_s' Hs Hs'.
+  destruct ts as [|[coe var] tl].
+  - exists 0%Z. reflexivity.
+  - unfold power_value in Hs, Hs' |- *.
+    destruct (terms_value s ((coe, var) :: tl) (Some 0%Z))
+      as [exp_s|] eqn:Hexp_s; try discriminate.
+    destruct (terms_value s' ((coe, var) :: tl) (Some 0%Z))
+      as [exp_s'|] eqn:Hexp_s'; try discriminate.
+    inversion Hs; inversion Hs'; subst.
+    have [exp_small Hexp_small] :=
+      @terms_value_some_smaller s s' ((coe, var) :: tl)
+        0%Z 0%Z 0%Z exp_s exp_s' Hexp_s Hexp_s'.
+    rewrite Hexp_small. eexists. reflexivity.
+Qed.
+
+Lemma rhs_value1_some_smaller s s' c :
+  forall value_s value_s',
+  rhs_value1 s c = Some value_s ->
+  rhs_value1 s' c = Some value_s' ->
+  exists value,
+    rhs_value1 (smaller_valuation s s') c = Some value.
+Proof.
+  intros value_s value_s' Hs Hs'.
+  unfold rhs_value1 in Hs, Hs' |- *.
+  destruct (terms_value s (rhs_terms1 c) (Some (rhs_const1 c)))
+    as [linear_s|] eqn:Hlinear_s; try discriminate.
+  destruct (power_value s (rhs_power c))
+    as [power_s|] eqn:Hpower_s; try discriminate.
+  destruct (terms_value s' (rhs_terms1 c) (Some (rhs_const1 c)))
+    as [linear_s'|] eqn:Hlinear_s'; try discriminate.
+  destruct (power_value s' (rhs_power c))
+    as [power_s'|] eqn:Hpower_s'; try discriminate.
+  inversion Hs; inversion Hs'; subst.
+  have [linear_small Hlinear_small] :=
+    @terms_value_some_smaller s s' (rhs_terms1 c)
+      (rhs_const1 c) (rhs_const1 c) (rhs_const1 c)
+      linear_s linear_s' Hlinear_s Hlinear_s'.
+  have [power_small Hpower_small] :=
+    @power_value_some_smaller s s' (rhs_power c)
+      power_s power_s' Hpower_s Hpower_s'.
+  rewrite Hlinear_small Hpower_small.
+  eexists. reflexivity.
 Qed.
 
 Theorem smaller_sol_is_sol :
@@ -1610,15 +1777,24 @@ Proof.
   - destruct H as [H _]. destruct H0 as [H0 _].
     apply in_sat_all_ctr1; intros. specialize (sat_all_in_ctr1 _ _ _ H H1). specialize (sat_all_in_ctr1 _ _ _ H0 H1). intros. clear H H0 H1 cs1.
     unfold satisfies_constraint1 in *. destruct (PVM.find (lhs_var1 c) s') as [val'|] eqn : Hfind'; try done. 
-    destruct (PVM.find (lhs_var1 c) s) as [val|] eqn : Hfind; try done. apply Z.leb_le in H2; apply Z.leb_le in H3.
-    rewrite (smaller_valuation_find_eq_min _ _ _ Hfind Hfind'). apply Z.leb_le.
+    destruct (PVM.find (lhs_var1 c) s) as [val|] eqn : Hfind; try done.
+    destruct (rhs_value1 s' c) as [rhs'|] eqn:Hrhs'; simpl in H2; try discriminate.
+    destruct (rhs_value1 s c) as [rhs|] eqn:Hrhs; simpl in H3; try discriminate.
+    apply Z.leb_le in H2; apply Z.leb_le in H3.
+    have [rhs_small Hsmall_rhs] :=
+      @rhs_value1_some_smaller s s' c rhs rhs' Hrhs Hrhs'.
+    rewrite (smaller_valuation_find_eq_min _ _ _ Hfind Hfind')
+      Hsmall_rhs.
+    apply Z.leb_le.
     specialize (leqVgt val val'); intro. destruct (val <= val') eqn : Hle.
     * clear H. assert (minn val val' = val). apply /minn_idPl. done. rewrite H; clear H.
-      specialize (smaller_valuation_rhs_value1_le_l s s' c); intro. 
-      apply (Z.le_trans _ _ _ H H3).
+      have Hrhs_le := smaller_valuation_rhs_value1_le_l s s' c.
+      rewrite Hsmall_rhs Hrhs in Hrhs_le. simpl in Hrhs_le.
+      apply (Z.le_trans _ _ _ Hrhs_le H3).
     * rewrite orb_false_l in H; clear Hle. assert (minn val val' = val'). apply /minn_idPr. intuition. rewrite H0; clear H0.
-      specialize (smaller_valuation_rhs_value1_le_r s s' c); intro. 
-      apply (Z.le_trans _ _ _ H0 H2).
+      have Hrhs_le := smaller_valuation_rhs_value1_le_r s s' c.
+      rewrite Hsmall_rhs Hrhs' in Hrhs_le. simpl in Hrhs_le.
+      apply (Z.le_trans _ _ _ Hrhs_le H2).
   - destruct H as [_ H]. destruct H0 as [_ H0].
     apply in_sat_all_ctr2; intros. specialize (sat_all_in_ctr2 _ _ _ H H1). specialize (sat_all_in_ctr2 _ _ _ H0 H1). intros. clear H H0 H1 cs1.
     unfold satisfies_constraint2 in *. remember (rhs_terms2 c) as ts. remember (lhs_const2 c) as cst.

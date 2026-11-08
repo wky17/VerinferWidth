@@ -26,10 +26,17 @@ Inductive min_rhs : Type :=
   | Expr : regular_rhs -> min_rhs
   | Min : min_rhs -> min_rhs -> min_rhs.
 
-Fixpoint min_rhs_value (v : Valuation) (rhs : min_rhs) : Z.t :=
+Fixpoint min_rhs_value (v : Valuation) (rhs : min_rhs) : option Z.t :=
   match rhs with
-  | Expr r => terms_value v (regular_terms r) (regular_const r) + power_value v (regular_power r)
-  | Min e1 e2 => Z.min (min_rhs_value v e1) (min_rhs_value v e2)
+  | Expr r => match terms_value v (regular_terms r) (Some (regular_const r)), power_value v (regular_power r)
+    with
+    | Some x, Some y => Some (Z.add x y)
+    | _, _ => None
+    end
+  | Min e1 e2 => match min_rhs_value v e1, min_rhs_value v e2 with
+                  | Some x, Some y => Some (Z.min x y)
+                  | _, _ => None
+                  end
   end.
   
 (* inequality of form: lhs_ >= min(fr1_ + const1_, fr2_ + const2_)
@@ -600,38 +607,60 @@ Definition collect_power1_vars (c : Constraint1) : list ProdVar.t :=
 Definition collect_power2_vars (c : Constraint2_new) : list ProdVar.t :=
   if (rhs_power2_new c) == nil then nil else (List.split (rhs_power2_new c)).2.
   
-Definition remove_power_regular (value : Valuation) (r : regular_rhs) : regular_rhs :=
+Definition remove_power_regular (value : Valuation) (r : regular_rhs) : option regular_rhs :=
+  match power_value value (regular_power r) with
+  | Some v => Some
   {|
     regular_terms := regular_terms r;
     regular_power := nil;
-    regular_const := Z.add (regular_const r) (power_value value (regular_power r))
-  |}.
+    regular_const := Z.add (regular_const r) v
+  |}
+  | _ => None
+  end.
 
-Definition remove_power1 (value : Valuation) (c : Constraint1) : Constraint1 :=
+Definition remove_power1 (value : Valuation) (c : Constraint1) : option Constraint1 :=
+  match power_value value (rhs_power c) with
+  | Some v => Some
   {|
     lhs_var1 := lhs_var1 c;
     rhs_terms1 := rhs_terms1 c;
     rhs_power := nil;
-    rhs_const1 := Z.add (rhs_const1 c) (power_value value (rhs_power c))
-  |}.
-
-Definition remove_power2 (value : Valuation) (c : Constraint2_new) : Constraint2_new :=
-  {|
-    lhs_const2_new := Z.sub (lhs_const2_new c) (power_value value (rhs_power2_new c));
-    rhs_terms2_new := rhs_terms2_new c;
-    rhs_power2_new := nil
-  |}.
-
-Fixpoint remove_power_min_rhs (value : Valuation) (rhs : min_rhs) : min_rhs :=
-  match rhs with
-  | Expr r => Expr (remove_power_regular value r)
-  | Min min1 min2 => Min (remove_power_min_rhs value min1) (remove_power_min_rhs value min2)
+    rhs_const1 := Z.add (rhs_const1 c) v
+  |}
+  | _ => None
   end.
 
-Definition remove_power_min (value : Valuation) (c : Constraint_Min) : Constraint_Min :=
+Definition remove_power2 (value : Valuation) (c : Constraint2_new) : option Constraint2_new :=
+  match power_value value (rhs_power2_new c) with
+  | Some v => Some
   {|
-    lhs_var_min := lhs_var_min c;
-    rhs_expr_min := remove_power_min_rhs value (rhs_expr_min c)
-  |}.
+    lhs_const2_new := Z.sub (lhs_const2_new c) v;
+    rhs_terms2_new := rhs_terms2_new c;
+    rhs_power2_new := nil
+  |}
+  | _ => None
+  end.
+
+Fixpoint remove_power_min_rhs (value : Valuation) (rhs : min_rhs) : option min_rhs :=
+  match rhs with
+  | Expr r => match remove_power_regular value r with
+              | Some r' => Some (Expr r')
+              | None => None
+              end
+  | Min min1 min2 => match (remove_power_min_rhs value min1, remove_power_min_rhs value min2) with
+                     | (Some min1', Some min2') => Some (Min min1' min2')
+                     | _ => None
+                     end
+  end.
+
+Definition remove_power_min (value : Valuation) (c : Constraint_Min) : option Constraint_Min :=
+  match remove_power_min_rhs value (rhs_expr_min c) with
+  | Some rhs_expr_min' => Some
+    {|
+      lhs_var_min := lhs_var_min c;
+      rhs_expr_min := rhs_expr_min'
+    |}
+  | None => None
+  end.
 
 End Extract_Constraints_with_min.
