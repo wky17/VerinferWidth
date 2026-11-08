@@ -1391,6 +1391,355 @@ Definition length (x : TripVar.t) (bds : TVM.t (nat * nat)) : nat :=
   | None => 0
   end.
 
+Lemma tvm_gtb_key : forall (A : Type) k (e e' : A) q,
+  TVM.Lemmas.gtb (elt:=A) (k, e) q = TVM.Lemmas.gtb (elt:=A) (k, e') q.
+Proof.
+  intros A k e e' [qk qv].
+  unfold TVM.Lemmas.gtb, TVM.Lemmas.leb.
+  simpl. destruct (TripVar.compare k qk); reflexivity.
+Qed.
+
+Lemma tvm_elements_ge_key : forall (A : Type) k (e e' : A) m,
+  TVM.Lemmas.elements_ge (elt:=A) (k, e) m =
+  TVM.Lemmas.elements_ge (elt:=A) (k, e') m.
+Proof.
+  intros A k e e' m.
+  unfold TVM.Lemmas.elements_ge, TVM.Lemmas.leb.
+  induction (TVM.elements m) as [|p l IH]; simpl; [reflexivity|].
+  rewrite (tvm_gtb_key A k e e' p).
+  destruct (~~ TVM.Lemmas.gtb (elt:=A) (k, e') p); simpl;
+    [rewrite IH|]; reflexivity.
+Qed.
+
+Lemma tvm_eqlistA_eq : forall (A : Type) (l l' : list (TripVar.t * A)),
+  eqlistA (TVM.Lemmas.O.eqke (elt:=A)) l l' -> l = l'.
+Proof.
+  intros A l.
+  induction l as [|p l IH]; intros l' H.
+  - inversion H; reflexivity.
+  - destruct l' as [|q l']; [inversion H|].
+    inversion H as [|x x' ll ll' Hxy Hr].
+    unfold TVM.Lemmas.O.eqke in Hxy; simpl in Hxy.
+    destruct Hxy as [Hkey Hv].
+    destruct p as [[p1 p2] pv]. destruct q as [[q1 q2] qv].
+    simpl in Hkey, Hv |- *.
+    destruct Hkey as [Hb1 Hb2].
+    move /eqP : Hb1 => ->. move /eqP : Hb2 => ->.
+    subst qv. f_equal. apply IH. exact Hr.
+Qed.
+
+Lemma tvm_eqlistA_sym : forall (A : Type) (l l' : list (TripVar.t * A)),
+  eqlistA (TVM.Lemmas.O.eqke (elt:=A)) l l' ->
+  eqlistA (TVM.Lemmas.O.eqke (elt:=A)) l' l.
+Proof.
+  intros A l l' H. induction H.
+  - constructor.
+  - constructor; [symmetry; exact H|exact IHeqlistA].
+Qed.
+
+Lemma tvm_elements_add : forall (A : Type) (bounds : TVM.t A) v (a b : A),
+  TVM.find v bounds = Some a ->
+  exists l0 l1,
+    l0 ++ (v, a) :: l1 = TVM.elements bounds /\
+    l0 ++ (v, b) :: l1 = TVM.elements (TVM.add v b bounds).
+Proof.
+  intros A bounds v a b Hfind.
+  set (m := TVM.remove v bounds).
+  assert (Hnin : ~ TVM.In (elt:=A) v m).
+  { apply (TVM.remove_1 (elt:=A) (m:=bounds) (x:=v) (y:=v)).
+    split; apply TripVar.eq_refl. }
+  assert (Hadd1 : TVM.Lemmas.P.Add (elt:=A) v a m bounds).
+  { intros y. destruct (TripVar.eq_dec v y) as [Heq|Hne].
+    - apply eq_from_tripvar_eq in Heq. subst y.
+      rewrite TVM.Lemmas.add_eq_o; [exact Hfind|].
+      split; apply TripVar.eq_refl.
+    - unfold m.
+      rewrite TVM.Lemmas.add_neq_o; [|exact Hne].
+      rewrite TVM.Lemmas.remove_neq_o; [reflexivity|exact Hne]. }
+  assert (Hadd2 : TVM.Lemmas.P.Add (elt:=A) v b m (TVM.add v b bounds)).
+  { intros y. destruct (TripVar.eq_dec v y) as [Heq|Hne].
+    - apply eq_from_tripvar_eq in Heq. subst y.
+      rewrite TVM.Lemmas.add_eq_o; [|split; apply TripVar.eq_refl].
+      rewrite TVM.Lemmas.add_eq_o; [reflexivity|split; apply TripVar.eq_refl].
+    - rewrite TVM.Lemmas.add_neq_o; [|exact Hne].
+      rewrite TVM.Lemmas.add_neq_o; [|exact Hne].
+      unfold m. rewrite TVM.Lemmas.remove_neq_o; [reflexivity|exact Hne]. }
+  pose proof (@TVM.Lemmas.elements_Add A m bounds v a Hnin Hadd1) as He1.
+  pose proof (@TVM.Lemmas.elements_Add A m (TVM.add v b bounds) v b Hnin Hadd2) as He2.
+  exists (TVM.Lemmas.elements_lt (v, a) m),
+         (TVM.Lemmas.elements_ge (v, a) m).
+  split.
+  - apply tvm_eqlistA_eq.
+    apply tvm_eqlistA_sym.
+    rewrite (tvm_elements_ge_key A v a b m). exact He1.
+  - apply tvm_eqlistA_eq.
+    apply tvm_eqlistA_sym.
+    rewrite (tvm_elements_ge_key A v a b m). exact He2.
+Qed.
+
+Lemma tvm_map_hdrel : forall (A : Type)
+  (g : TripVar.t * A -> TripVar.t * A) l p,
+  (forall p, (g p).1 = p.1) ->
+  HdRel (TVM.M.lt_key (elt:=A)) p l ->
+  HdRel (TVM.M.lt_key (elt:=A)) (g p) (List.map g l).
+Proof.
+  intros A g l p Hkey H.
+  destruct l as [|a tl]; simpl in *.
+  - constructor.
+  - inversion H; subst. constructor.
+    unfold TVM.M.lt_key, TVM.M.Raw.Proofs.PX.ltk.
+    simpl. rewrite (Hkey p). rewrite (Hkey a). exact H1.
+Qed.
+
+Lemma tvm_map_key_sort : forall (A : Type)
+  (g : TripVar.t * A -> TripVar.t * A) l,
+  (forall p, (g p).1 = p.1) ->
+  Sorted (TVM.M.lt_key (elt:=A)) l ->
+  Sorted (TVM.M.lt_key (elt:=A)) (List.map g l).
+Proof.
+  intros A g l Hkey. induction l as [|p l IH]; intros Hs; simpl.
+  - constructor.
+  - inversion Hs; subst. constructor.
+    + apply IH. assumption.
+    + apply tvm_map_hdrel with (p := p); assumption.
+Qed.
+
+Lemma tvm_InA_intro_gen : forall (A : Type) (R : A -> A -> Prop) x y l,
+  List.In y l -> R x y -> InA R x l.
+Proof.
+  intros A R x y l Hin HR.
+  apply InA_alt. exists y. split; assumption.
+Qed.
+
+Lemma tvm_InA_map_inv : forall (A : Type) (f : A -> A) l p,
+  InA (TVM.Lemmas.O.eqke (elt:=A)) p
+    (List.map (fun '(k, v) => (k, f v)) l) ->
+  exists a, p.2 = f a /\
+    InA (TVM.Lemmas.O.eqke (elt:=A)) (p.1, a) l.
+Proof.
+  intros A f l p H.
+  rewrite InA_alt in H.
+  destruct H as [q [Heq Hin]].
+  apply in_map_iff in Hin.
+  destruct Hin as [w [Hw Hinw]].
+  destruct w as [[k1 k2] v]. simpl in Hw, Hinw, Heq.
+  subst q. unfold TVM.Lemmas.O.eqke in Heq. simpl in Heq.
+  destruct Heq as [Hkey Hv].
+  destruct p as [[p1 p2] pv]. simpl in *.
+  destruct Hkey as [Hb1 Hb2].
+  move /eqP : Hb1 => Hk1. move /eqP : Hb2 => Hk2.
+  rewrite -Hk1 -Hk2 in Hinw.
+  exists v. split; [exact Hv|].
+  apply tvm_InA_intro_gen with (y := ((p1, p2), v)); [exact Hinw|].
+  unfold TVM.Lemmas.O.eqke. simpl. split; [split; apply eqxx|reflexivity].
+Qed.
+
+Lemma tvm_InA_map : forall (A : Type) (f : A -> A) l p,
+  InA (TVM.Lemmas.O.eqke (elt:=A)) p l ->
+  InA (TVM.Lemmas.O.eqke (elt:=A)) (p.1, f p.2)
+    (List.map (fun '(k, v) => (k, f v)) l).
+Proof.
+  intros A f l p H.
+  rewrite InA_alt in H.
+  destruct H as [q [Heq Hin]].
+  destruct q as [[q1 q2] qv]. simpl in Heq, Hin |- *.
+  apply tvm_InA_intro_gen with (y := ((q1, q2), f qv)).
+  - apply in_map_iff. exists ((q1, q2), qv). split; [reflexivity|exact Hin].
+  - destruct p as [[p1 p2] pv]. simpl in Heq |- *.
+    unfold TVM.Lemmas.O.eqke in Heq |- *. simpl in Heq |- *.
+    destruct Heq as [Hkey Hv]. destruct Hkey as [Hb1 Hb2].
+    move /eqP : Hb1 => ->. move /eqP : Hb2 => ->.
+    subst pv. split; [split; apply eqxx|reflexivity].
+Qed.
+
+Lemma tvm_elements_map : forall (A : Type) (f : A -> A) (bounds : TVM.t A),
+  TVM.elements (TVM.map f bounds) =
+  List.map (fun '(key, value) => (key, f value)) (TVM.elements bounds).
+Proof.
+  intros A f bounds.
+  apply tvm_eqlistA_eq.
+  apply TVM.Lemmas.sort_equivlistA_eqlistA.
+  - apply TVM.M.elements_3.
+  - apply tvm_map_key_sort; [intros [k v]; reflexivity|apply TVM.M.elements_3].
+  - intros [x e]. split; intros Hp.
+    + apply TVM.Lemmas.elements_mapsto_iff in Hp.
+      rewrite TVM.Lemmas.map_mapsto_iff in Hp.
+      destruct Hp as [a [Heq Hm]]. subst e.
+      apply (@tvm_InA_map A f (TVM.elements bounds) (x, a)).
+      apply TVM.Lemmas.elements_mapsto_iff. exact Hm.
+    + apply tvm_InA_map_inv in Hp.
+      destruct Hp as [a [Heq Hin]].
+      apply TVM.Lemmas.elements_mapsto_iff.
+      rewrite TVM.Lemmas.map_mapsto_iff.
+      exists a. split; [exact Heq|].
+      apply TVM.Lemmas.elements_mapsto_iff. exact Hin.
+Qed.
+
+Definition widths_fold (l : list (TripVar.t * (nat * nat))) (init : nat) : nat :=
+  fold_left (fun acc '(_, (lb, ub)) => acc + (ub - lb)) l init.
+
+Lemma product_bounds_widths_fold l init :
+  fold_left (fun acc '(v, bs) =>
+    let '(lb, ub) := bs in acc + (ub - lb)) l init =
+  widths_fold l init.
+Proof.
+  induction l as [|[v [lb ub]] l IH] in init |- *; simpl.
+  - reflexivity.
+  - exact (IH (init + (ub - lb))).
+Qed.
+
+Lemma product_bounds_helper : forall (l : list (TripVar.t * (nat * nat))) init0 init1,
+  init0 < init1 -> widths_fold l init0 < widths_fold l init1.
+Proof.
+  induction l as [|[v [lb ub]] l IH]; intros init0 init1 Hlt; simpl.
+  - exact Hlt.
+  - apply IH. by rewrite ltn_add2r.
+Qed.
+
+Lemma midpoint_bounds lb ub :
+  Nat.le (Nat.min lb ub) ((lb + ub) / 2) /\
+  Nat.le ((lb + ub) / 2) (Nat.max lb ub).
+Proof.
+  destruct (le_ge_dec lb ub) as [Hlbub|Hublb].
+  - split.
+    + rewrite Nat.min_l; [|lia].
+      have Hlb : lb = (lb + lb) / 2 by
+        (rewrite addnn -muln2; rewrite Nat.div_mul; lia).
+      rewrite {1}Hlb.
+      apply (Nat.div_le_mono (lb + lb) (lb + ub) 2); [lia|].
+      exact (proj1 (Nat.add_le_mono_l lb ub lb) Hlbub).
+    + rewrite Nat.max_r; [|lia].
+      apply (Nat.div_le_upper_bound (lb + ub) 2 ub).
+      * discriminate.
+      * rewrite Nat.mul_succ_l. simpl.
+        apply Nat.add_le_mono; lia.
+  - split.
+    + rewrite Nat.min_r; [|lia].
+      have Hub : ub = (ub + ub) / 2 by
+        (rewrite addnn -muln2; rewrite Nat.div_mul; lia).
+      rewrite {1}Hub.
+      apply (Nat.div_le_mono (ub + ub) (lb + ub) 2); [lia|].
+      exact (proj1 (Nat.add_le_mono_r ub lb ub) Hublb).
+    + rewrite Nat.max_l; [|lia].
+      apply (Nat.div_le_upper_bound (lb + ub) 2 lb).
+      * discriminate.
+      * rewrite Nat.mul_succ_l. simpl.
+        apply Nat.add_le_mono; lia.
+Qed.
+
+Lemma widths_fold_map_le : forall l init0 init1,
+  Nat.le init0 init1 ->
+  Nat.le
+    (widths_fold
+      (List.map (fun '(v, (lb, ub)) => (v, (lb, (lb + ub) / 2))) l) init0)
+    (widths_fold l init1).
+Proof.
+  induction l as [|[v [lb ub]] l IH]; intros init0 init1 Hinit; simpl.
+  - exact Hinit.
+  - apply IH.
+    apply Nat.add_le_mono; [exact Hinit|].
+    destruct (le_ge_dec lb ub) as [Hle|Hle];
+      destruct (midpoint_bounds lb ub) as [Hmin Hmax].
+    + rewrite Nat.min_l in Hmin; [|exact Hle].
+      rewrite Nat.max_r in Hmax; [|exact Hle].
+      apply Nat.sub_le_mono_r. exact Hmax.
+    + rewrite Nat.min_r in Hmin; [|exact Hle].
+      rewrite Nat.max_l in Hmax; [|exact Hle].
+      have Hmid0 : ((lb + ub) / 2 - lb) = 0.
+      { apply /eqP. rewrite subn_eq0. apply /leP. exact Hmax. }
+      have Hub0 : (ub - lb) = 0.
+      { apply /eqP. rewrite subn_eq0. apply /leP. exact Hle. }
+      rewrite Hmid0 Hub0. apply Nat.le_refl.
+Qed.
+
+Lemma widths_fold_map_lt : forall l init0 init1,
+  Nat.lt init0 init1 ->
+  Nat.lt
+    (widths_fold
+      (List.map (fun '(v, (lb, ub)) => (v, (lb, (lb + ub) / 2))) l) init0)
+    (widths_fold l init1).
+Proof.
+  induction l as [|[v [lb ub]] l IH]; intros init0 init1 Hlt; simpl.
+  - exact Hlt.
+  - apply IH.
+    assert (Nat.le ((lb + ub) / 2 - lb) (ub - lb)) as Hwidth.
+    { destruct (le_ge_dec lb ub) as [Hle|Hle];
+        destruct (midpoint_bounds lb ub) as [Hmin Hmax].
+      - rewrite Nat.min_l in Hmin; [|exact Hle].
+        rewrite Nat.max_r in Hmax; [|exact Hle].
+        apply Nat.sub_le_mono_r. exact Hmax.
+      - rewrite Nat.min_r in Hmin; [|exact Hle].
+        rewrite Nat.max_l in Hmax; [|exact Hle].
+        have Hmid0 : ((lb + ub) / 2 - lb) = 0.
+        { apply /eqP. rewrite subn_eq0. apply /leP. exact Hmax. }
+        have Hub0 : (ub - lb) = 0.
+        { apply /eqP. rewrite subn_eq0. apply /leP. exact Hle. }
+        rewrite Hmid0 Hub0. apply Nat.le_refl. }
+    eapply Nat.le_lt_trans.
+    + apply Nat.add_le_mono; [apply Nat.le_refl|exact Hwidth].
+    + apply Nat.add_lt_mono_r. exact Hlt.
+Qed.
+
+Lemma widths_fold_nonzero_exists l :
+  widths_fold l 0 != 0 ->
+  exists v lb ub, List.In (v, (lb, ub)) l /\ ub - lb != 0.
+Proof.
+  induction l as [|[v [lb ub]] l IH]; simpl; first discriminate.
+  move=> Hsum.
+  destruct (Nat.eq_dec (ub - lb) 0) as [Hwidth|Hwidth].
+  - have Htail : widths_fold l 0 != 0.
+    { rewrite Hwidth add0n in Hsum. exact Hsum. }
+    destruct (IH Htail) as [v' [lb' [ub' [Hin Hnz]]]].
+    exists v', lb', ub'. split; [right; exact Hin|exact Hnz].
+  - exists v, lb, ub. split; [left; reflexivity|].
+    apply /negP=> /eqP Hzero. apply Hwidth. exact Hzero.
+Qed.
+
+Lemma tvm_mean_ltn : forall (a b : nat), Nat.lt a b -> Nat.lt ((a + b) / 2) b.
+Proof.
+  intros a b Hlt.
+  apply (Nat.div_lt_upper_bound (a + b) 2 b); [lia|].
+  change (Nat.lt (a + b) (Nat.mul 2 b)).
+  rewrite (Nat.mul_succ_l 1 b). simpl. rewrite Nat.add_0_r.
+  exact (proj1 (Nat.add_lt_mono_r a b b) Hlt).
+Qed.
+
+Lemma widths_fold_halve_lt l :
+  (exists v lb ub, List.In (v, (lb, ub)) l /\ lb < ub) ->
+  Nat.lt
+    (widths_fold
+      (List.map (fun '(v, (lb, ub)) => (v, (lb, (lb + ub) / 2))) l) 0)
+    (widths_fold l 0).
+Proof.
+  intros [v [lb [ub [Hin Hlt]]]].
+  have HltNat : Nat.lt lb ub by apply /ltP.
+  apply in_split in Hin. destruct Hin as [l0 [l1 Heq]]. subst l.
+  rewrite /widths_fold map_app !fold_left_app /=.
+  apply widths_fold_map_lt.
+  apply Nat.le_lt_trans with
+    (widths_fold l0 0 + ((lb + ub) / 2 - lb)).
+  - apply Nat.add_le_mono.
+    + exact (widths_fold_map_le l0 0 0 (Nat.le_refl 0)).
+    + apply Nat.le_refl.
+  - apply Nat.add_lt_mono_l.
+    have Hlbmid_eq : lb = (lb + lb) / 2.
+    { rewrite addnn -muln2. rewrite Nat.div_mul; lia. }
+    have Hlbmid : Nat.le lb ((lb + ub) / 2).
+    { rewrite {1}Hlbmid_eq.
+      apply (Nat.div_le_mono (lb + lb) (lb + ub) 2); [lia|].
+      apply Nat.add_le_mono; [apply Nat.le_refl|].
+      exact (Nat.lt_le_incl lb ub HltNat). }
+    have Hmidub : Nat.lt ((lb + ub) / 2) ub.
+    { exact: tvm_mean_ltn HltNat. }
+    have Hupper : Nat.le lb ub by exact (Nat.lt_le_incl lb ub HltNat).
+    have Hwidth : Nat.lt (((lb + ub) / 2) - lb) (ub - lb).
+    { apply (proj2 (Nat.add_lt_mono_r
+        (((lb + ub) / 2) - lb) (ub - lb) lb)).
+      rewrite (Nat.sub_add lb ((lb + ub) / 2) Hlbmid).
+      rewrite (Nat.sub_add lb ub Hupper).
+      exact Hmidub. }
+    lia.
+Qed.
 
 (* =================== termination proofs =================== *)
 
@@ -1408,7 +1757,37 @@ Lemma bab_bin_g1 :
   TVM.find (elt:=nat * nat) v bounds = Some (lb, ub) ->
   (product_bounds (update_lb bounds v ((lb + ub) / 2).+1) < product_bounds bounds)%coq_nat.
 Proof.
-Admitted.
+  intros.
+  rewrite /product_bounds /update_lb H3.
+  specialize (@tvm_elements_add (nat * nat) bounds v
+    (lb, ub) (((lb + ub) / 2).+1, ub) H3) as Heles.
+  destruct Heles as [l0 [l1 [Hele Hele_add]]].
+  rewrite -Hele -Hele_add.
+  rewrite fold_left_app. rewrite fold_left_app.
+  remember (fold_left
+    (fun (acc : nat) '(_, bs) => let '(lb0, ub0) := bs in (acc + (ub0 - lb0)))
+    l0 0) as init.
+  apply (elimT ltP).
+  apply (product_bounds_helper l1
+    (init + (ub - ((lb + ub) / 2).+1)) (init + (ub - lb))).
+  rewrite ltn_add2l //. apply find_some in H1.
+  move : H1 H3; clear. intros [Hin Hlength] Hfind.
+  rewrite /length Hfind in Hlength. assert (lb < ub).
+  move /eqP : Hlength => Hlength.
+  specialize (leqVgt ub lb); intro.
+  destruct (ub <= lb) eqn : Hle.
+  rewrite -subn_eq0 in Hle. move /eqP : Hle => Hle. done.
+  rewrite orb_false_l in H; done.
+  apply ltn_sub2l; try done.
+  rewrite -(addn1 ((lb + ub) / 2)).
+  assert (lb = (lb + lb)/2). rewrite addnn -muln2. rewrite Nat.div_mul; auto.
+  assert (lb <= (lb + ub) / 2).
+  rewrite {1}H0. apply (introT leP).
+  apply (Nat.div_le_mono (lb + lb) (lb + ub) 2); try done.
+  apply (elimT leP). rewrite leq_add2l. intuition.
+  specialize (ltnSn ((lb + ub) / 2)); intro.
+  rewrite addn1. move : H1 H2; apply leq_ltn_trans.
+Qed.
 
 Lemma bab_bin_g2 :
   seq TripVar.t ->
@@ -1424,7 +1803,37 @@ Lemma bab_bin_g2 :
   TVM.find (elt:=nat * nat) v bounds = Some (lb, ub) ->
   (product_bounds (update_ub bounds v ((lb + ub) / 2)) < product_bounds bounds)%coq_nat.
 Proof.
-Admitted.
+  intros.
+  rewrite /product_bounds /update_ub H3.
+  specialize (@tvm_elements_add (nat * nat) bounds v
+    (lb, ub) (lb, (lb + ub) / 2) H3) as Heles.
+  destruct Heles as [l0 [l1 [Hele Hele_add]]].
+  rewrite -Hele -Hele_add.
+  rewrite fold_left_app. rewrite fold_left_app.
+  remember (fold_left
+    (fun (acc : nat) '(_, bs) => let '(lb0, ub0) := bs in (acc + (ub0 - lb0)))
+    l0 0) as init.
+  apply (elimT ltP).
+  apply (product_bounds_helper l1
+    (init + (((lb + ub) / 2) - lb)) (init + (ub - lb))).
+  rewrite ltn_add2l //. apply find_some in H1.
+  move : H1 H3; clear. intros [Hin Hlength] Hfind.
+  rewrite /length Hfind in Hlength. assert (lb < ub).
+  move /eqP : Hlength => Hlength.
+  specialize (leqVgt ub lb); intro.
+  destruct (ub <= lb) eqn : Hle.
+  rewrite -subn_eq0 in Hle. move /eqP : Hle => Hle. done.
+  rewrite orb_false_l in H; done.
+  rewrite ltn_sub2rE.
+  specialize (Nat.div_lt_upper_bound (lb + ub) 2 ub); intro.
+  apply (introT ltP). apply H0; try done. apply (elimT ltP).
+  rewrite -(ltn_add2r ub) in H. rewrite addnn -mul2n in H. done.
+  assert (Hlbmid : lb = (lb + lb)/2)
+    by (rewrite addnn -muln2; rewrite Nat.div_mul; auto).
+  rewrite {1}Hlbmid; clear Hlbmid. apply (introT leP).
+  apply (Nat.div_le_mono (lb + lb) (lb + ub) 2); try done.
+  apply (elimT leP). rewrite leq_add2l. intuition.
+Qed.
 
 Lemma bab_bin_g3 :
   seq TripVar.t ->
@@ -1440,7 +1849,35 @@ Lemma bab_bin_g3 :
   TVM.find (elt:=nat * nat) (lhs_var1 c1) bounds = Some (lb, ub) ->
   (product_bounds (update_ub bounds (lhs_var1 c1) ((lb + ub) / 2)) < product_bounds bounds)%coq_nat.
 Proof.
-Admitted.
+  intros.
+  rewrite /product_bounds /update_ub H4.
+  specialize (@tvm_elements_add (nat * nat) bounds (lhs_var1 c1)
+    (lb, ub) (lb, (lb + ub) / 2) H4) as Heles.
+  destruct Heles as [l0 [l1 [Hele Hele_add]]].
+  rewrite -Hele -Hele_add.
+  rewrite fold_left_app. rewrite fold_left_app.
+  remember (fold_left
+    (fun (acc : nat) '(_, bs) => let '(lb0, ub0) := bs in (acc + (ub0 - lb0)))
+    l0 0) as init.
+  apply (elimT ltP).
+  apply (product_bounds_helper l1
+    (init + (((lb + ub) / 2) - lb)) (init + (ub - lb))).
+  rewrite ltn_add2l //. rewrite /length H4 in H2.
+  assert (lb < ub). move /eqP : H2 => H2.
+  specialize (leqVgt ub lb); intro.
+  destruct (ub <= lb) eqn : Hle.
+  rewrite -subn_eq0 in Hle. move /eqP : Hle => Hle. done.
+  rewrite orb_false_l in H5; done.
+  rewrite ltn_sub2rE.
+  specialize (Nat.div_lt_upper_bound (lb + ub) 2 ub); intro.
+  apply (introT ltP). apply H6; try done. apply (elimT ltP).
+  rewrite -(ltn_add2r ub) in H5. rewrite addnn -mul2n in H5. done.
+  assert (Hlbmid : lb = (lb + lb)/2)
+    by (rewrite addnn -muln2; rewrite Nat.div_mul; auto).
+  rewrite {1}Hlbmid; clear Hlbmid. apply (introT leP).
+  apply (Nat.div_le_mono (lb + lb) (lb + ub) 2); try done.
+  apply (elimT leP). rewrite leq_add2l. intuition.
+Qed.
 
 Lemma bab_bin_g4 :
   seq TripVar.t ->
@@ -1456,7 +1893,34 @@ Lemma bab_bin_g4 :
   TVM.find (elt:=nat * nat) (lhs_var1 c1) bounds = Some (lb, ub) ->
   (product_bounds (update_lb bounds (lhs_var1 c1) ((lb + ub) / 2).+1) < product_bounds bounds)%coq_nat.
 Proof.
-Admitted.
+  intros.
+  rewrite /product_bounds /update_lb H4.
+  specialize (@tvm_elements_add (nat * nat) bounds (lhs_var1 c1)
+    (lb, ub) (((lb + ub) / 2).+1, ub) H4) as Heles.
+  destruct Heles as [l0 [l1 [Hele Hele_add]]].
+  rewrite -Hele -Hele_add.
+  rewrite fold_left_app. rewrite fold_left_app.
+  remember (fold_left
+    (fun (acc : nat) '(_, bs) => let '(lb0, ub0) := bs in (acc + (ub0 - lb0)))
+    l0 0) as init.
+  apply (elimT ltP).
+  apply (product_bounds_helper l1
+    (init + (ub - ((lb + ub) / 2).+1)) (init + (ub - lb))).
+  rewrite ltn_add2l //. rewrite /length H4 in H2.
+  assert (lb < ub). move /eqP : H2 => H2.
+  specialize (leqVgt ub lb); intro.
+  destruct (ub <= lb) eqn : Hle.
+  rewrite -subn_eq0 in Hle. move /eqP : Hle => Hle. done.
+  rewrite orb_false_l in H5; done.
+  apply ltn_sub2l; try done.
+  assert (Hlbmid : lb = (lb + lb)/2).
+  { rewrite addnn -muln2. rewrite Nat.div_mul; auto. }
+  have Hlower : lb <= (lb + ub) / 2.
+  { rewrite {1}Hlbmid. apply (introT leP).
+    apply (Nat.div_le_mono (lb + lb) (lb + ub) 2); try done.
+    apply (elimT leP). rewrite leq_add2l. intuition. }
+  exact (leq_ltn_trans Hlower (ltnSn ((lb + ub) / 2))).
+Qed.
   
 Lemma bab_bin_g5 :
   seq TripVar.t ->
@@ -1472,7 +1936,37 @@ Lemma bab_bin_g5 :
   TVM.find (elt:=nat * nat) v bounds = Some (lb, ub) ->
   (product_bounds (update_lb bounds v ((lb + ub) / 2).+1) < product_bounds bounds)%coq_nat.
 Proof.
-Admitted.
+  intros.
+  rewrite /product_bounds /update_lb H4.
+  specialize (@tvm_elements_add (nat * nat) bounds v
+    (lb, ub) (((lb + ub) / 2).+1, ub) H4) as Heles.
+  destruct Heles as [l0 [l1 [Hele Hele_add]]].
+  rewrite -Hele -Hele_add.
+  rewrite fold_left_app. rewrite fold_left_app.
+  remember (fold_left
+    (fun (acc : nat) '(_, bs) => let '(lb0, ub0) := bs in (acc + (ub0 - lb0)))
+    l0 0) as init.
+  apply (elimT ltP).
+  apply (product_bounds_helper l1
+    (init + (ub - ((lb + ub) / 2).+1)) (init + (ub - lb))).
+  rewrite ltn_add2l //. apply find_some in H2.
+  move : H2 H4; clear. intros [Hin Hlength] Hfind.
+  rewrite /length Hfind in Hlength. assert (lb < ub).
+  move /eqP : Hlength => Hlength.
+  specialize (leqVgt ub lb); intro.
+  destruct (ub <= lb) eqn : Hle.
+  rewrite -subn_eq0 in Hle. move /eqP : Hle => Hle. done.
+  rewrite orb_false_l in H; done.
+  apply ltn_sub2l; try done.
+  rewrite -(addn1 ((lb + ub) / 2)).
+  assert (lb = (lb + lb)/2). rewrite addnn -muln2. rewrite Nat.div_mul; auto.
+  assert (lb <= (lb + ub) / 2).
+  rewrite {1}H0. apply (introT leP).
+  apply (Nat.div_le_mono (lb + lb) (lb + ub) 2); try done.
+  apply (elimT leP). rewrite leq_add2l. intuition.
+  specialize (ltnSn ((lb + ub) / 2)); intro.
+  rewrite addn1. move : H1 H2; apply leq_ltn_trans.
+Qed.
 
 Lemma bab_bin_g6 :
   seq TripVar.t ->
@@ -1488,7 +1982,37 @@ Lemma bab_bin_g6 :
   TVM.find (elt:=nat * nat) v bounds = Some (lb, ub) ->
   (product_bounds (update_ub bounds v ((lb + ub) / 2)) < product_bounds bounds)%coq_nat.
 Proof.
-Admitted.
+  intros.
+  rewrite /product_bounds /update_ub H4.
+  specialize (@tvm_elements_add (nat * nat) bounds v
+    (lb, ub) (lb, (lb + ub) / 2) H4) as Heles.
+  destruct Heles as [l0 [l1 [Hele Hele_add]]].
+  rewrite -Hele -Hele_add.
+  rewrite fold_left_app. rewrite fold_left_app.
+  remember (fold_left
+    (fun (acc : nat) '(_, bs) => let '(lb0, ub0) := bs in (acc + (ub0 - lb0)))
+    l0 0) as init.
+  apply (elimT ltP).
+  apply (product_bounds_helper l1
+    (init + (((lb + ub) / 2) - lb)) (init + (ub - lb))).
+  rewrite ltn_add2l //. apply find_some in H2.
+  move : H2 H4; clear. intros [Hin Hlength] Hfind.
+  rewrite /length Hfind in Hlength. assert (lb < ub).
+  move /eqP : Hlength => Hlength.
+  specialize (leqVgt ub lb); intro.
+  destruct (ub <= lb) eqn : Hle.
+  rewrite -subn_eq0 in Hle. move /eqP : Hle => Hle. done.
+  rewrite orb_false_l in H; done.
+  rewrite ltn_sub2rE.
+  specialize (Nat.div_lt_upper_bound (lb + ub) 2 ub); intro.
+  apply (introT ltP). apply H0; try done. apply (elimT ltP).
+  rewrite -(ltn_add2r ub) in H. rewrite addnn -mul2n in H. done.
+  assert (lb = (lb + lb)/2)
+    by (rewrite addnn -muln2; rewrite Nat.div_mul; auto).
+  rewrite {1}H0; clear H0. apply (introT leP).
+  apply (Nat.div_le_mono (lb + lb) (lb + ub) 2); try done.
+  apply (elimT leP). rewrite leq_add2l. intuition.
+Qed.
 
 Lemma bab_bin_g7 :
   seq TripVar.t ->
@@ -1497,7 +2021,36 @@ Lemma bab_bin_g7 :
   List.find (fun c : Constraint2 => ~~ satisfies_constraint2 (key_value bounds) c) cs2 = None ->
   (product_bounds bounds == 0) = false -> (product_bounds (halve bounds) < product_bounds bounds)%coq_nat.
 Proof.
-Admitted.
+  intros scc bounds cs1 cs2 Hun1 Hun2 Hprod.
+  rewrite /product_bounds /halve tvm_elements_map.
+  change (Nat.lt
+    (widths_fold
+      (List.map (fun '(key, value) =>
+        (key, let '(lb, ub) := value in (lb, (lb + ub) / 2)))
+        (TVM.elements bounds)) 0)
+    (widths_fold (TVM.elements bounds) 0)).
+  have Hmap :
+    List.map (fun '(key, value) =>
+      (key, let '(lb, ub) := value in (lb, (lb + ub) / 2)))
+      (TVM.elements bounds) =
+    List.map (fun '(key, (lb, ub)) =>
+      (key, (lb, (lb + ub) / 2))) (TVM.elements bounds).
+  { apply List.map_ext. intros [key [lb ub]]. reflexivity. }
+  rewrite Hmap.
+  apply widths_fold_halve_lt.
+  have Hpb : product_bounds bounds = widths_fold (TVM.elements bounds) 0.
+  { rewrite /product_bounds. apply product_bounds_widths_fold. }
+  have Hnz : widths_fold (TVM.elements bounds) 0 != 0.
+  { apply /negP=> /eqP Hz.
+    have Hzero : product_bounds bounds = 0 by rewrite Hpb; exact Hz.
+    move: Hprod. rewrite Hzero. discriminate. }
+  destruct (widths_fold_nonzero_exists (TVM.elements bounds) Hnz)
+    as [v [lb [ub [Hin Hwidth]]]].
+  exists v, lb, ub. split; [exact Hin|].
+  have Hdiffpos : Nat.lt 0 (ub - lb).
+  { move /eqP : Hwidth => Hwidth'. lia. }
+  rewrite -subn_gt0. apply /ltP. exact Hdiffpos.
+Qed.
 
 Function bab_bin (scc : list TripVar.t) (bounds : TVM.t (nat * nat))
                  (cs1 : list Constraint1) (cs2 : list Constraint2)
