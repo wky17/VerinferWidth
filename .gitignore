@@ -56,3 +56,4 @@ ocaml_try/extraction
 */.DS_Store
 */output.out
 */output.txt
+coq-firrtl

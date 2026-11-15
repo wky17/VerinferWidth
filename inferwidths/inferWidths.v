@@ -55,22 +55,27 @@ end.
 
 Definition solve_alg_check (res : list (list ProdVar.t)) (cs1 : PVM.t (list Constraint1)) (cs2 : list min_rhs) : option Valuation :=
   match solve_alg res initial_valuation cs1 with
-  | Some value => if (forallb (fun c => Z.leb (min_rhs_value value c) 1%Z) cs2) then Some value else None
+  | Some value => if (forallb (fun c => match min_rhs_value value c with
+                | Some x => Z.leb x 1%Z
+                | _ => false
+                end) cs2) then Some value else None
   | _ => None
   end.
 
 (***************      Lemmas of computing max       ******************)
 
-Lemma terms_value'_eq v c cst : terms_value v c cst = terms_value' v c cst.
+Lemma terms_value'_eq v c cst : terms_value v c (Some cst) = terms_value' v c cst.
 Proof.
   move : c cst; elim. simpl; done.
-  simpl; intros. rewrite H; clear H. unfold terms_value_aux. done.
+  simpl; intros [coe var] tl; intros. unfold terms_value_aux; simpl.
+  destruct (PVM.find (elt:=nat) var v); try done.
 Qed.
 
 Lemma rhs_value1'_eq v c : rhs_power c = nil -> rhs_value1 v c = rhs_value1' v c.
 Proof.
-  unfold rhs_value1; unfold rhs_value1'. intro. rewrite H; simpl. rewrite Z.add_0_r.
-  rewrite terms_value'_eq //.
+  unfold rhs_value1; unfold rhs_value1'. intro. rewrite H; simpl. 
+  rewrite terms_value'_eq //. destruct (terms_value' v (rhs_terms1 c) (rhs_const1 c)); try done.
+  rewrite Z.add_0_r //.
 Qed.
 
 Lemma satisfies_constraint1_eq v c : rhs_power c = nil -> satisfies_constraint1' v c = satisfies_constraint1 v c.
@@ -85,16 +90,167 @@ Proof.
   intros; apply H; simpl; right; done.
 Qed.
 
-Axiom NoDupA_NoDup : forall l, NoDupA (PVM.eq_key (elt:=nat)) l -> NoDup l.
+Theorem simple_cycle_solution_lower_bound nodes cs solution candidate :
+  (forall c, List.In c cs -> rhs_power c = nil) ->
+  solve_simple_cycle nodes cs = Some solution ->
+  Solver.constraints.satisfies_all_constraint1 candidate cs ->
+  (forall x, PVM.mem x solution -> PVM.mem x candidate) ->
+  le solution candidate.
+Proof.
+  move => Hpowers Hsolve Hsat Hdomain.
+  apply: (@SccSmallestProof.simple_cycle_le_satisfying_valuation
+    nodes cs solution Hsolve candidate _ Hdomain).
+  by rewrite (@satisfies_all_constraint1_eq candidate cs Hpowers).
+Qed.
 
-Axiom key_NoDup : forall B (v : PVM.t B), NoDup (List.split (PVM.elements v)).1.
+Theorem simple_cycle_contract_from_matrix_composition nodes cs solution :
+  (forall c, List.In c cs -> rhs_power c = nil) ->
+  (forall c, List.In c cs ->
+    List.In (lhs_var1 c) nodes /\
+    (rhs_terms1 c = nil \/
+      exists source, List.In source nodes /\ rhs_terms1 c = [(1, source)])) ->
+  matrix_path_composition (floyd_loop_map' nodes cs) ->
+  solve_simple_cycle nodes cs = Some solution ->
+  Solver.constraints.satisfies_all_constraint1 solution cs /\
+  (forall candidate,
+    Solver.constraints.satisfies_all_constraint1 candidate cs ->
+    (forall x, PVM.mem x solution -> PVM.mem x candidate) ->
+    le solution candidate).
+Proof.
+  move => Hpowers Hshape Hcompose Hsolve.
+  split.
+  - rewrite -(@satisfies_all_constraint1_eq solution cs Hpowers).
+    exact: (@simple_cycle_correct_from_matrix_composition
+      nodes cs solution Hsolve Hshape Hcompose).
+  - move => candidate Hsat Hdomain.
+    exact: (@simple_cycle_solution_lower_bound
+      nodes cs solution candidate Hpowers Hsolve Hsat Hdomain).
+Qed.
 
-Axiom key_in_elements : forall [A : Type] (m : PVM.t A) v, List.In v (List.split (PVM.elements m)).1 <-> exists val, List.In (v, val) (PVM.elements m).
+Lemma NoDupA_NoDup l : NoDupA (PVM.eq_key (elt:=nat)) l -> NoDup l.
+Proof.
+  induction l as [| x l IH]; intros H.
+  - constructor.
+  - inversion H as [|x' l' Hnin Hnd]; subst.
+    constructor.
+    + intro Hin. apply Hnin. rewrite InA_alt.
+      exists x. split; [unfold PVM.eq_key; simpl; split; rewrite eqxx // | exact Hin].
+    + apply IH; exact Hnd.
+Qed.
+
+Lemma key_NoDup : forall B (v : PVM.t B), NoDup (List.split (PVM.elements v)).1.
+Proof.
+  intros B v.
+  assert (Hsplit : forall (l : list (PVM.key * B)), (List.split l).1 = map fst l).
+  { induction l as [|[k b] t IH]; [reflexivity|].
+    simpl. case E : (List.split t) => [ls rs].
+    rewrite E in IH. simpl in IH. simpl. rewrite IH. reflexivity. }
+  rewrite Hsplit.
+  assert (Hnd : NoDupA (PVM.eq_key (elt:=B)) (PVM.elements v)) by apply PVM.elements_3w.
+  remember (PVM.elements v) as els eqn:E; clear v E Hsplit.
+  revert Hnd.
+  induction els as [|[k b] t IH]; intros Hnd.
+  - constructor.
+  - inversion Hnd as [|x t' Hnin Hnd']; subst. simpl.
+    constructor.
+    + intro Hin. apply in_map_iff in Hin. destruct Hin as [[k' b'] [Hfk Hin']].
+      simpl in Hfk.
+      apply Hnin. rewrite InA_alt. exists (k', b').
+      split; [rewrite -Hfk; change (PVM.eq_key ((k,b)) ((k,b'))) with (PVM.Raw.Proofs.PX.eqk ((k,b)) ((k,b'))); unfold PVM.Raw.Proofs.PX.eqk; simpl; split; rewrite !eqxx // | exact Hin'].
+    + apply IH; exact Hnd'.
+Qed.
+
+Lemma key_in_elements : forall [A : Type] (m : PVM.t A) v, List.In v (List.split (PVM.elements m)).1 <-> exists val, List.In (v, val) (PVM.elements m).
+Proof.
+  intros A m v.
+  assert (Hsplit : forall (l : list (PVM.key * A)), (List.split l).1 = map fst l).
+  { induction l as [|[k b] t IH]; [reflexivity|].
+    simpl. case E : (List.split t) => [ls rs].
+    rewrite E in IH. simpl in IH. simpl. rewrite IH. reflexivity. }
+  rewrite Hsplit. split.
+  - intro Hin. apply in_map_iff in Hin. destruct Hin as [[k' b'] [Hfk Hin']].
+    simpl in Hfk. subst k'. exists b'. exact Hin'.
+  - intros [val Hin]. apply in_map_iff. exists (v, val). split; [reflexivity | exact Hin].
+Qed.
 
 Lemma forallb2satisfies_all_constraint1 values: forall cs, forallb (satisfies_constraint1 values) cs <-> Solver.constraints.satisfies_all_constraint1 values cs.
 Proof.
   split. induction cs as [|c cs' IH]. simpl; intros; done. simpl; intros. move /andP : H => [H H1]. apply IH in H1. rewrite H H1 //.
   induction cs as [|c cs' IH]. simpl; intros; done. simpl; intros. move /andP : H => [H H1]. apply IH in H1. rewrite H H1 //.
+Qed.
+
+Lemma simple_cycle_input_shape nodes cs :
+  is_simple_cycle cs = true ->
+  (forall c, List.In c cs ->
+    forall x, List.In x (constraint1_vars c) -> List.In x nodes) ->
+  forall c, List.In c cs ->
+    List.In (lhs_var1 c) nodes /\
+    (rhs_terms1 c = nil \/
+      exists source, List.In source nodes /\ rhs_terms1 c = [(1, source)]).
+Proof.
+  move => Hsimple Hvars c Hin.
+  have Hlhs : List.In (lhs_var1 c) nodes.
+  { apply: (Hvars c Hin). by rewrite /constraint1_vars /=; left. }
+  split; first exact Hlhs.
+  rewrite /is_simple_cycle in Hsimple.
+  apply forallb_forall with (x := c) in Hsimple; last exact Hin.
+  case Hterms : (rhs_terms1 c) => [|[coef source] tl] in Hsimple.
+  - by left.
+  - case: coef Hterms Hsimple => [|[|coef]] Hterms Hsimple; try discriminate.
+    case: tl Hterms Hsimple => [|t tl] Hterms Hsimple; last discriminate.
+    right. exists source. split; last exact Hterms.
+    apply: (Hvars c Hin).
+    rewrite /constraint1_vars Hterms /=. by right; left.
+Qed.
+
+Theorem simple_cycle_solver_correct nodes cs solution :
+  is_simple_cycle cs = true ->
+  (forall c, List.In c cs -> rhs_power c = nil) ->
+  (forall c, List.In c cs ->
+    forall x, List.In x (constraint1_vars c) -> List.In x nodes) ->
+  solve_simple_cycle nodes cs = Some solution ->
+  Solver.constraints.satisfies_all_constraint1 solution cs /\
+  (forall x, PVM.mem x solution <-> List.In x nodes) /\
+  (forall candidate,
+    Solver.constraints.satisfies_all_constraint1 candidate cs ->
+    (forall x, List.In x nodes -> PVM.mem x candidate) ->
+    le solution candidate).
+Proof.
+  move => Hsimple Hpowers Hvars Hsolve.
+  have Hshape := @simple_cycle_input_shape nodes cs Hsimple Hvars.
+  split.
+  - rewrite -(@satisfies_all_constraint1_eq solution cs Hpowers).
+    exact: (@simple_cycle_correct nodes cs solution Hsolve Hshape).
+  - split.
+    + move => x. exact: (@simple_cycle_solution_domain nodes cs solution x Hsolve).
+    + move => candidate Hsat Hcoverage.
+      apply: (@simple_cycle_solution_lower_bound
+        nodes cs solution candidate Hpowers Hsolve Hsat).
+      move => x Hmem.
+      apply Hcoverage.
+      exact: (proj1 (@simple_cycle_solution_domain nodes cs solution x Hsolve) Hmem).
+Qed.
+
+Theorem simple_cycle_solver_none_iff_unsatisfiable nodes cs :
+  is_simple_cycle cs = true ->
+  (forall c, List.In c cs -> rhs_power c = nil) ->
+  (forall c, List.In c cs ->
+    forall x, List.In x (constraint1_vars c) -> List.In x nodes) ->
+  (solve_simple_cycle nodes cs = None <->
+    forall candidate, Solver.constraints.satisfies_all_constraint1 candidate cs = false).
+Proof.
+  move => Hsimple Hpowers Hvars.
+  split.
+  - move => Hnone candidate.
+    have Hfalse := @scc_none_unsat cs nodes Hnone candidate.
+    case Hsat : (Solver.constraints.satisfies_all_constraint1 candidate cs); last reflexivity.
+    have Hforall := (proj2 (forallb2satisfies_all_constraint1 candidate cs)) Hsat.
+    by rewrite Hfalse in Hforall.
+  - move => Hunsat.
+    case Hsolve : (solve_simple_cycle nodes cs) => [solution|]; last reflexivity.
+    have [Hsat _] := @simple_cycle_solver_correct nodes cs solution
+      Hsimple Hpowers Hvars Hsolve.
+    have Hfalse := Hunsat solution. by rewrite Hsat in Hfalse.
 Qed.
 
 Lemma max_list_correctness : forall zl init, init <= (max_nl zl init) /\ (forall z, List.In z zl -> Z.le z (Z.of_nat (max_nl zl init))).
@@ -138,6 +294,81 @@ Proof.
   intros [coe var]; simpl; done.
 Qed.
 
+Lemma substitute_constraint_value_exists v c1 c2 r1 r2 :
+  rhs_value1 v c1 = Some r1 -> rhs_value1 v c2 = Some r2 -> exists rhs, rhs_value1 v (substitute_constraint c1 (lhs_var1 c2) (rhs_terms1 c2) (rhs_const1 c2)) = Some rhs.
+Proof.
+  move=> Hr1 Hr2.
+  have Hterms_mem : forall terms init result,
+      terms_value v terms (Some init) = Some result ->
+      forall x, List.In x (map snd terms) -> PVM.mem x v.
+  { move=> terms; elim: terms => [|[coe var] tl IH] init result Hval x Hx.
+    - by [].
+    - simpl in Hval.
+      case Hfind : (PVM.find var v) => [n|] in Hval; last by discriminate.
+      simpl in Hx. move: Hx => [<-|Hx].
+      + apply find_mem. by exists n.
+      + apply (IH (init + Z.of_nat (coe * n))%Z result Hval x Hx). }
+  rewrite /rhs_value1 in Hr1 Hr2.
+  case Hlin1 : (terms_value v (rhs_terms1 c1) (Some (rhs_const1 c1))) => [lin1|];
+    rewrite Hlin1 in Hr1; try discriminate.
+  case Hpow1 : (power_value v (rhs_power c1)) => [pow1|];
+    rewrite Hpow1 in Hr1; try discriminate.
+  case Hlin2 : (terms_value v (rhs_terms1 c2) (Some (rhs_const1 c2))) => [lin2|];
+    rewrite Hlin2 in Hr2; try discriminate.
+  case Hpow2 : (power_value v (rhs_power c2)) => [pow2|];
+    rewrite Hpow2 in Hr2; try discriminate.
+  have Hmem1 : forall x, List.In x (map snd (rhs_terms1 c1)) -> PVM.mem x v.
+  { move=> x Hx. apply Hterms_mem with (terms := rhs_terms1 c1) (init := rhs_const1 c1) (result := lin1); try done. }
+  have Hmem2 : forall x, List.In x (map snd (rhs_terms1 c2)) -> PVM.mem x v.
+  { move=> x Hx. apply Hterms_mem with (terms := rhs_terms1 c2) (init := rhs_const1 c2) (result := lin2); try done. }
+  have Hgenmem : forall (hd : ProdVar.t) (coe : nat)
+      (terms_hd terms_tl : list term),
+      forall t, List.In t (substitute_rhs_terms hd coe terms_hd terms_tl) ->
+      exists u, snd u = snd t /\ (List.In u terms_hd \/ List.In u terms_tl).
+  { move=> hd coe terms_hd; elim: terms_hd => [|a terms_hd IH] terms_tl t Ht.
+    - rewrite /substitute_rhs_terms /= in Ht.
+      apply in_remove in Ht. exists t. split; first by []. right. exact Ht.1.
+    - destruct a as [coe' var]. rewrite /substitute_rhs_terms /= in Ht.
+      set acc := fold_right (fun '(coe0, var0) (acc : list term) =>
+        match List.find (fun p : term => p.2 == var0) acc with
+        | Some t => let (existing_coef, _) := t in
+            (existing_coef + coe * coe0, var0) :: List.remove term_dec (existing_coef, var0) acc
+        | None => (coe * coe0, var0) :: acc
+        end) (List.remove term_dec (coe, hd) terms_tl) terms_hd.
+      case Hfind : (List.find (fun p : term => p.2 == var) acc) => [[existing var0]|].
+      + rewrite Hfind in Ht. destruct Ht as [Ht|Ht].
+        * apply find_some in Hfind as [Hin Heq]. move /eqP : Heq => Heq. simpl in Heq. subst var0.
+          apply IH in Hin. destruct Hin as [u [Hu HuIn]]. exists u. split; first by rewrite -Ht; exact Hu.
+          destruct HuIn as [HuIn|HuIn].
+          - left. right. exact HuIn.
+          - right. exact HuIn.
+        * apply in_remove in Ht. have Hih := IH _ _ Ht.1.
+          destruct Hih as [u [Hu HuIn]]. exists u. split; first exact Hu.
+          destruct HuIn as [HuIn|HuIn].
+          - left. right. exact HuIn.
+          - right. exact HuIn.
+      + rewrite Hfind in Ht. destruct Ht as [Ht|Ht].
+        * exists (coe', var). split; first by rewrite -Ht. left. by left.
+        * have Hih := IH _ _ Ht. destruct Hih as [u [Hu HuIn]]. exists u. split; first exact Hu.
+          destruct HuIn as [HuIn|HuIn].
+          - left. right. exact HuIn.
+          - right. exact HuIn. }
+  case Hfind : (List.find (fun p : term => p.2 == lhs_var1 c2) (rhs_terms1 c1)) => [[coe var]|].
+  - rewrite /substitute_constraint Hfind /=.
+    rewrite /rhs_value1.
+    have Hmem : forall x, List.In x
+        (map snd (substitute_rhs_terms (lhs_var1 c2) coe (rhs_terms1 c2) (rhs_terms1 c1))) -> PVM.mem x v.
+    { move=> x Hx. apply in_map_iff in Hx. destruct Hx as [t [Htx Ht]].
+      apply Hgenmem in Ht. destruct Ht as [u [Hu [Hu2|Hu1]]].
+      + apply Hmem2. apply in_map_iff. exists u. split; first by rewrite Hu Htx. exact Hu2.
+      + apply Hmem1. apply in_map_iff. exists u. split; first by rewrite Hu Htx. exact Hu1. }
+    have [lin Hlin] := terms_value_some v
+      (substitute_rhs_terms (lhs_var1 c2) coe (rhs_terms1 c2) (rhs_terms1 c1))
+      (rhs_const1 c1 + Z.of_nat coe * rhs_const1 c2)%Z Hmem.
+    rewrite Hlin. eexists. reflexivity.
+  - rewrite /substitute_constraint Hfind. exists r1. rewrite /rhs_value1 Hlin1 Hpow1. exact Hr1.
+Qed.
+
 Lemma substitute_c_correctness c1 c2 v : satisfies_constraint1 v c1 -> satisfies_constraint1 v c2 ->
   rhs_power c1 = nil -> rhs_power c2 = nil -> good_terms (rhs_terms1 c1) -> good_terms (rhs_terms1 c2) ->
   satisfies_constraint1 v (substitute_c c1 c2).
@@ -146,34 +377,49 @@ Proof.
   intros Hsat1 Hsat2 Hhd_power Htl_power Hhd_term Htl_term.
   case Hfind1 : (PVM.find (lhs_var1 c1) v) => [val1|]; rewrite Hfind1 in Hsat1; try discriminate.
   case Hfind2 : (PVM.find (lhs_var1 c2) v) => [val2|]; rewrite Hfind2 in Hsat2; try discriminate.
-  rewrite substitute_constraint_lhs_eq Hfind1. apply Zle_imp_le_bool. apply Zle_bool_imp_le in Hsat1. apply Zle_bool_imp_le in Hsat2.
-  
-  assert ((rhs_value1 v (substitute_constraint c1 (lhs_var1 c2) (rhs_terms1 c2) (rhs_const1 c2)) <= rhs_value1 v c1)%Z).
-  { clear Hsat1. rewrite /substitute_constraint. 
-    case Hfind : (List.find (fun p : term => p.2 == lhs_var1 c2) (rhs_terms1 c1)) => [[coe var]|]; try lia. 
-    rewrite /rhs_value1 Hhd_power; simpl; rewrite Z.add_0_r; rewrite Z.add_0_r.
-    assert ((terms_value v (fold_right (fun '(coe', var) (acc : list term) =>
-              match List.find (fun p : term => p.2 == var) acc with
-              | Some t =>
-                  let (existing_coef, _) := t in
-                  ((existing_coef + coe * coe')%N, var) :: remove term_dec (existing_coef, var) acc
-              | None => ((coe * coe')%N, var) :: acc
-              end) (remove term_dec (coe, lhs_var1 c2) (rhs_terms1 c1)) (rhs_terms1 c2))
-          (rhs_const1 c1 + Z.of_nat coe * rhs_const1 c2) 
-          = terms_value v (rhs_terms1 c1) (rhs_const1 c1) - Z.of_nat (coe * val2)
-            + Z.of_nat coe * (terms_value v (rhs_terms1 c2) (rhs_const1 c2)))%Z).
-    { apply substitute_constraint_rhs; try done.
-      apply find_some in Hfind as Heq. 
-      move /eqP : Heq.2 => Heq'; clear Heq. 
-      simpl in Heq'; rewrite Heq' in Hfind; done. }
+  (* [rhs_value1] returns an option; expose the successful results guaranteed by
+     the two satisfaction hypotheses before doing integer arithmetic. *)
+  case Hr1 : (rhs_value1 v c1) => [r1|]; rewrite Hr1 in Hsat1; try discriminate.
+  case Hr2 : (rhs_value1 v c2) => [r2|]; rewrite Hr2 in Hsat2; try discriminate.
+  rewrite substitute_constraint_lhs_eq Hfind1. specialize (substitute_constraint_value_exists  _ _ _ r1 r2 Hr1 Hr2) as Hexists.
+  destruct Hexists as [rhs Hexists]. rewrite Hexists. apply Zle_imp_le_bool. apply Zle_bool_imp_le in Hsat1. apply Zle_bool_imp_le in Hsat2.
+  assert ((rhs <= r1)%Z).
+  { clear Hsat1. rewrite /substitute_constraint in Hexists. 
+    destruct (List.find (fun p : term => p.2 == lhs_var1 c2) (rhs_terms1 c1)) as [[coe var]|] eqn : Hfind; try lia. 
+    rewrite /rhs_value1 Hhd_power Htl_power in Hexists Hr1 Hr2; simpl in Hexists, Hr1, Hr2.
+    case Hsub : (terms_value v
+              (fold_right
+                 (fun '(coe', var) (acc : seq term) =>
+                  match List.find (fun p : term => p.2 == var) acc with
+                  | Some t =>
+                      let (existing_coef, _) := t in
+                      (existing_coef + coe * coe', var)
+                      :: remove term_dec (existing_coef, var) acc
+                  | None => (coe * coe', var) :: acc
+                  end) (remove term_dec (coe, lhs_var1 c2) (rhs_terms1 c1))
+                 (rhs_terms1 c2))
+              (Some (rhs_const1 c1 + Z.of_nat coe * rhs_const1 c2)%Z)) => [linear|]; rewrite Hsub in Hexists; try discriminate.
+    destruct (terms_value v (rhs_terms1 c1) (Some (rhs_const1 c1))) as [r1'|] eqn : Hr1'; try discriminate.
+    destruct (terms_value v (rhs_terms1 c2) (Some (rhs_const1 c2))) as [r2'|] eqn : Hr2'; try discriminate.
+    rewrite Z.add_0_r in Hexists; rewrite Z.add_0_r in Hr1; rewrite Z.add_0_r in Hr2. 
+    inversion Hexists; subst linear; clear Hexists. 
+    inversion Hr1; subst r1'; clear Hr1. 
+    inversion Hr2; subst r2'; clear Hr2. 
+    assert ((rhs
+          = r1 - Z.of_nat (coe * val2)
+            + (Z.of_nat coe) * r2)%Z).
+    { move : Hr1' Hr2'; apply substitute_constraint_rhs with (hd := var); try done.
+      1-3 : apply find_some in Hfind as Heq. 
+      1-3 : move /eqP : Heq.2 => Heq'; clear Heq. 
+      simpl in Heq'; rewrite -Heq' in Hfind; done. simpl in Heq'; rewrite -Heq' in Hfind2; done. 
+      unfold substitute_rhs_terms. simpl in Heq'; rewrite -Heq' in Hsub. done. }
     rewrite H; clear H.
     rewrite Nat2Z.inj_mul -Z.sub_sub_distr -Zmult_minus_distr_l.
-    apply (Zplus_le_reg_r _ _ (Z.of_nat coe * (Z.of_nat val2 - terms_value v (rhs_terms1 c2) (rhs_const1 c2))%Z)).
-    rewrite Z.sub_add. rewrite -{1}(Z.add_0_r (terms_value v (rhs_terms1 c1) (rhs_const1 c1))).
+    apply (Zplus_le_reg_r _ _ (Z.of_nat coe * (Z.of_nat val2 - r2)%Z)).
+    rewrite Z.sub_add. rewrite -{1}(Z.add_0_r r1).
     apply Z.add_le_mono_l.
-    apply Ztac.mul_le; try intuition. apply Zle_minus_le_0.
-    rewrite /rhs_value1 in Hsat2.
-    rewrite Htl_power in Hsat2; simpl in Hsat2; rewrite Z.add_0_r in Hsat2; done. }
+    apply Ztac.mul_le; try intuition. 
+    rewrite Hr1 in Hexists. inversion Hexists; subst r1. apply Z.le_refl. }
   move : H Hsat1; apply Z.le_trans.
 Qed.
 
@@ -223,16 +469,62 @@ Proof.
   inversion H3; clear H3. rewrite -H6 //.
 Qed.
 
-Lemma terms_value_ge_cst v : forall t cst, (cst <= terms_value v t cst)%Z.
+Lemma terms_value_ge_cst v : forall t cst result,
+  terms_value v t (Some cst) = Some result ->
+  (cst <= result)%Z.
 Proof.
-  elim. simpl; intros. intuition.
-  simpl; intros. specialize (H (cst +
-  Z.of_nat
-    (a.1 *
-     match PVM.find (elt:=nat) a.2 v with
-     | Some val => val
-     | None => 0
-     end))%Z). move : H; apply Z.le_trans. intuition.
+  elim => [|[coe var] tl IH] cst result Hvalue.
+  - simpl in Hvalue. inversion Hvalue. apply Z.le_refl.
+  - simpl in Hvalue.
+    destruct (PVM.find var v) as [val|] eqn:Hfind; try discriminate.
+    have Htail := IH (cst + Z.of_nat (coe * val))%Z result Hvalue.
+    apply Z.le_trans with (m := (cst + Z.of_nat (coe * val))%Z).
+    + rewrite -{1}(Z.add_0_r cst).
+      exact (proj1 (Z.add_le_mono_l 0
+        (Z.of_nat (coe * val)) cst) (Nat2Z.is_nonneg _)).
+    + exact Htail.
+Qed.
+
+Lemma terms_value_term_ge v : forall terms cst coe var val result,
+  List.In (coe, var) terms ->
+  PVM.find var v = Some val ->
+  terms_value v terms (Some cst) = Some result ->
+  (cst + Z.of_nat (coe * val) <= result)%Z.
+Proof.
+  move => terms.
+  elim: terms => [|[coe' var'] terms IH] cst coe var val result //=.
+  move => Hin Hfind Hvalue.
+  destruct Hin as [Heq|Hin].
+  - inversion Heq; subst coe' var'.
+    simpl in Hvalue. rewrite Hfind in Hvalue.
+    have Htail := terms_value_ge_cst v terms
+      (cst + Z.of_nat (coe * val)) result Hvalue.
+    exact Htail.
+  - simpl in Hvalue.
+    destruct (PVM.find var' v) as [val'|] eqn:Hfind'; try discriminate.
+    have Htail := IH (cst + Z.of_nat (coe' * val'))%Z
+      coe var val result Hin Hfind Hvalue.
+    apply Z.le_trans with (m := (cst + Z.of_nat (coe' * val') +
+      Z.of_nat (coe * val))%Z).
+    + apply Z.add_le_mono_r.
+      rewrite -{1}(Z.add_0_r cst).
+      apply (proj1 (Z.add_le_mono_l 0
+        (Z.of_nat (coe' * val')) cst)).
+      apply Nat2Z.is_nonneg.
+    + exact Htail.
+Qed.
+
+Lemma power_value_nonneg v : forall terms result,
+  power_value v terms = Some result -> (0 <= result)%Z.
+Proof.
+  intros terms result Hvalue.
+  destruct terms as [|[coe var] tl].
+  - simpl in Hvalue. inversion Hvalue. lia.
+  - unfold power_value in Hvalue.
+  destruct (terms_value v ((coe, var) :: tl) (Some 0%Z))
+    as [exponent|] eqn:Hexponent; try discriminate.
+  inversion Hvalue; subst result.
+  apply Z.pow_nonneg. lia.
 Qed.
 
 Lemma compute_ub_correctness c ub v : satisfies_constraint1 v c -> compute_ub c = Some ub -> exists n : nat, PVM.find (lhs_var1 c) v = Some n /\ n <= ub.
@@ -240,24 +532,32 @@ Proof.
   rewrite /compute_ub; intros Hsat Hub. case Hfind : (List.find (fun p : term => p.2 == lhs_var1 c) (rhs_terms1 c)) => [[coe var]|]; rewrite Hfind in Hub; try discriminate.
   case Hgt : (1 < coe); rewrite Hgt in Hub; try discriminate. inversion Hub; clear Hub H0.
   rewrite /satisfies_constraint1 in Hsat. case Hlhs : (PVM.find (lhs_var1 c) v) => [val|]; rewrite Hlhs in Hsat; try discriminate.
-  exists val; split; try done. apply Zle_bool_imp_le in Hsat. 
-  assert (Z.of_nat (coe * val) + rhs_const1 c <= rhs_value1 v c)%Z. 
-  { clear Hgt Hsat. rewrite /rhs_value1.
-    assert (terms_value v (rhs_terms1 c) (rhs_const1 c) <= terms_value v (rhs_terms1 c) (rhs_const1 c) + power_value v (rhs_power c))%Z.
-      rewrite -{1}(Z.add_0_r (terms_value v (rhs_terms1 c) (rhs_const1 c))). apply Zplus_le_compat_l. rewrite /power_value.
-      case : (rhs_power c); try done. intros. specialize (Z.pow_pos_nonneg 2 (terms_value v (a :: l) 0)); intro. 
-      specialize (terms_value_ge_cst v (a :: l) 0); intro. apply H in H0; try done. intuition.
-    move : H; apply Z.le_trans.
-    assert (exists pre post, pre ++ (coe, lhs_var1 c) :: post = (rhs_terms1 c)).
-      assert (Hin : List.In (coe, lhs_var1 c) (rhs_terms1 c)).
-        apply find_some in Hfind; move : Hfind => [H H0]. move /eqP : H0 => H0; simpl in H0. subst var; done. 
-      destruct (List.in_split _ _ Hin) as [pre [post Hsplit]].
-      exists pre, post. symmetry. apply Hsplit.
-    destruct H as [pre [post H]].
-    rewrite -H; clear H. rewrite terms_value_app. simpl. rewrite Hlhs -(Z.add_0_l (rhs_const1 c + Z.of_nat (coe * val))) terms_value_cst_add.
-    rewrite Z.add_assoc (Z.add_comm (Z.of_nat (coe * val)) (rhs_const1 c)) -{1}(Z.add_0_l (rhs_const1 c + Z.of_nat (coe * val))).
-    apply Zplus_le_compat_r. apply Z.add_nonneg_nonneg. apply terms_value_ge_cst. apply terms_value_ge_cst. }
-  specialize (Z.le_trans _ _ _ H Hsat); intro. clear Hsat H.
+  case Hrhs : (rhs_value1 v c) => [rhs|]; rewrite Hrhs in Hsat; try discriminate.
+  exists val; split; try done. apply Zle_bool_imp_le in Hsat.
+  assert (Hbound : (Z.of_nat (coe * val) + rhs_const1 c <= rhs)%Z).
+  {
+    unfold rhs_value1 in Hrhs.
+    destruct (terms_value v (rhs_terms1 c) (Some (rhs_const1 c)))
+      as [linear|] eqn:Hlinear; try discriminate.
+    destruct (power_value v (rhs_power c))
+      as [power|] eqn:Hpower; try discriminate.
+    inversion Hrhs; subst rhs.
+    have Hin : List.In (coe, lhs_var1 c) (rhs_terms1 c).
+    {
+      have [Hin Heq] := find_some _ _ Hfind.
+      move/eqP in Heq. simpl in Heq. subst var. exact Hin.
+    }
+    have Hlinear_bound := terms_value_term_ge v (rhs_terms1 c)
+      (rhs_const1 c) coe (lhs_var1 c) val linear Hin Hlhs Hlinear.
+    rewrite Z.add_comm in Hlinear_bound.
+    have Hpower_bound := power_value_nonneg v (rhs_power c) power Hpower.
+    apply Z.le_trans with (m := linear).
+    - exact Hlinear_bound.
+    - rewrite -{1}(Z.add_0_r linear).
+      exact (proj1 (Z.add_le_mono_l 0 power linear) Hpower_bound).
+  }
+  have H0 := Z.le_trans _ _ _ Hbound Hsat.
+  clear Hsat Hbound.
   rewrite Z.abs_neq. apply Z.le_add_le_sub_r in H0. rewrite -Z.add_opp_l in H0. apply Z.le_sub_le_add_r in H0.
   rewrite Nat2Z.inj_mul -{2}(Z.mul_1_l (Z.of_nat val)) -Z.mul_sub_distr_r in H0. apply Z.div_le_lower_bound in H0. 
   apply (introT leP). apply Nat2Z.inj_le. rewrite Z2Nat.id. rewrite Nat2Z.inj_sub; try simpl; try done.
@@ -1892,17 +2192,34 @@ Qed.
 Definition scc_correctness (scc : list ProdVar.t) (cs : list Constraint1) : Prop := 
   forall a b g adj, List.In a scc -> List.In b scc -> build_graph cs = (g, adj) -> exists p_hd p_tl, scc.find_path g a (List.length scc) [] b None = Some (p_hd :: p_tl).
 
-Axiom not_simple_scc_correctness : forall cs1 tbsolved, ~ is_simple_cycle cs1 -> 
+Definition is_scc (scc : list ProdVar.t) (g : scc.G) : Prop :=
+  forall a b, List.In a scc -> List.In b scc ->
+  exists p_hd p_tl, scc.find_path g a (List.length scc) [] b None = Some (p_hd :: p_tl).
+
+Lemma not_simple_scc_correctness : forall cs1 tbsolved, ~ is_simple_cycle cs1 -> 
   (forall var : ProdVar.t, List.In var (constraints1_vars cs1) -> List.In var tbsolved) -> 
-  scc_correctness tbsolved cs1.
+  forall g adj, scc.build_graph cs1 = (g, adj) -> is_scc tbsolved g -> scc_correctness tbsolved cs1.
+Proof.
+  intros cs1 tbsolved Hnot_simple Hvars g adj Hbuild Hscc a b g' adj' Ha Hb Hg.
+  (* Hbuild 无关紧要: is_scc 已经是所求结论的形状 *)
+  rewrite Hbuild in Hg; have Hgg : g = g' by congruence.
+  have H := Hscc a b Ha Hb. rewrite Hgg in H. exact H.
+Qed.
 
 Lemma no_ubs_unsat cs1 tbsolved : ~ is_simple_cycle cs1 -> (*NoDup tbsolved -> tbsolved <> [] -> *)
-  (forall var : ProdVar.t, List.In var (constraints1_vars cs1) -> List.In var tbsolved) -> 
+  (forall var : ProdVar.t, List.In var (constraints1_vars cs1) -> List.In var tbsolved) ->
+  forall g adj, scc.build_graph cs1 = (g, adj) -> is_scc tbsolved g -> 
   (forall c : Constraint1, List.In c cs1 -> rhs_power c = []) -> 
   (forall c : Constraint1, List.In c cs1 -> good_terms (rhs_terms1 c)) ->
   solve_ubs_aux tbsolved cs1 = None -> forall (v : Valuation), ~ forallb (satisfies_constraint1 v) cs1.
 Proof.
-  intros Hnot_simple Hvars_in_hd Hpower Hterm. specialize (not_simple_scc_correctness _ _ Hnot_simple Hvars_in_hd) as Hscc. rewrite /solve_ubs_aux. destruct (scc.build_graph cs1) as [g adj] eqn : Hgraph.
+  intros Hnot_simple Hvars_in_hd g0 adj0 Hbuild Hsccpre Hpower Hterm.
+  rewrite /solve_ubs_aux. destruct (scc.build_graph cs1) as [g adj] eqn : Hgraph.
+  have Hscc : scc_correctness tbsolved cs1.
+  have Hg0 : g0 = g by congruence.
+  { apply (not_simple_scc_correctness cs1 tbsolved Hnot_simple Hvars_in_hd g adj).
+    - by rewrite Hgraph.
+    - by rewrite -Hg0. }
   case Hcase1 : (List.find (fun c : Constraint1 =>
     List.existsb (fun t : nat * ProdVar.t => 1 < t.1) (rhs_terms1 c)) cs1) => [c|].
   - (* c : lhs >= coe * var + ... + cst c, coe > 1 *)
@@ -1938,21 +2255,9 @@ Qed.
 
 Lemma add_edge_of_cs'_mem_eq cs a var : PVM.mem var a -> PVM.mem var (add_edge_of_cs' cs a).
 Proof.
-  intro. move : cs. elim. simpl; done.
-  simpl; intros hd tl IH. apply find_mem.
-  case Hfind : (PVM.find (lhs_var1 hd) a) => [dst_map|]; try done. destruct (rhs_terms1 hd) as [|[n v] ts] eqn : Hterm.
-  destruct (NVM.find Zero dst_map) as [dist|]. remember (NVM.add Zero (Z.max dist (rhs_const1 hd)) dst_map) as x.
-  - destruct (var == (lhs_var1 hd)) eqn : Heq; move /eqP : Heq => Heq. subst var. exists x; apply find_add_eq.
-    rewrite find_add_neq; try done. apply find_mem; done.
-  - remember (NVM.add Zero (rhs_const1 hd) dst_map) as x. destruct (var == (lhs_var1 hd)) eqn : Heq; move /eqP : Heq => Heq.
-    subst var. exists x; apply find_add_eq. rewrite find_add_neq; try done. apply find_mem; done.
-  destruct n as [|n0]. 2 : destruct n0. 2: destruct ts. 
-  1,3-5: apply find_mem; done.
-  destruct (NVM.find (Node v) dst_map) as [dist|]. remember (NVM.add (Node v) (Z.max dist (rhs_const1 hd)) dst_map) as x.
-  - destruct (var == (lhs_var1 hd)) eqn : Heq; move /eqP : Heq => Heq. subst var. exists x; apply find_add_eq.
-    rewrite find_add_neq; try done. apply find_mem; done.
-  - remember (NVM.add (Node v) (rhs_const1 hd) dst_map) as x. destruct (var == (lhs_var1 hd)) eqn : Heq; move /eqP : Heq => Heq.
-    subst var. exists x; apply find_add_eq. rewrite find_add_neq; try done. apply find_mem; done.
+  move /find_mem => [row Hrow].
+  apply find_mem.
+  exact: (@SccNoneUnsatProof.add_edge_of_cs'_preserves_row cs a var row Hrow).
 Qed.
 
 Lemma floyd_update'_mem_eq a b c d var : PVM.mem var d -> PVM.mem var (floyd_update' a b c d).
@@ -1969,6 +2274,14 @@ Proof.
   destruct (PVM.find var (inner_loop1 l m a)) as [x|] eqn : Hfind. apply find_mem; exists x; done.
   assert (exists val, PVM.find var m = Some val). apply find_mem. rewrite Heqm; apply floyd_update'_mem_eq; done.
   destruct H as [val H]. apply (pfind_innedr_loop1_some _ _ _ _ H) in Hfind; done.
+Qed.
+
+Lemma floyd_pivots_mem_eq pivots rows targets m var :
+  PVM.mem var m -> PVM.mem var (floyd_pivots pivots rows targets m).
+Proof.
+  move /find_mem => [row Hrow].
+  apply find_mem.
+  exact: (@floyd_pivots_preserves_row pivots rows targets var m row Hrow).
 Qed.
 
 Lemma map0_in v : forall ls var, List.In var ls -> PVM.mem var (map0 ls v).
@@ -1996,11 +2309,12 @@ Proof.
       specialize (Hvars_in_hd _ H (lhs_var1 x)). move : Hvars_in_hd; clear; intro. simpl in Hvars_in_hd. destruct Hvars_in_hd; try done. left; done.
     apply (elements_in_partition _ _ Hpart) in H. destruct H.
     * rewrite /satisfies_constraint1. rewrite Hlhs; clear Hlhs.
-      rewrite find_add_eq. apply Zle_imp_le_bool.
+      rewrite find_add_eq.
       remember (max_nl (List.map [eta rhs_const1] cs) 0) as new_val.   
       rewrite partition_as_filter in Hpart. inversion Hpart; clear Hpart H2. generalize H. intros Hin.
       rewrite -H1 in H. apply filter_In in H. move : H => [_ H]. move /andP : H => [Hterm Hpower]. move /eqP : Hterm => Hterm; move /eqP : Hpower => Hpower.
-      rewrite /rhs_value1 Hterm Hpower; clear Hterm Hpower; simpl. rewrite Z.add_0_r.
+      rewrite /rhs_value1 Hterm Hpower; clear Hterm Hpower; simpl.
+      apply Zle_imp_le_bool. rewrite Z.add_0_r.
       specialize (max_list_correctness (List.map [eta rhs_const1] cs) 0) as Hmax. move : Hmax => [Hinit Hle].
       apply (in_map [eta rhs_const1]) in Hin. apply Hle in Hin. 
       rewrite Heqnew_val //.
@@ -2009,11 +2323,9 @@ Proof.
     rewrite -Hhd in Hsolve Hvars_in_hd. clear Htl Hhd Hnotempty l a.
     case His_simple : (is_simple_cycle cs1); rewrite His_simple in Hsolve.
     * (* floyd *)
-      apply solve_simple_cycle_correctness in Hsolve. rewrite satisfies_all_constraint1_eq in Hsolve; try done. apply forallb2satisfies_all_constraint1 in Hsolve. done.
-      { rewrite /conform1_m. split. 
-        2 : intros. 1,2:unfold floyd_loop_map'. specialize (Hvars_in_hd _ H (lhs_var1 c)). 2 : specialize (Hvars_in_hd _ H x).
-        1,2:move : Hvars_in_hd; intro; apply find_mem; apply inner_loop2_mem_eq; unfold init_dist_map'; apply add_edge_of_cs'_mem_eq; apply map0_in; apply Hvars_in_hd;
-        unfold constraint1_vars. simpl; left; done. unfold rhs_vars1 in H0. simpl; right. apply in_or_app; left; done. } 
+      have [Hsat _] := @simple_cycle_solver_correct hd cs1 nv
+        His_simple Hp Hvars_in_hd Hsolve.
+      exact: (proj2 (forallb2satisfies_all_constraint1 nv cs1) Hsat).
     * (* bab *)
       case Hubs : (solve_ubs_aux hd (List.filter (fun c : Constraint1 => Datatypes.length (rhs_terms1 c) != 0) cs1)) => [ubs|]; rewrite Hubs in Hsolve; try discriminate.
       specialize (bab_bin_correct1 hd (mergeBounds ubs) cs1 nil); intro Hbab_correctness. rewrite Hsolve in Hbab_correctness.
@@ -2203,11 +2515,12 @@ Proof.
 Qed.
 
 Lemma solve_scc_smallest hd cs1 nv : hd <> nil -> NoDup hd -> solve_scc hd cs1 = Some nv -> cs1 <> nil -> 
+  (forall x : ProdVar.t, List.In x hd -> List.In x (constraints1_vars cs1)) ->
   (forall c, List.In c cs1 -> (forall v, List.In v (constraint1_vars c) -> List.In v hd)) ->
   (forall c, List.In c cs1 -> good_terms (rhs_terms1 c)) -> (forall c, List.In c cs1 -> rhs_power c = nil) ->
   forall temp_s, forallb (satisfies_constraint1 temp_s) cs1 -> le nv temp_s.
 Proof.
-  rewrite /solve_scc; intros Hnotemptyscc Hnodup Hsolve Hnotempty Hvars_in_hd Hterm Hpower.
+  rewrite /solve_scc; intros Hnotemptyscc Hnodup Hsolve Hnotempty Hhd_in_vars Hvars_in_hd Hterm Hpower.
   destruct hd as [|a l] eqn : Hhd. done.
   destruct l as [|hda tla] eqn : Htl.
   - (* trivial *)
@@ -2245,7 +2558,7 @@ Proof.
     rewrite /rhs_value1 Hterm Hpower in H3. clear Hterm Hpower; simpl in H3. rewrite Z.add_0_r in H3.
     apply Zle_bool_imp_le. done.
   - (* scc *)
-    rewrite -Hhd in Hsolve Hvars_in_hd Hnodup. clear Htl Hhd Hnotemptyscc l a.
+    rewrite -Hhd in Hsolve Hhd_in_vars Hvars_in_hd Hnodup. clear Htl Hhd Hnotemptyscc l a.
     case His_simple : (is_simple_cycle cs1); rewrite His_simple in Hsolve.
     * (* floyd *)
       intros. assert (exists fm, well_formed fm cs1).
@@ -2316,7 +2629,8 @@ Proof.
           rewrite find_add_neq. exists (dst_map); done. move /eqP : Heq => Heq; done.
           rewrite find_add_neq. exists (dst_map); done. move /eqP : Heq => Heq; done.
           exists (dst_map); done. }
-      destruct H0 as [fm H0]. apply (scc_smallest _ H0 Hsolve). 
+      destruct H0 as [fm H0]. 
+      apply (SccSmallestProof.scc_smallest _ Hhd_in_vars Hpower H0 Hsolve). 
       rewrite satisfies_all_constraint1_eq; try done. apply forallb2satisfies_all_constraint1. done.
     * (* bab *)
       case Hubs : (solve_ubs_aux hd (List.filter (fun c : Constraint1 => Datatypes.length (rhs_terms1 c) != 0) cs1)) => [ubs|]; rewrite Hubs in Hsolve; try discriminate.
@@ -2821,9 +3135,10 @@ Qed.
 Lemma solve_scc_unsat hd cs1 : hd <> nil -> NoDup hd -> solve_scc hd cs1 = None -> cs1 <> nil -> (forall c, List.In c cs1 -> List.In (lhs_var1 c) hd) -> 
   (forall c, List.In c cs1 -> good_terms (rhs_terms1 c)) -> (forall c, List.In c cs1 -> rhs_power c = nil) ->
   (forall c, List.In c cs1 -> (forall v, List.In v (constraint1_vars c) -> List.In v hd)) ->
+  (forall g adj, scc.build_graph (List.filter (fun c : Constraint1 => Datatypes.length (rhs_terms1 c) != 0) cs1) = (g, adj) -> is_scc hd g) ->
   forall v, forallb (satisfies_constraint1 v) cs1 = false.
 Proof.
-  rewrite /solve_scc; intros Hnotemptyscc Hnodup Hsolve Hnotempty Hlhs_in_hd Hterms Hpowers Hvars_in_hd.
+  rewrite /solve_scc; intros Hnotemptyscc Hnodup Hsolve Hnotempty Hlhs_in_hd Hterms Hpowers Hvars_in_hd Hiscc.
   destruct hd as [|a l] eqn : Hhd. done.
   destruct l as [|hda tla] eqn : Htl.
   - (* trivial *)
@@ -2839,21 +3154,18 @@ Proof.
       exists x; split. apply (elements_in_partition _ _ Hpart); right; done.
       { rewrite /satisfies_constraint1 in Hunsat; rewrite /satisfies_constraint1.
         assert (List.In x cs1). apply (elements_in_partition _ _ Hpart); right; done. specialize (Hlhs _ H) as H2.
-        rewrite H2 Hmem; rewrite H2 find_add_eq in Hunsat. apply Z.leb_gt. apply Z.leb_gt in Hunsat.
-        rewrite /rhs_value1; rewrite /rhs_value1 in Hunsat.
-        specialize (Hpowers _ H) as Hpowerx. rewrite Hpowerx in Hunsat; rewrite Hpowerx; simpl in Hunsat; simpl. 
-          rewrite Z.add_0_r; rewrite Z.add_0_r in Hunsat. 
+        rewrite H2 Hmem; rewrite H2 find_add_eq in Hunsat.
+        specialize (Hpowers _ H) as Hpowerx.
+        case Hrhs_v : (rhs_value1 v x) => [rhs_v|]; [|done].
         rewrite partition_as_filter in Hpart. inversion Hpart; clear Hpart. clear H1. 
         rewrite -H3 in Hin. apply filter_In in Hin. destruct Hin as [_ Hhave_v].
         apply negb_true_iff in Hhave_v. apply andb_false_iff in Hhave_v. destruct Hhave_v.
         + (* (terms-v) + power *)
           move /eqP : H0 => H0.
-          assert ((terms_value (PVM.add a new_val initial_valuation) (rhs_terms1 x) (rhs_const1 x)) - (Z.of_nat new_val)
-            <= (terms_value v (rhs_terms1 x) (rhs_const1 x)) - (Z.of_nat val))%Z.
-          { assert (Hgood_terms : good_terms (rhs_terms1 x)) by (apply Hterms; done). 
-            rewrite /good_terms in Hgood_terms; move : Hgood_terms => [Hcoe Hnodup].
-            assert (exists coe, rhs_terms1 x = [(coe,a)]).
-            { clear Hunsat. destruct (rhs_terms1 x) as [|(c, var) tl] eqn : Hrhs; [contradiction |].
+          assert (Hgood_terms : good_terms (rhs_terms1 x)) by (apply Hterms; done).
+          rewrite /good_terms in Hgood_terms; move : Hgood_terms => [Hcoe Hnodup].
+          assert (exists coe, rhs_terms1 x = [(coe,a)]).
+          { destruct (rhs_terms1 x) as [|(c, var) tl] eqn : Hrhs; [contradiction |].
               clear H0. simpl in Hnodup. destruct (List.split tl) as [left right] eqn : Hsplit.
               simpl in Hnodup.
               assert (List.In var [a]) as Heq.
@@ -2871,23 +3183,47 @@ Proof.
                 inversion Hsplit. rewrite -H4 in Hnodup. move : Hnodup; clear; intros.
                 apply NoDup_cons_iff in Hnodup. move : Hnodup => [Hnodup _].
                 intuition. }
-            destruct H1 as [coe Hterm]. clear H0 Hnodup.
-            rewrite Hterm; simpl. rewrite Hmem find_add_eq.
-            assert (coe <> 0) by (apply Hcoe with (var := a); rewrite Hterm; apply in_eq).
-            move : H0 Hgeq; clear.
-            { intros Hcoe Hle.
-              rewrite <- Z.add_sub_assoc, <- Z.add_sub_assoc.
-              apply Z.add_le_mono_l.
-              rewrite Nat2Z.inj_mul; rewrite Nat2Z.inj_mul.
-              rewrite -{2}(Z.mul_1_l (Z.of_nat new_val)).
-              rewrite -{2}(Z.mul_1_l (Z.of_nat val)).
-              rewrite -Z.mul_sub_distr_r; rewrite -Z.mul_sub_distr_r.
-              assert (Hcoeff_nonneg : ((Z.of_nat coe - 1) >= 0)%Z) by
-                (destruct coe; [contradiction|]; lia).  
-              apply Zmult_le_compat_l; [|lia].
-              apply Nat2Z.inj_le. apply (elimT leP). done. }}
-          apply Zlt_left_lt in Hunsat. apply (Z.lt_le_trans _ _ _ Hunsat) in H1.
-          rewrite -Z.add_opp_r in H1. apply Zlt_left_rev in H1; done.
+          destruct H1 as [coe Hterm]. clear H0 Hnodup.
+          assert (coe <> 0) by (apply Hcoe with (var := a); rewrite Hterm; apply in_eq).
+          assert (((Z.of_nat (coe * new_val) + rhs_const1 x) - Z.of_nat new_val
+            <= (Z.of_nat (coe * val) + rhs_const1 x) - Z.of_nat val)%Z) as H1.
+          { move : H0 Hgeq; clear.
+            intros Hcoe Hle.
+            rewrite !Nat2Z.inj_mul.
+            replace (Z.of_nat coe * Z.of_nat new_val + rhs_const1 x -
+              Z.of_nat new_val)%Z with
+              ((Z.of_nat coe - 1) * Z.of_nat new_val + rhs_const1 x)%Z by ring.
+            replace (Z.of_nat coe * Z.of_nat val + rhs_const1 x -
+              Z.of_nat val)%Z with
+              ((Z.of_nat coe - 1) * Z.of_nat val + rhs_const1 x)%Z by ring.
+            assert (Hcoe_pos : Nat.le 1 coe).
+            { destruct coe as [|coe'].
+              - exfalso. apply Hcoe. reflexivity.
+              - apply le_n_S. apply Nat.le_0_l. }
+            apply Nat2Z.inj_le in Hcoe_pos. simpl in Hcoe_pos.
+            assert (Hcoeff_nonneg : (0 <= Z.of_nat coe - 1)%Z) by lia.
+            apply Z.add_le_mono_r.
+            apply Z.mul_le_mono_nonneg_l; [exact Hcoeff_nonneg|].
+            apply Nat2Z.inj_le. apply (elimT leP). exact Hle. }
+          unfold rhs_value1 in Hrhs_v.
+          rewrite Hterm Hpowerx in Hrhs_v.
+          simpl in Hrhs_v.
+          rewrite Hmem in Hrhs_v.
+          simpl in Hrhs_v.
+          inversion Hrhs_v; subst rhs_v.
+          rewrite /rhs_value1 Hterm Hpowerx in Hunsat.
+          simpl in Hunsat.
+          rewrite find_add_eq in Hunsat. simpl in Hunsat.
+          apply Z.leb_gt in Hunsat.
+          apply Zlt_left_lt in Hunsat.
+          ring_simplify in Hunsat. ring_simplify in H1.
+          replace (Z.of_nat (coe * new_val) + rhs_const1 x -
+            Z.of_nat new_val)%Z with
+            (rhs_const1 x + Z.of_nat (coe * new_val) -
+            Z.of_nat new_val)%Z in H1 by ring.
+          have Hfinal := Z.lt_le_trans _ _ _ Hunsat H1.
+          rewrite -Z.add_opp_r in Hfinal. apply Zlt_left_rev in Hfinal.
+          rewrite Z.add_0_r. apply Z.leb_gt. exact Hfinal.
         rewrite Hpowerx in H0. discriminate. } 
     * specialize (leqVgt new_val val); intros. rewrite Hgeq in H. rewrite orb_false_l in H. clear Hgeq.
       rewrite Heqnew_val in H. 
@@ -2898,14 +3234,14 @@ Proof.
       move : Hin => [Hin Hcs]. move /andP : Hcs => [Hterm Hpower]. move /eqP : Hterm => Hterm; move /eqP : Hpower => Hpower.
       exists x; split; try done. 
       rewrite /satisfies_constraint1. apply Hlhs in Hin. rewrite Hin Hmem.
-      apply Z.leb_gt. rewrite /rhs_value1 Hterm Hpower. simpl. rewrite Z.add_0_r.
-      rewrite Hcst //. 
+      rewrite /rhs_value1 Hterm Hpower. simpl. rewrite Z.add_0_r Hcst.
+      apply Z.leb_gt. exact Hlt.
     * apply not_true_iff_false; apply forallb_neg_neg.
       destruct (destruct_list cs1).
       destruct s as [hd [tl Hcons]]. 2 : done. exists hd. rewrite Hcons. split. simpl; left; done. rewrite /satisfies_constraint1.
       assert (List.In hd cs1) by (rewrite Hcons; simpl; left; done). specialize (Hlhs _ H) as H2. rewrite H2 Hmem //.
   - (* scc *)
-    rewrite -Hhd in Hsolve Hvars_in_hd Hlhs_in_hd Hnodup. clear Htl Hhd Hnotemptyscc l a.
+    rewrite -Hhd in Hsolve Hvars_in_hd Hlhs_in_hd Hnodup Hiscc. clear Htl Hhd Hnotemptyscc l a.
     case His_simple : (is_simple_cycle cs1); rewrite His_simple in Hsolve.
     * (* floyd *)
       move : Hsolve; apply scc_none_unsat.
@@ -2930,29 +3266,22 @@ Proof.
           apply filter_In in Hin; move : Hin => [Hin _]. exists x; split; try done. 
         1,2: intros; apply filter_In in H0; move : H0 => [H0 _]. apply Hterms; done. apply Hpowers; done.
       clear Hsolve. assert (forall v : Valuation, ~ forallb (satisfies_constraint1 v) (List.filter (fun c : Constraint1 => Datatypes.length (rhs_terms1 c) != 0) cs1)).
-      { move : Hubs; apply no_ubs_unsat. apply not_true_iff_false in His_simple. move : His_simple; apply contra_not.
-        unfold is_simple_cycle; intros. remember (fun c : Constraint1 =>
-          match rhs_terms1 c with
-          | [] => true
-          | p :: l =>
-              let (n, _) := p in
-              match n with
-              | 0 => false
-              | n0.+1 => match n0 with
-                        | 0 => match l with
-                                | [] => true
-                                | _ :: _ => false
-                                end
-                        | _.+1 => false
-                        end
-              end
-          end) as f. apply forallb_forall. remember (List.filter
-          (fun c : Constraint1 => Datatypes.length (rhs_terms1 c) != 0) cs1) as cs1'.
-        assert (forall c, List.In c cs1' -> f c = true) by (apply forallb_forall; done). intros. destruct (Datatypes.length (rhs_terms1 x) == 0) eqn : Hcst.
-        + move /eqP : Hcst => Hcst. subst f. move : Hcst; clear; intro. destruct (rhs_terms1 x); try done.
-        + apply H0. rewrite Heqcs1'; apply filter_In; split; try done. remember (Datatypes.length (rhs_terms1 x)) as a. move : Hcst; clear.
-          unfold "!=". intros. rewrite Hcst //.
-        intros. apply constraint1s_vars2constraint1_vars in H. destruct H as [x [Hin0 Hin1]]. apply filter_In in Hin0. move : Hin0.1 var Hin1; apply Hvars_in_hd.
+      { assert (Hsccpre : forall g adj, scc.build_graph (List.filter (fun c : Constraint1 => Datatypes.length (rhs_terms1 c) != 0) cs1) = (g, adj) -> is_scc hd g).
+        { intros g adj Hbg; apply (Hiscc g adj Hbg). }
+        destruct (scc.build_graph (List.filter (fun c : Constraint1 => Datatypes.length (rhs_terms1 c) != 0) cs1)) as [g adj] eqn : Hbg.
+        assert (Hnot_simple_f : is_simple_cycle (List.filter (fun c : Constraint1 => Datatypes.length (rhs_terms1 c) != 0) cs1) = false).
+        { apply not_true_iff_false. apply forallb_neg_neg.
+          apply not_true_iff_false in His_simple. apply forallb_neg_neg in His_simple.
+          destruct His_simple as [x [Hin Hf]]. exists x. split; last done.
+          apply filter_In. split; [done |].
+          destruct (rhs_terms1 x) as [|[coe var] tl] eqn : Hrhs; done. }
+        assert (Hvars_f : forall var : ProdVar.t, List.In var (constraints1_vars (List.filter (fun c : Constraint1 => Datatypes.length (rhs_terms1 c) != 0) cs1)) -> List.In var hd).
+        { move => var Hin.
+          apply constraint1s_vars2constraint1_vars in Hin. destruct Hin as [x [Hin1 Hin2]].
+          apply filter_In in Hin1; apply (Hvars_in_hd x Hin1.1 var Hin2). }
+        assert (Hns : ~ is_simple_cycle (List.filter (fun c : Constraint1 => Datatypes.length (rhs_terms1 c) != 0) cs1)) by (apply not_true_iff_false; exact Hnot_simple_f).
+        assert (Hscc_g : is_scc hd g) by exact (Hsccpre g adj (@Logic.eq_refl (G * Adj)%type (g, adj))).
+        move : Hubs; apply (no_ubs_unsat (List.filter (fun c : Constraint1 => Datatypes.length (rhs_terms1 c) != 0) cs1) hd Hns Hvars_f g adj Hbg Hscc_g); try done.
         intros; apply Hpowers. 2 : intros; apply Hterms. 1,2 : apply filter_In in H; exact H.1. }
       move : H; clear; intros. apply not_true_iff_false. apply forallb_neg_neg. specialize (H v). apply forallb_neg_neg in H.
       destruct H as [y [Hin Hunsat]]; exists y; split; try done. apply filter_In in Hin. exact Hin.1.
@@ -2974,7 +3303,7 @@ Lemma remove_solved_correctness initial nv new_values : forall terms cst new_ter
   (forall (var : ProdVar.t) (value0 : nat), PVM.find var initial = Some value0 -> PVM.find var new_values = Some value0) ->
   (forall (var : ProdVar.t) (value0 : nat), PVM.find var nv = Some value0 -> PVM.find var new_values = Some value0) ->
   (forall (var : ProdVar.t), PVM.find var initial = None -> PVM.find var nv = None -> PVM.find var new_values = None) ->
-  terms_value new_values terms cst = terms_value nv new_terms (cst + new_cst).
+  terms_value new_values terms (Some cst) = terms_value nv new_terms (Some (cst + new_cst)%Z).
 Proof.
   intros. move : terms cst new_terms new_cst H; elim. 
   - simpl; intros. inversion H; simpl. rewrite Z.add_0_r //.
@@ -2986,14 +3315,16 @@ Proof.
       rewrite (IH _ new_terms new_cst_tl); try done.
       rewrite (Z.add_comm new_cst_tl (Z.of_nat (coe * val))) Z.add_assoc //.
     * (* find none *)
-      simpl. destruct (remove_solved initial tl) as [new_terms_tl new_cst_tl] eqn : Hnew_tl.
-      inversion H; clear H; subst. simpl.
-      rewrite terms_value_cst_add. rewrite terms_value_cst_add.
+      simpl. destruct (remove_solved initial tl) as [new_terms_tl new_cst_tl] eqn : Hnew_tl2.
+      inversion H; clear H. simpl.
       case Hfind' : (PVM.find (elt:=nat) var nv) => [val|].
-      + apply H1 in Hfind'. rewrite Hfind'. 
-        apply Z.add_cancel_r. apply IH; try done.
-      + specialize (H2 _ Hfind Hfind'). rewrite H2 muln0. simpl. rewrite Z.add_0_r Z.add_0_r.
-        apply IH; try done.
+      + apply H1 in Hfind'. rewrite Hfind'.
+        rewrite <- H5.
+        replace (cst + new_cst_tl + Z.of_nat (coe * val))%Z with
+          (cst + Z.of_nat (coe * val) + new_cst_tl)%Z by ring.
+        rewrite (@IH (cst + Z.of_nat (coe * val))%Z new_terms_tl new_cst_tl Logic.eq_refl).
+        reflexivity.
+      + specialize (H2 _ Hfind Hfind'). rewrite H2. reflexivity.
 Qed.
 
 Lemma remove_solved_c_correctness nv initial new_values x : 
@@ -3005,7 +3336,12 @@ Lemma remove_solved_c_correctness nv initial new_values x :
 Proof.
   intros; rewrite /remove_solved_c.
   destruct (remove_solved initial (rhs_terms1 x)) as [new_terms new_cst] eqn : Hnew. 
-  - rewrite H. rewrite /rhs_value1 H; simpl. rewrite Z.add_0_r Z.add_0_r. move : Hnew H0 H1 H2; apply remove_solved_correctness. 
+  - rewrite H. rewrite /rhs_value1 H; simpl.
+    assert (Hterms : terms_value new_values (rhs_terms1 x) (Some (rhs_const1 x)) =
+      terms_value nv new_terms (Some (rhs_const1 x + new_cst)%Z)).
+    { exact (remove_solved_correctness initial nv new_values
+        (rhs_terms1 x) (rhs_const1 x) new_terms new_cst Hnew H0 H1 H2). }
+    rewrite Hterms. reflexivity.
 Qed.
 
 Lemma remove_solved_c_sat nv initial new_values : forall x, rhs_power x = nil ->
@@ -3021,26 +3357,96 @@ Proof.
   rewrite H1 in H0. clear H1. 
   case Hfind1 : (PVM.find (elt:=nat) (lhs_var1 x) nv) => [val|]; rewrite Hfind1 in H0; try discriminate.
   apply Hfind_nv in Hfind1. rewrite Hfind1.
-  apply Zle_imp_le_bool. apply Zle_bool_imp_le in H0.
   rewrite -(remove_solved_c_correctness _ _ new_values) in H0; try done.
 Qed.
 
-Lemma remove_solved_smallest initial nv : forall terms cst new_terms new_cst, le initial nv ->
-  remove_solved initial terms = (new_terms, new_cst) -> (terms_value nv new_terms (cst + new_cst) <= terms_value nv terms cst)%Z.
+Lemma terms_value_shift v terms cst delta :
+  terms_value v terms (Some (cst + delta)%Z) =
+  match terms_value v terms (Some cst) with
+  | Some result => Some (result + delta)%Z
+  | None => None
+  end.
 Proof.
-  elim. simpl; intros. inversion H0; simpl. lia. 
-  simpl; intros [coe var]; intros; simpl. destruct (remove_solved initial l) as [terms' cst'] eqn : Htl.
-  case Hinit : (PVM.find (elt:=nat) var initial) => [val|]; rewrite Hinit in H1.
-  - inversion H1; clear H1 H4 new_cst. rewrite -H3; clear H3 new_terms. rewrite /smaller_valuation in H0. 
-    rewrite /le in H0. destruct (H0 _ _ Hinit) as [value1 [Hfind1 Hle]].
-    rewrite Hfind1. rewrite Z.add_assoc.
-    rewrite terms_value_cst_add. rewrite (terms_value_cst_add _ _ cst (Z.of_nat (coe * value1))). apply Z.add_le_mono.
-    apply H; try done. apply inj_le. apply (elimT leP). apply leq_mul; try done.
-  - inversion H1. clear H1 H3 new_terms. rewrite -H4; clear H4 new_cst. simpl. rewrite terms_value_cst_add. 
-    rewrite (terms_value_cst_add _ _ cst (Z.of_nat (coe * match PVM.find (elt:=nat) var nv with
-      | Some val => val
-      | None => 0
-      end))). apply Zplus_le_compat_r. apply H; try done.
+  revert cst. induction terms as [|[coe var] tl IH]; intros cst; simpl; first reflexivity.
+  destruct (PVM.find var v) as [value|] eqn:Hfind; [|reflexivity].
+  replace (cst + delta + Z.of_nat (coe * value))%Z with
+    (cst + Z.of_nat (coe * value) + delta)%Z by ring.
+  rewrite (IH (cst + Z.of_nat (coe * value))%Z).
+  reflexivity.
+Qed.
+
+Lemma terms_value_success_mem v terms init result :
+  terms_value v terms (Some init) = Some result ->
+  forall var, List.In var (List.map snd terms) -> PVM.mem var v.
+Proof.
+  revert init result.
+  induction terms as [|[coe hd] tl IH]; intros init result Hvalue var Hin; simpl in *.
+  - contradiction.
+  - destruct (PVM.find hd v) as [value|] eqn:Hfind; try discriminate.
+    destruct Hin as [Heq|Hin].
+    + subst var. apply find_mem. eexists. exact Hfind.
+    + exact (IH (init + Z.of_nat (coe * value))%Z result Hvalue var Hin).
+Qed.
+
+Lemma remove_solved_terms_in initial : forall terms new_terms new_cst,
+  remove_solved initial terms = (new_terms, new_cst) ->
+  forall var, List.In var (List.map snd new_terms) ->
+    List.In var (List.map snd terms).
+Proof.
+  induction terms as [|[coe hd] tl IH]; intros new_terms new_cst Hremove var Hin.
+  - simpl in Hremove. inversion Hremove; subst. contradiction.
+  - simpl in Hremove. destruct (PVM.find hd initial) as [value|] eqn:Hfind;
+      destruct (remove_solved initial tl) as [terms' cst'] eqn:Htl;
+      inversion Hremove; subst new_terms new_cst; simpl in Hin.
+    + right. eapply IH; eauto.
+    + destruct Hin as [Heq|Hin].
+      * left. exact Heq.
+      * right. eapply IH; eauto.
+Qed.
+
+Lemma remove_solved_smallest initial nv : forall terms cst new_terms new_cst, le initial nv ->
+  remove_solved initial terms = (new_terms, new_cst) ->
+  forall x y, terms_value nv new_terms (Some (cst + new_cst)%Z) = Some x ->
+    terms_value nv terms (Some cst) = Some y -> (x <= y)%Z.
+Proof.
+  induction terms as [|[coe var] tl IH]; intros cst new_terms new_cst Hle Hremove x y Hnew Horig.
+  - simpl in Hremove. inversion Hremove; subst. simpl in Hnew, Horig. inversion Hnew; inversion Horig; subst; lia.
+  - simpl in Hremove. destruct (remove_solved initial tl) as [terms' cst'] eqn:Htl.
+    destruct (PVM.find var initial) as [value|] eqn:Hinit.
+    + inversion Hremove; subst new_terms new_cst.
+      rewrite /le in Hle. destruct (Hle var value Hinit) as [value1 [Hfind1 Hvalue]].
+      simpl in Horig. rewrite Hfind1 in Horig.
+      simpl in Hnew.
+      rewrite Z.add_assoc in Hnew.
+      destruct (terms_value nv terms' (Some (cst + cst')%Z)) as [base_new|] eqn:Hbase_new.
+      * rewrite terms_value_shift in Hnew. rewrite Hbase_new in Hnew. simpl in Hnew.
+        destruct (terms_value nv tl (Some cst)) as [base_orig|] eqn:Hbase_orig.
+        -- simpl in Horig. rewrite terms_value_shift in Horig.
+           rewrite Hbase_orig in Horig. simpl in Horig.
+           inversion Hnew; inversion Horig; subst.
+           assert (Htail := IH cst terms' cst' Hle Logic.eq_refl
+             base_new base_orig Hbase_new Hbase_orig).
+           apply Z.add_le_mono.
+           ++ exact Htail.
+           ++ apply Nat2Z.inj_le. apply (elimT leP).
+              apply leq_mul; try done.
+        -- rewrite terms_value_shift in Horig. rewrite Hbase_orig in Horig.
+           simpl in Horig. congruence.
+      * rewrite terms_value_shift in Hnew. rewrite Hbase_new in Hnew. congruence.
+    + inversion Hremove; subst new_terms new_cst.
+      simpl in Hnew, Horig.
+      destruct (PVM.find var nv) as [value|] eqn:Hfind.
+      * simpl in Hnew, Horig.
+        destruct (terms_value nv terms' (Some (cst + cst' + Z.of_nat (coe * value))%Z))
+          as [new_result|] eqn:Hnew_tail; try discriminate.
+        destruct (terms_value nv tl (Some (cst + Z.of_nat (coe * value))%Z))
+          as [orig_result|] eqn:Horig_tail; try discriminate.
+        replace (cst + cst' + Z.of_nat (coe * value))%Z with
+          (cst + Z.of_nat (coe * value) + cst')%Z in Hnew_tail by ring.
+        have Htail := IH (cst + Z.of_nat (coe * value))%Z terms' cst'
+          Hle Logic.eq_refl new_result orig_result Hnew_tail Horig_tail.
+        inversion Hnew; inversion Horig; subst; exact Htail.
+      * simpl in Hnew, Horig. discriminate.
 Qed.
 
 Lemma remove_solved_c_sat' nv initial : forall x, le initial nv -> rhs_power x = nil ->
@@ -3052,12 +3458,26 @@ Proof.
     intros [coe var] l. case : (PVM.find (elt:=nat) var initial); simpl; try done. }
   rewrite H1; clear H1. 
   case Hfind1 : (PVM.find (elt:=nat) (lhs_var1 x) nv) => [val|]; rewrite Hfind1 in H0; try discriminate.
-  apply Zle_imp_le_bool. apply Zle_bool_imp_le in H0.
-  assert (rhs_value1 nv (remove_solved_c initial x) <= rhs_value1 nv x)%Z.
-  { rewrite /rhs_value1. rewrite /remove_solved_c. destruct (remove_solved initial (rhs_terms1 x)) as [new_terms new_cst] eqn: Hnew. simpl.
-    rewrite Hgood_power; simpl. rewrite Z.add_0_r. rewrite Z.add_0_r. move : Hnew; apply remove_solved_smallest; try done.
-  }
-  move : H1 H0; apply Z.le_trans.
+  case Hrhs : (rhs_value1 nv x) => [rhs|] in H0; [|discriminate].
+  apply Zle_bool_imp_le in H0.
+  unfold rhs_value1 in Hrhs. rewrite Hgood_power in Hrhs. simpl in Hrhs.
+  destruct (terms_value nv (rhs_terms1 x) (Some (rhs_const1 x))) as [linear|] eqn:Hlinear;
+    try discriminate.
+  inversion Hrhs; subst rhs. rewrite Z.add_0_r in H0.
+  rewrite /rhs_value1 /remove_solved_c.
+  destruct (remove_solved initial (rhs_terms1 x)) as [new_terms new_cst] eqn:Hremove.
+  rewrite Hgood_power. simpl.
+  assert (Hvars_orig : forall var, List.In var (List.map snd (rhs_terms1 x)) -> PVM.mem var nv).
+  { intros var Hin. eapply terms_value_success_mem; eauto. }
+  assert (Hvars_new : forall var, List.In var (List.map snd new_terms) -> PVM.mem var nv).
+  { intros var Hin. apply Hvars_orig.
+    apply (remove_solved_terms_in _ _ _ _ Hremove var Hin). }
+  destruct (terms_value_some nv new_terms (rhs_const1 x + new_cst)%Z Hvars_new)
+    as [small Hsmall].
+  rewrite Hsmall Z.add_0_r. apply Zle_imp_le_bool.
+  apply Z.le_trans with (m := linear); [|exact H0].
+  exact (remove_solved_smallest initial nv (rhs_terms1 x) (rhs_const1 x)
+    new_terms new_cst H Hremove small linear Hsmall Hlinear).
 Qed.
 
 Definition le_bool (v0 v1 : Valuation) : bool :=
@@ -3093,12 +3513,30 @@ Proof.
     intros [coe var] l. case : (PVM.find (elt:=nat) var initial); simpl; try done. }
   rewrite H0 in H; clear H0. 
   case Hfind1 : (PVM.find (elt:=nat) (lhs_var1 x) nv) => [val|]; rewrite Hfind1 in H; try done.
-  apply Z.leb_gt. apply Z.leb_gt in H. 
-  assert (rhs_value1 nv (remove_solved_c initial x) <= rhs_value1 nv x)%Z. apply le_le_bool in Hle.
-  { rewrite /rhs_value1. rewrite /remove_solved_c. destruct (remove_solved initial (rhs_terms1 x)) as [new_terms new_cst] eqn: Hnew. simpl.
-    rewrite Hgood_power; simpl. rewrite Z.add_0_r. rewrite Z.add_0_r. move : Hnew; apply remove_solved_smallest; try done.
-  }
-  move : H H0; apply Z.lt_le_trans.
+  case Hrhs : (rhs_value1 nv x); [|reflexivity].
+  unfold rhs_value1 in Hrhs. rewrite Hgood_power in Hrhs. simpl in Hrhs.
+  destruct (terms_value nv (rhs_terms1 x) (Some (rhs_const1 x))) as [linear|] eqn:Hlinear;
+    try discriminate.
+  inversion Hrhs; subst.
+  apply le_le_bool in Hle.
+  unfold rhs_value1, remove_solved_c in H.
+  destruct (remove_solved initial (rhs_terms1 x)) as [new_terms new_cst] eqn:Hremove.
+  rewrite Hgood_power in H. simpl in H.
+  assert (Hvars_orig : forall var, List.In var (List.map snd (rhs_terms1 x)) -> PVM.mem var nv).
+  { intros var Hin. eapply terms_value_success_mem; eauto. }
+  assert (Hvars_new : forall var, List.In var (List.map snd new_terms) -> PVM.mem var nv).
+  { intros var Hin. apply Hvars_orig.
+    apply (remove_solved_terms_in _ _ _ _ Hremove var Hin). }
+  destruct (terms_value_some nv new_terms (rhs_const1 x + new_cst)%Z Hvars_new)
+    as [small Hsmall].
+  rewrite Hsmall Z.add_0_r in H.
+  apply Z.leb_gt in H.
+  have Hsmall_le_linear := remove_solved_smallest initial nv
+    (rhs_terms1 x) (rhs_const1 x) new_terms new_cst Hle Hremove
+    small linear Hsmall Hlinear.
+  apply Z.leb_gt.
+  rewrite Z.add_0_r.
+  eapply Z.lt_le_trans; eauto.
 Qed.
 
 Lemma merge_solution_find_notin nv : forall tbsolved v initial new_values, ~List.In v tbsolved -> 
@@ -3151,12 +3589,9 @@ Qed.
 
 Lemma solve_simple_cycle_mem_in cs : forall ls nv, solve_simple_cycle ls cs = Some nv -> forall var, PVM.mem var nv -> List.In var ls.
 Proof.
-  intros. unfold solve_simple_cycle in H. destruct (forallb
-    (fun c : ProdVar.t =>
-    match get_weight c (Node c) (floyd_loop_map ls cs) with
-    | Some w => (w =? 0)%Z
-    | None => false
-    end) ls); try discriminate. assert (forall (ls : seq ProdVar.t) (nv v : Valuation) m,
+  intros. unfold solve_simple_cycle in H.
+  move: H; case (negcycb ls (floyd_loop_map' ls cs) true) => [H|H]; try discriminate.
+  assert (forall (ls : seq ProdVar.t) (nv v : Valuation) m,
     save_longest_dist ls m v = Some nv ->
     forall var : PVM.key, PVM.mem (elt:=nat) var nv -> List.In var ls \/ PVM.mem var v). clear. elim. 
   - simpl; intros. inversion H. right; done.
@@ -3247,6 +3682,8 @@ Proof.
 Qed.
 
 Definition tarjan_correctness (initial : Valuation) (scc_list : list (list ProdVar.t)) (c1map : PVM.t (list Constraint1)) : Prop :=
+  (forall nv hd cs1 (c : Constraint1), List.In c cs1 -> dominates_at c nv (floyd_loop_map' hd cs1)) /\
+  (forall val scc g adj, List.In scc scc_list -> scc.build_graph (List.filter (fun c : Constraint1 => Datatypes.length (rhs_terms1 c) != 0) (List.map (remove_solved_c val) (extract_cs scc c1map))) = (g, adj) -> is_scc scc g) /\
   (forall (scc : list ProdVar.t), List.In scc scc_list -> scc <> []) /\
   (NoDup (concat scc_list)) /\ (forall (var : ProdVar.t), PVM.mem var initial -> ~List.In var (concat scc_list)) /\
   (forall (l1 l2 : list (list ProdVar.t)) (scc : list ProdVar.t), l1 ++ scc :: l2 = scc_list ->
@@ -3279,13 +3716,19 @@ Lemma solve_alg_correctness : forall scclist c1map cs2,
   -> match solve_alg_check scclist c1map cs2 with
     | Some solution => forallb (satisfies_constraint1 solution) 
                                   (extract_cs (concat scclist) c1map) 
-                    /\ forallb (fun c => Z.leb (min_rhs_value solution c) 1%Z) cs2
+                    /\ forallb (fun c => match min_rhs_value solution c with
+                      | Some x => Z.leb x 1%Z
+                      | None => false
+                      end) cs2
     | None => true
     end.
 Proof.
   intros; rewrite /solve_alg_check.
   case Hsolve : (solve_alg scclist initial_valuation c1map) => [value|]; try done.
-  destruct (forallb (fun c => Z.leb (min_rhs_value value c) 1%Z) cs2) eqn : Hcs2; try done.
+  destruct (forallb (fun c => match min_rhs_value value c with
+    | Some x => Z.leb x 1%Z
+    | None => false
+    end) cs2) eqn : Hcs2; try done.
   split; try done; clear Hcs2 cs2.
   move : scclist H H0 value Hsolve.
   assert (Hhelper : forall scclist initial,
@@ -3310,16 +3753,16 @@ Proof.
     { intros; generalize H0. apply (solve_alg_nodup_solved_eq _ _ _ _ _ _ Hsolve). 
       assert (exists val, PVM.find (elt:=nat) var new_values = Some val) by (exists value0; done). apply find_mem in H1.
       apply (merge_solution_mem_or _ _ _ _ Hmerge) in H1. move : Htarjan H1; clear; intros.
-      unfold tarjan_correctness in Htarjan. move : Htarjan => [_ [H [H0 _]]]. destruct H1.
+      unfold tarjan_correctness in Htarjan. move : Htarjan => [_ [_ [_ [H [H0 _]]]]]. destruct H1.
       - simpl in H. apply (NoDup_app_notin_r _ _ H) in H1. done.
       - apply H0 in H1. move : H1; apply contra_not. simpl; intro. apply in_or_app; right; done. }
     assert (forall var, List.In var (rhs_vars x) -> PVM.mem var new_values).
-    { move : Hx Hmerge Htarjan; clear; intros. apply (merge_solution_mem_or _ _ _ _ Hmerge). unfold tarjan_correctness in Htarjan. move : Htarjan => [_ [_ [_ H0]]].
+    { move : Hx Hmerge Htarjan; clear; intros. apply (merge_solution_mem_or _ _ _ _ Hmerge). unfold tarjan_correctness in Htarjan. move : Htarjan => [_ [_ [_ [_ [_ H0]]]]].
       specialize (H0 nil l a); simpl in H0. apply H0. done. apply (constraint1_vars2constraints1_vars _ Hx). unfold constraint1_vars. simpl; right. unfold rhs_vars in H; done. }
     move : H0 H H1; clear.
     { unfold satisfies_constraint1; intros.
       case Hfind0 : (PVM.find (lhs_var1 x) new_values) => [val|]; rewrite Hfind0 in H; try discriminate.
-      apply H0 in Hfind0; rewrite Hfind0. apply Zle_bool_imp_le in H. apply Zle_imp_le_bool.
+      apply H0 in Hfind0; rewrite Hfind0.
       rewrite -(rhs_value1_eq _ new_values value); try done.
       intros. apply H1 in H2; clear H1. apply find_mem in H2. destruct H2 as [val0 H2]. rewrite H2.
       apply H0 in H2. rewrite H2 //. }
@@ -3327,17 +3770,17 @@ Proof.
     destruct (Hextract v) as [cs' [Hfind' [_ [_ Hgood]]]]. simpl; apply in_or_app; left; done. rewrite Hfind in Hfind'; inversion Hfind'; clear Hfind'; subst cs'.
     apply Hgood in Hincs; exact Hincs.2.
     intros; apply (merge_solution_find_notin _ _ var) in Hmerge. rewrite -Hmerge //. assert (exists val, PVM.find (elt:=nat) var initial = Some val) by (exists value0; done). apply find_mem in H1.
-      unfold tarjan_correctness in Htarjan. move : Htarjan => [_ [_ [Htarjan _]]]. apply Htarjan in H1. move: H1; apply contra_not. intros; apply in_or_app; left; done.
+      unfold tarjan_correctness in Htarjan. move : Htarjan => [_ [_ [_ [_ [Htarjan _]]]]]. apply Htarjan in H1. move: H1; apply contra_not. intros; apply in_or_app; left; done.
     intros; apply merge_solution_find_in with (var := var) in Hmerge. destruct Hmerge as [value0' [H1 H2]]. rewrite H1 in H0; rewrite H2 //.
-    unfold tarjan_correctness in Htarjan. move : Htarjan => [_ [Hnodup _]]. simpl in Hnodup. apply NoDup_app_remove_r in Hnodup; done.
+    unfold tarjan_correctness in Htarjan. move : Htarjan => [_ [_ [_ [Hnodup _]]]]. simpl in Hnodup. apply NoDup_app_remove_r in Hnodup; done.
     apply (solve_scc_mem_in _ _ _ Hnv). apply find_mem. exists value0; done.
     intro; apply (merge_solution_find_none _ _ _ _ Hmerge).
-    unfold tarjan_correctness in Htarjan; move : Htarjan => [Htarjan _]. apply Htarjan. simpl; left; done.
+    unfold tarjan_correctness in Htarjan; move : Htarjan => [_ [_ [Htarjan _]]]. apply Htarjan. simpl; left; done.
     unfold extract_correctness in Hextract. intros. apply in_map_iff in H0; destruct H0 as [c0 [Hremove Hin]]; subst c. 
       apply extract_cs_exist_c in Hin. destruct Hin as [v [Hina [cs [Hfind Hincs]]]]. destruct (Hextract v) as [cs' [Hfind' [_ [_ Hgood]]]]. simpl; apply in_or_app; left; done. rewrite Hfind in Hfind'; inversion Hfind'; clear Hfind'; subst cs'.
       apply Hgood in Hincs; move : Hincs => [_ Hincs]. move : Hincs; clear; unfold remove_solved_c. intro; rewrite Hincs. destruct (remove_solved initial (rhs_terms1 c0)); simpl; done.
     move : Htarjan Hextract; clear; intros. apply in_map_iff in H. destruct H as [c' [Hremove Hin]]. 
-      unfold tarjan_correctness in Htarjan. move : Htarjan => [_ [_ [Hinit Htarjan]]]. assert ([] ++ a :: l = a :: l) by (simpl; done).
+      unfold tarjan_correctness in Htarjan. move : Htarjan => [_ [_ [_ [_ [Hinit Htarjan]]]]]. assert ([] ++ a :: l = a :: l) by (simpl; done).
       specialize (Htarjan _ _ _ H); clear H. subst c. apply remove_solved_c_vars in H0. move : H0 => [H0 H]. apply (constraint1_vars2constraints1_vars _ Hin) in H0.
       apply Htarjan in H0; clear Htarjan. destruct H0; try done.
     1,2 : unfold extract_correctness in Hextract; apply extract_cs_exist_c in Hin; destruct Hin as [var [Hina [cs [Hfind Hincs]]]];
@@ -3349,7 +3792,10 @@ Proof.
     move : x H. apply forallb_forall. move : Hsolve; apply IH.
     (* tarjan start *) move : Hmerge Htarjan; clear; intros.
     unfold tarjan_correctness in *.
-    move : Htarjan => [Hnotempty [Hnodup [Hinitial Hsolved]]]. split. intros; apply Hnotempty; intuition.
+    move : Htarjan => [Hdominate [Hiscc0 [Hnotempty [Hnodup [Hinitial Hsolved]]]]].
+    split. intros. apply Hdominate; done.
+    split. intros val scc g adj Hin Hbg; apply (Hiscc0 val scc g adj); [right; exact Hin | exact Hbg].
+    split. intros; apply Hnotempty; intuition.
     split. simpl in Hnodup. apply NoDup_app_remove_l in Hnodup; done.
     split. intros. apply (merge_solution_mem_or _ _ _ _ Hmerge) in H. destruct H. simpl in Hnodup; apply NoDup_app_notin_r with (var := var) in Hnodup; try done.
       apply Hinitial in H. move : H; apply contra_not. intros; simpl; apply in_or_app; right; done.
@@ -3394,30 +3840,90 @@ Proof.
   1,2,3 : move : Hremove; apply remove_solved_good_terms; done.
 Qed.
 
+Lemma extract_cs_in_remove_solved x a c1map cs initial :
+  List.In x a ->
+  PVM.find (elt := seq Constraint1) x c1map = Some cs ->
+  cs <> [] ->
+  forallb (fun c : Constraint1 => lhs_var1 c == x) cs ->
+  List.In x
+    (constraints1_vars
+       (List.map (remove_solved_c initial)
+          (extract_cs a c1map))).
+Proof.
+  move=> Hxa Hfind Hne Hlhs.
+  have Hextract : forall c, List.In c cs -> List.In c (extract_cs a c1map).
+  { move: a Hxa; elim=> [|hd tl IH] Hxa.
+    - done.
+    - intros c Hc. case Heq : (hd == x).
+      + move/eqP : Heq => Heq. subst hd.
+        simpl. rewrite Hfind. apply in_or_app. left. exact Hc.
+      + have Htail : List.In x tl.
+        { move/eqP : Heq => Heq. destruct Hxa as [Hxa|Hxa].
+          - exfalso. apply Heq. exact Hxa.
+          - exact Hxa. }
+        simpl. case Hhd : (PVM.find hd c1map).
+        * apply in_or_app. right. apply IH; done.
+        * apply IH; done. }
+  destruct cs as [|c cs'].
+  - contradiction.
+  - have Hcin : List.In c (extract_cs a c1map).
+    { apply Hextract. left. done. }
+    have Hlhs_c : lhs_var1 c = x.
+    { apply/eqP.
+      apply ((proj1 (forallb_forall (fun c : Constraint1 => lhs_var1 c == x) (c :: cs'))) Hlhs c).
+      left. done. }
+    have Hmap : List.In (remove_solved_c initial c)
+        (List.map (remove_solved_c initial) (extract_cs a c1map)).
+    { apply in_map. exact Hcin. }
+    apply (constraint1_vars2constraints1_vars
+      (List.map (remove_solved_c initial) (extract_cs a c1map))
+      (x := remove_solved_c initial c) (var := x)).
+    - exact Hmap.
+    - unfold remove_solved_c.
+    destruct (remove_solved initial (rhs_terms1 c)) as [new_terms new_cst].
+    destruct (rhs_power c) as [|[coe var] p_tl].
+    - simpl. left. exact Hlhs_c.
+    - destruct (PVM.find (elt := nat) var initial) as [val|].
+      + simpl. left. exact Hlhs_c.
+      + simpl. left. exact Hlhs_c.
+Qed.
+
 Lemma solve_alg_smallest : forall scclist c1map cs2, 
     tarjan_correctness initial_valuation scclist c1map 
   -> extract_correctness c1map scclist
   -> match solve_alg_check scclist c1map cs2 with
     | Some solution => forall temp_s, 
         forallb (satisfies_constraint1 temp_s) (extract_cs (concat scclist) c1map) /\
-        forallb (fun c => Z.leb (min_rhs_value temp_s c) 1%Z) cs2 -> le solution temp_s
+        forallb (fun c => match min_rhs_value temp_s c with
+          | Some x => Z.leb x 1%Z
+          | None => false
+          end) cs2 -> le solution temp_s
     | None => true
     end.
 Proof.
   intros; rewrite /solve_alg_check.
   case Hsolve : (solve_alg scclist initial_valuation c1map) => [value|]; try done.
-  destruct (forallb (fun c => Z.leb (min_rhs_value value c) 1%Z) cs2) eqn : Hcs2; try done.
+  destruct (forallb (fun c => match min_rhs_value value c with
+    | Some x => Z.leb x 1%Z
+    | None => false
+    end) cs2) eqn : Hcs2; try done.
   move : scclist H H0 value Hsolve Hcs2.
   assert (Hhelper : forall (scclist : list (list ProdVar.t)) initial,
     tarjan_correctness initial scclist c1map ->
     extract_correctness c1map scclist ->
     forall value : Valuation,
     solve_alg scclist initial c1map = Some value ->
-    forallb (fun c => Z.leb (min_rhs_value value c) 1%Z) cs2 = true ->
+    forallb (fun c => match min_rhs_value value c with
+      | Some x => Z.leb x 1%Z
+      | None => false
+      end) cs2 = true ->
     forall temp_s : Valuation,
     forallb (satisfies_constraint1 temp_s)
       (extract_cs (concat scclist) c1map) /\
-    forallb (fun c => Z.leb (min_rhs_value temp_s c) 1%Z) cs2 -> le initial temp_s ->
+    forallb (fun c => match min_rhs_value temp_s c with
+      | Some x => Z.leb x 1%Z
+      | None => false
+      end) cs2 -> le initial temp_s ->
     le value temp_s).
   elim.
   - simpl; intros.
@@ -3430,7 +3936,10 @@ Proof.
     apply IH with (initial := new_values); try done. 
     (* tarjan start *) move : Hmerge Htarjan; clear; intros.
     unfold tarjan_correctness in *.
-    move : Htarjan => [Hnotempty [Hnodup [Hinitial Hsolved]]]. split. intros; apply Hnotempty; intuition.
+    move : Htarjan => [Hdominate [Hiscc0 [Hnotempty [Hnodup [Hinitial Hsolved]]]]].
+    split. intros; apply Hdominate; done.
+    split. intros val scc g adj Hin Hbg; apply (Hiscc0 val scc g adj); [right; exact Hin | exact Hbg].
+    split. intros; apply Hnotempty; intuition.
     split. simpl in Hnodup. apply NoDup_app_remove_l in Hnodup; done.
     split. intros. apply (merge_solution_mem_or _ _ _ _ Hmerge) in H. destruct H. simpl in Hnodup; apply NoDup_app_notin_r with (var := var) in Hnodup; try done.
       apply Hinitial in H. move : H; apply contra_not. intros; simpl; apply in_or_app; right; done.
@@ -3445,16 +3954,20 @@ Proof.
     { move : Htemp => [Htemp1 Htemp2]. split; try done. move : Htemp1; clear; intros. simpl in Htemp1. apply forallb_forall.
       assert (forall x, List.In x (extract_cs (a ++ concat l)%list c1map) -> satisfies_constraint1 temp_s x) by (apply forallb_forall; done). clear Htemp1.
       intros; apply H. rewrite extract_cs_app. apply in_or_app; right; done. }
-    clear IH Hsolve Hcs2 value. apply solve_scc_smallest with (temp_s := temp_s) in Hscc.
+    clear IH Hsolve Hcs2 value. 
+    apply solve_scc_smallest with (temp_s := temp_s) in Hscc.
     move : Hsmaller Hscc Hmerge; apply merge_smaller. 
-    unfold tarjan_correctness in Htarjan; move : Htarjan => [Htarjan _]. apply Htarjan. simpl; left; done.
-    unfold tarjan_correctness in Htarjan; move : Htarjan => [_ [Hnodup _]]; simpl in Hnodup; apply NoDup_app_remove_r in Hnodup; done.
-    { assert (a <> []) by (unfold tarjan_correctness in Htarjan; move : Htarjan => [Htarjan _]; apply Htarjan; simpl; left; done).
+    unfold tarjan_correctness in Htarjan; move : Htarjan => [_ [_ [Htarjan _]]]. apply Htarjan. simpl; left; done.
+    unfold tarjan_correctness in Htarjan; move : Htarjan => [_ [_ [_ [Hnodup _]]]]; simpl in Hnodup; apply NoDup_app_remove_r in Hnodup; done.
+    { assert (a <> []) by (unfold tarjan_correctness in Htarjan; move : Htarjan => [_ [_ [Htarjan _]]]; apply Htarjan; simpl; left; done).
       apply (extract_cs_not_nil c1map) in H.
       remember (extract_cs a c1map) as cs. move : H; clear. destruct cs; try done.
       intros. unfold extract_correctness in Hextract. destruct (Hextract var) as [cs [Hfind [_ [Hnotnil _]]]]. simpl; apply in_or_app; left; done. exists cs; split; done. }
+    move : Htarjan Hextract; clear; intros. unfold extract_correctness in Hextract. assert (Hin : List.In x (concat (a :: l))). simpl. apply in_or_app; left; done.
+    specialize (Hextract _ Hin). destruct Hextract as [cs [Hfind [Hlhs [Hnot_empty _]]]].
+    apply (extract_cs_in_remove_solved _ _ _ _ _ H Hfind Hnot_empty Hlhs).
     move : Htarjan Hextract; clear; intros. apply in_map_iff in H. destruct H as [c' [Hremove Hin]]. 
-      unfold tarjan_correctness in Htarjan. move : Htarjan => [_ [_ [Hinit Htarjan]]]. assert ([] ++ a :: l = a :: l) by (simpl; done).
+      unfold tarjan_correctness in Htarjan. move : Htarjan => [_ [_ [_ [_ [Hinit Htarjan]]]]]. assert ([] ++ a :: l = a :: l) by (simpl; done).
       specialize (Htarjan _ _ _ H); clear H. subst c. apply remove_solved_c_vars in H0. move : H0 => [H0 H]. apply (constraint1_vars2constraints1_vars _ Hin) in H0.
       apply Htarjan in H0; clear Htarjan. destruct H0; try done.
     1,2 : unfold extract_correctness in Hextract; apply extract_cs_exist_c in Hin; destruct Hin as [var [Hina [cs [Hfind Hincs]]]];
@@ -3525,12 +4038,8 @@ Qed.
 
 Lemma solve_simple_cycle_in_find_some a cs nv : solve_simple_cycle a cs = Some nv -> forall var : ProdVar.t, List.In var a -> exists val : nat, PVM.find (elt:=nat) var nv = Some val.
 Proof.
-  intros. unfold solve_simple_cycle in H. destruct (forallb
-    (fun c : ProdVar.t =>
-    match get_weight c (Node c) (floyd_loop_map a cs) with
-    | Some w => (w =? 0)%Z
-    | None => false
-    end) a); try discriminate. assert (forall (ls : seq ProdVar.t) (nv v : Valuation) m,
+  intros. unfold solve_simple_cycle in H.
+  move: H; case (negcycb a (floyd_loop_map' a cs) true) => [H|H]; try discriminate. assert (forall (ls : seq ProdVar.t) (nv v : Valuation) m,
     save_longest_dist ls m v = Some nv ->
     forall var, List.In var ls \/ PVM.mem var v -> PVM.mem (elt:=nat) var nv). clear. elim. 
   - simpl; intros. inversion H. rewrite -H2. destruct H0; done.
@@ -3592,7 +4101,10 @@ Proof.
         - apply in_or_app; right. apply in_or_app; right; done. }
       (* tarjan start *) move : Hmerge Htarjan; clear; intros.
       unfold tarjan_correctness in *.
-      move : Htarjan => [Hnotempty [Hnodup [Hinitial Hsolved]]]. split. intros; apply Hnotempty; intuition.
+      move : Htarjan => [Hdominate [Hiscc0 [Hnotempty [Hnodup [Hinitial Hsolved]]]]].
+      split. intros; apply Hdominate; done.
+      split. intros val scc g adj Hin Hbg; apply (Hiscc0 val scc g adj); [right; exact Hin | exact Hbg].
+      split. intros; apply Hnotempty; intuition.
       split. simpl in Hnodup. apply NoDup_app_remove_l in Hnodup; done.
       split. intros. apply (merge_solution_mem_or _ _ _ _ Hmerge) in H. destruct H. simpl in Hnodup; apply NoDup_app_notin_r with (var := var) in Hnodup; try done.
         apply Hinitial in H. move : H; apply contra_not. intros; simpl; apply in_or_app; right; done.
@@ -3605,14 +4117,14 @@ Proof.
       move : Hextract; unfold extract_correctness; clear; intros. apply Hextract. simpl; apply in_or_app; right ;done.
       (* extract end *)
       { move : Hinitial Hscc Hmerge Htarjan Hextract; clear.
-        unfold initial_smallest; intros. assert (H0 : a <> []) by (unfold tarjan_correctness in Htarjan; move : Htarjan => [Htarjan _]; apply Htarjan; simpl; left; done).
+        unfold initial_smallest; intros. assert (H0 : a <> []) by (unfold tarjan_correctness in Htarjan; move : Htarjan => [_ [_ [Htarjan _]]]; apply Htarjan; simpl; left; done).
         assert (H1 : List.map (remove_solved_c initial) (extract_cs a c1map) <> []).
         { apply (extract_cs_not_nil c1map) in H0.
           remember (extract_cs a c1map) as cs. move : H0; clear. destruct cs; try done.
           intros. unfold extract_correctness in Hextract. destruct (Hextract var) as [cs [Hfind [_ [Hnotnil _]]]]. simpl; apply in_or_app; left; done. exists cs; split; done. }
         assert (H2 : forall c, List.In c (List.map (remove_solved_c initial) (extract_cs a c1map)) -> (forall var, List.In var (constraint1_vars c) -> List.In var a)).
         { move : Htarjan Hextract; clear; intros. apply in_map_iff in H. destruct H as [c' [Hremove Hin]]. 
-          unfold tarjan_correctness in Htarjan. move : Htarjan => [_ [_ [Hinit Htarjan]]]. assert ([] ++ a :: l = a :: l) by (simpl; done).
+          unfold tarjan_correctness in Htarjan. move : Htarjan => [_ [_ [_ [_ [Hinit Htarjan]]]]]. assert ([] ++ a :: l = a :: l) by (simpl; done).
           specialize (Htarjan _ _ _ H); clear H. subst c. apply remove_solved_c_vars in H0. move : H0 => [H0 H]. apply (constraint1_vars2constraints1_vars _ Hin) in H0.
           apply Htarjan in H0; clear Htarjan. destruct H0; try done.
           1,2 : unfold extract_correctness in Hextract; apply extract_cs_exist_c in Hin; destruct Hin as [var' [Hina [cs [Hfind Hincs]]]];
@@ -3629,8 +4141,14 @@ Proof.
         { move : Hextract;clear. intros. apply in_map_iff in H. destruct H as [x [Hremove Hin]]. subst c. unfold extract_correctness in Hextract. apply extract_cs_exist_c in Hin. destruct Hin as [var [Hina [cs [Hfind Hincs]]]].
           destruct (Hextract var) as [cs' [Hfind' [_ [_ Hgood]]]]. simpl; apply in_or_app; left; done. rewrite Hfind in Hfind'; inversion Hfind'; clear Hfind'; subst cs'.
           apply Hgood in Hincs; move : Hincs => [_ H]. unfold remove_solved_c. rewrite H. destruct (remove_solved initial (rhs_terms1 x)); done. }
-        assert (H5 : NoDup a) by (unfold tarjan_correctness in Htarjan; move : Htarjan => [_ [Hnodup _]]; simpl in Hnodup; apply NoDup_app_remove_r in Hnodup; done).
-        specialize (solve_scc_smallest _ _ _ H0 H5 Hscc H1 H2 H3 H4 v); clear H1 H2 H3 H4 H5; intros H1. 
+        assert (H5 : NoDup a) by (unfold tarjan_correctness in Htarjan; move : Htarjan => [_ [_ [_ [Hnodup _]]]]; simpl in Hnodup; apply NoDup_app_remove_r in Hnodup; done).
+        assert (H6 : forall x, List.In x a -> List.In x (constraints1_vars (List.map
+            (remove_solved_c initial)
+            (extract_cs a c1map)))). 
+        move : Htarjan Hextract; clear; intros. unfold extract_correctness in Hextract. assert (Hin : List.In x (concat (a :: l))). simpl. apply in_or_app; left; done.
+        specialize (Hextract _ Hin). destruct Hextract as [cs [Hfind [Hlhs [Hnot_empty _]]]].
+        apply (extract_cs_in_remove_solved _ _ _ _ _ H Hfind Hnot_empty Hlhs).
+        specialize (solve_scc_smallest _ _ _ H0 H5 Hscc H1 H6 H2 H3 H4 v); clear H1 H2 H3 H4 H5 H6; intros H1. 
         specialize (contra_not H1); intros; clear H1.
         destruct (le_bool initial v) eqn : Hle_initial.
         * apply le_le_bool in Hle_initial; clear Hinitial.
@@ -3670,9 +4188,9 @@ Proof.
         { move : Hin Hextract; clear; intros. unfold extract_correctness in Hextract; apply extract_cs_exist_c in Hin; destruct Hin as [var' [Hina [cs [Hfind Hincs]]]];
           destruct (Hextract var') as [cs' [Hfind' [Hlhs [_ Hgood]]]]. simpl; apply in_or_app; left; done. rewrite Hfind in Hfind'; inversion Hfind'; clear Hfind'; subst cs'.
           apply Hgood in Hincs; exact Hincs.2. }
-        unfold tarjan_correctness in Htarjan; move : Htarjan => [Htarjan _]; apply Htarjan; simpl; left; done.
-        unfold tarjan_correctness in Htarjan; move : Htarjan => [_ [Hnodup _]]. simpl in Hnodup. apply NoDup_app_remove_r in Hnodup; done.
-        { assert (a <> []) by (unfold tarjan_correctness in Htarjan; move : Htarjan => [Htarjan _]; apply Htarjan; simpl; left; done).
+        unfold tarjan_correctness in Htarjan; move : Htarjan => [_ [_ [Htarjan _]]]; apply Htarjan; simpl; left; done.
+        unfold tarjan_correctness in Htarjan; move : Htarjan => [_ [_ [_ [Hnodup _]]]]. simpl in Hnodup. apply NoDup_app_remove_r in Hnodup; done.
+        { assert (a <> []) by (unfold tarjan_correctness in Htarjan; move : Htarjan => [_ [_ [Htarjan _]]]; apply Htarjan; simpl; left; done).
           apply (extract_cs_not_nil c1map) in H.
           remember (extract_cs a c1map) as cs. move : H; clear. destruct cs; try done.
           intros. unfold extract_correctness in Hextract. destruct (Hextract var) as [cs [Hfind [_ [Hnotnil _]]]]. simpl; apply in_or_app; left; done. exists cs; split; done. }
@@ -3687,7 +4205,7 @@ Proof.
           apply extract_cs_exist_c in Hin. destruct Hin as [v' [Hina [cs [Hfind Hincs]]]]. destruct (Hextract v') as [cs' [Hfind' [_ [_ Hgood]]]]. simpl; apply in_or_app; left; done. rewrite Hfind in Hfind'; inversion Hfind'; clear Hfind'; subst cs'.
           apply Hgood in Hincs; move : Hincs => [_ Hincs]. move : Hincs; clear; unfold remove_solved_c. intro; rewrite Hincs. destruct (remove_solved initial (rhs_terms1 c0)); simpl; done.
         { move : Htarjan Hextract; clear; intros. apply in_map_iff in H. destruct H as [c' [Hremove Hin]]. 
-          unfold tarjan_correctness in Htarjan. move : Htarjan => [_ [_ [Hinit Htarjan]]]. assert ([] ++ a :: l = a :: l) by (simpl; done).
+          unfold tarjan_correctness in Htarjan. move : Htarjan => [_ [_ [_ [_ [Hinit Htarjan]]]]]. assert ([] ++ a :: l = a :: l) by (simpl; done).
           specialize (Htarjan _ _ _ H); clear H. subst c. apply remove_solved_c_vars in H0. move : H0 => [H0 H]. apply (constraint1_vars2constraints1_vars _ Hin) in H0.
           apply Htarjan in H0; clear Htarjan. destruct H0; try done.
           1,2 : unfold extract_correctness in Hextract; apply extract_cs_exist_c in Hin; destruct Hin as [var' [Hina [cs [Hfind Hincs]]]];
@@ -3695,11 +4213,12 @@ Proof.
           * assert (forall c, List.In c cs -> lhs_var1 c == var') by (apply forallb_forall; done). apply H in Hincs. clear H Hlhs. move /eqP : Hincs => Hincs; subst var'.
             intro. apply Hinit in H; clear Hinit. simpl in H. apply H. apply in_or_app; left; done. 
           * apply Hgood in Hincs; exact Hincs.2. }
+        intros g adj Hbg. unfold tarjan_correctness in Htarjan. move : Htarjan => [_ [Hiscc0 _]]. apply (Hiscc0 initial a g adj); [simpl; left; done | exact Hbg].
       * rewrite /initial_smallest in Hinitial.
-        assert (~(le initial v)) by (apply not_true_iff_false in Hle; move : Hle; apply contra_not; intros; apply le_le_bool; done). clear Hle. 
-        apply Hinitial in H; clear Hinitial.
+        assert (Hnle : ~ (le initial v)). { intros Hle2. apply le_le_bool in Hle2. rewrite Hle2 in Hle. discriminate. } clear Hle.
+        apply Hinitial in Hnle; clear Hinitial.
         apply not_true_iff_false. apply forallb_neg_neg.
-        apply not_true_iff_false in H. apply forallb_neg_neg in H. destruct H as [x [Hin Hunsat]].
+        apply not_true_iff_false in Hnle. apply forallb_neg_neg in Hnle. destruct Hnle as [x [Hin Hunsat]].
         exists x; split; try done. apply in_or_app; left; done.
 
   intros. case H2 : (solve_alg scclist initial_valuation c1map); try done.
@@ -3717,18 +4236,25 @@ Variable (c : HiF.hfcircuit).
 
 Definition solve_helper (c1map : PVM.t (list Constraint1)) (cs2 : list min_rhs) : option Valuation :=
   let cs1 := List.concat ((List.split (PVM.elements c1map)).2) in
-  let dpdcg := build_dependency_graph cs1 in
-  let res := rev (map rev (kosaraju dpdcg)) in
-  let res' := map (map (@finProdVar2ProdVar c)) res in
-  solve_alg_check res' c1map cs2.
+  match build_dependency_graph c cs1 with
+  | Some dpdcg =>
+      let res := rev (map rev (kosaraju dpdcg)) in
+      let res' := map (map (@finProdVar2ProdVar c)) res in
+      solve_alg_check res' c1map cs2
+  | None => None
+  end.
 
 Definition solve_fun (tmap : VM.t (ftype * forient)) : option Valuation :=
   match extract_constraints_c c tmap with
-  | Some (c1maps, cs2) => fold_left (fun res c1map => match res, solve_helper c1map cs2 with
+  | Some (c1maps, cs2) =>
+    if forallb (fun c1map =>
+      all (constraint_vars_in_graph c) (List.concat ((List.split (PVM.elements c1map)).2))) c1maps
+    then fold_left (fun res c1map => match res, solve_helper c1map cs2 with
                                 | None, new_values => new_values
                                 | Some old_values, Some new_values => Some (branch_and_bound.smaller_valuation old_values new_values)
                                 | Some old_values, _ => res
                                 end) c1maps None
+    else None
   | _ => None
   end.
 

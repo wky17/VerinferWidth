@@ -7,6 +7,10 @@ syntax/Env.v
 syntax/LoFirrtl.v
 syntax/HiEnv.v 
 syntax/HiFirrtl.v
+syntax/Env_with_implicit_widths.v
+syntax/Firrtl_with_implicit_widths.v
+syntax/HiEnv_with_implicit_widths.v
+syntax/HiFirrtl_with_implicit_widths.v
 -Q ./inferwidths Solver
 inferWidths/constraints.v
 inferWidths/floyd_sc.v
@@ -22,6 +26,11 @@ inferWidths/extract_cs_multimod.v
 inferWidths/inferWidths_multimod.v
 -Q ./semantics Semantics
 semantics/Semantics.v
+semantics/Semantics_with_implicit_widths.v
+semantics/Reset_width_tests.v
+semantics/Width_solution_bridge.v
+semantics/Width_bridge_proofs.v
+semantics/Width_solution_bridge_tests.v
 -Q ./lowertypes LowerTypes
 lowertypes/ExpandConnects_inst.v
 -Q ./expandwhens ExpandWhens 

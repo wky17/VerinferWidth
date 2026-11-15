@@ -43,19 +43,29 @@ Section dpdcgraph.
 Variable  (c : HiF.hfcircuit).
 Definition Graph : Type := finProdVar c -> finProdVar c -> bool.
 
-Definition add_dependency (g : Graph) (from to : finProdVar c) : Graph :=
-  fun x y => g x y || (((finProdVar2ProdVar x) == (finProdVar2ProdVar from)) && ((finProdVar2ProdVar y) == (finProdVar2ProdVar to))).
+Definition add_dependency (g : Graph) (from to : ProdVar.t) : Graph :=
+  fun x y => g x y || ((finProdVar2ProdVar x == from) && (finProdVar2ProdVar y == to)).
 
-Fixpoint build_dependency_graph (constraints : list Constraint1) : Graph :=
+Definition constraint_vars_in_graph (constraint : Constraint1) : bool :=
+  (lhs_var1 constraint \in finProdVar_list c) &&
+  all (fun term => term.2 \in finProdVar_list c)
+    (rhs_terms1 constraint ++ rhs_power constraint).
+
+Fixpoint build_dependency_graph_unchecked (constraints : list Constraint1) : Graph :=
   match constraints with
   | [] => fun _ _ => false
   | c0 :: cs =>
-      let graph := build_dependency_graph cs in
+      let graph := build_dependency_graph_unchecked cs in
       fold_left (fun g (coef_var : nat * ProdVar.t) =>
-                   let (_, xi) := coef_var in add_dependency g (ProdVar2finProdVar c xi) (ProdVar2finProdVar c (lhs_var1 c0)))
-                (rhs_terms1 c0)
+                   let (_, xi) := coef_var in add_dependency g xi (lhs_var1 c0))
+                (rhs_terms1 c0 ++ rhs_power c0)
                 graph
   end.
+
+Definition build_dependency_graph (constraints : list Constraint1) : option Graph :=
+  if all constraint_vars_in_graph constraints
+  then Some (build_dependency_graph_unchecked constraints)
+  else None.
 
 (* ------------ distinguish simple cycle from sccs ------------ *)
 
