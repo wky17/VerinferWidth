@@ -62,3 +62,4 @@ coq-firrtl
 *.out
 *.txt
 *.DS_Store
+.DS_Store
