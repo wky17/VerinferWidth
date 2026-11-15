@@ -57,3 +57,8 @@ ocaml_try/extraction
 */output.out
 */output.txt
 coq-firrtl
+.vscode
+*.json
+*.out
+*.txt
+*.DS_Store

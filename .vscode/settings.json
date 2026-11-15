@@ -1,3 +1,6 @@
 {
-    "cmake.sourceDirectory": "/Users/wky/Desktop/VerinferWidth/coq-firrtl/circt"
+    "coqtop.binPath": "/Users/wangkeyin/.opam/mathcomp2.0/bin",
+    "workbench.colorTheme": "Dark Modern",
+    "editor.bracketPairColorization.enabled": false,
+    "workbench.preferredDarkColorTheme": "Dark Modern"
 }

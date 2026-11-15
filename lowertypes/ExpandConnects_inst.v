@@ -53,7 +53,7 @@ with stmt_tmap (modplmap : VM.t (seq HiF.hfport)) (tmap : VM.t (ftype * fcompone
 Fixpoint modules_tmap (modplmap : VM.t (seq HiF.hfport)) (tmap : VM.t (VM.t (ftype * fcomponent))) (ml : seq HiF.hfmodule) : option (VM.t (VM.t (ftype * fcomponent))) :=
   match ml with
   | nil => Some tmap
-  | FInmod mv ps ss :: tl => match Sem_HiF.ports_tmap' (VM.empty (ftype * fcomponent)) ps with
+  | FInmod mv ps ss :: tl => match Sem_HiF.ports_tmap (VM.empty (ftype * fcomponent)) ps with
               | Some pmap => match stmts_tmap modplmap pmap ss with
                   | Some tmap' => modules_tmap modplmap (VM.add mv tmap' tmap) tl
                   | None => None

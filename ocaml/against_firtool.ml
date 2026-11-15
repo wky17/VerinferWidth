@@ -26,7 +26,7 @@ let compare_with_mlir in_file hif_ast mfile =
     let mlirf = Mparser.mlirparse mfile in 
     let mlirmap = Mast.mapcir mlirf in
 
-    (* 逐modul比较 *)
+    (* 逐module比较 *)
     StringMap.iter (fun modname mod_tmap -> 
       let modnum = StringMap.find modname modmap in
       let (map0,_) = StringMap.find modname map in

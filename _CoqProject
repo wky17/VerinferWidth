@@ -33,5 +33,14 @@ semantics/Width_bridge_proofs.v
 semantics/Width_solution_bridge_tests.v
 -Q ./lowertypes LowerTypes
 lowertypes/ExpandConnects_inst.v
+lowertypes/LowerTypes_proof.v
 -Q ./expandwhens ExpandWhens 
 expandwhens/ExpandWhens_inst.v
+expandwhens/ExpandWhens_proof.v
+-Q ./inferresets InferResets 
+inferresets/inferResets.v
+inferresets/inferResets_proof.v
+-Q ./lowermatches LowerMatches
+lowermatches/LowerMatches.v
+-Q ./ocaml Extract
+ocaml/Extract.v

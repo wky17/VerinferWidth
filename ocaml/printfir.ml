@@ -141,13 +141,13 @@ and pp_statement_fir out indent s =
 
 let pp_module_fir out fmod =
   match fmod with
-  | HiFirrtl.FInmod (mv, pl, sl) -> fprintf out "  module %d : \n" mv; pp_ports_fir out pl; pp_statements_fir out 2 sl
+  | HiFirrtl.FInmod (mv, pl, sl) -> fprintf out "  module %d : \n" (Obj.magic mv); pp_ports_fir out pl; pp_statements_fir out 2 sl
   | FExmod _ -> output_string out "extmodule\n"
            
 let pp_modules_fir out fmod = Stdlib.List.iter (pp_module_fir out) fmod
  
 let pp_fcircuit_fir out fc =
   match fc with
-  | HiFirrtl.Fcircuit (cv, fmod) -> fprintf out "circuit %d : \n" cv; pp_modules_fir out fmod
+  | HiFirrtl.Fcircuit (cv, fmod) -> fprintf out "circuit %d : \n" (Obj.magic cv); pp_modules_fir out fmod
 
  

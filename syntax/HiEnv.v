@@ -85,10 +85,9 @@ Notation "x =? y" := (ftype_eqn x y).
 Lemma ftype_eq_dec (x y : ftype) : {x = y} + {x <> y}
 with ffield_eq_dec (fx fy : ffield) : {fx = fy} + {fx <> fy}.
 Proof.
-* decide equality. apply fgtyp_eq_dec. apply Nat.eq_dec.
-* decide equality.
-  decide equality. 
-Admitted.
+* decide equality; [apply fgtyp_eq_dec | apply Nat.eq_dec].
+* decide equality; auto using fflip_eq_dec, N.eq_dec.
+Qed.
 
 Lemma ftype_eqn_refl (x : ftype) : x =? x
 with ffield_eqn_refl (fx : ffield) : ffield_eqn fx fx.

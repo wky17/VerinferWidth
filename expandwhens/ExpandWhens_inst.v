@@ -214,7 +214,7 @@ Fixpoint modules_tmap (modplmap : PVM.t (seq HiFP.hfport)) (tmap : PVM.t (PVM.t 
   (whitelist_map : PVM.t (list ProdVarOrder.t)) (ml : seq HiFP.hfmodule) : option ((PVM.t (PVM.t (fgtyp * fcomponent))) * (PVM.t (list ProdVarOrder.t))):=
   match ml with
   | nil => Some (tmap, whitelist_map)
-  | (FInmod mv ps ss) :: tl => match Sem_HiFP.ports_tmap' (PVM.empty (fgtyp * fcomponent)) ps with
+  | (FInmod mv ps ss) :: tl => match Sem_HiFP.ports_tmap (PVM.empty (fgtyp * fcomponent)) ps with
               | Some pmap => match stmts_tmap modplmap pmap (fst (List.split (PVM.elements pmap))) ss with
                   | Some (tmap', whitelist) => modules_tmap modplmap (PVM.add mv tmap' tmap) (PVM.add mv whitelist whitelist_map) tl
                   | None => None

@@ -15,64 +15,56 @@ let rec pl2btyp pl =
   | (Ast.Finput (v, ty)) :: tl -> Ast.Fflips (v, Ast.Nflip, ty, pl2btyp tl)
   | (Ast.Foutput (v, ty)) :: tl -> Ast.Fflips (v, Ast.Flipped, ty, pl2btyp tl)
 
-let rec mapstmt modplmap ((map, flag), tmap) stmt = 
+let rec mapstmt modplmap (((map, map_i), flag), tmap) stmt = 
   match stmt with
-  | Ast.Swire (v, ty) -> (Transhiast.mapftype v (map, flag) ty, StringMap.add v ty tmap)
-  | Ast.Sreg (v, r) -> (Transhiast.mapftype v (map, flag) r.coq_type, StringMap.add v r.coq_type tmap)
-  | Ast.Smem (v, ty, n) -> (Transhiast.mapftype v (map, flag) (Ast.Atyp (ty, n)), StringMap.add v (Ast.Atyp (ty, n)) tmap)
-    (*(StringMap.add v [flag] map, flag + 1), tmap*)
-  | Ast.Snode (v, e) -> (match type_of_hfexpr e tmap with
-                      | Some ty -> (Transhiast.mapftype v (map, flag) ty, StringMap.add v ty tmap)
-                      | None -> printf "%s wrong expr type\n" v; Ast.pp_expr stdout e; ((map, flag), tmap))
+  | Ast.Swire (v, ty) -> let (map0, flag0) = Transhiast.mapftype v (map, flag) ty in 
+                        (((map0, IntMap.add flag v map_i), flag0), StringMap.add v ty tmap)
+  | Ast.Sreg (v, r) -> let (map0, flag0) = Transhiast.mapftype v (map, flag) r.coq_type in 
+                        (((map0, IntMap.add flag v map_i), flag0), StringMap.add v r.coq_type tmap)
+  | Ast.Smem (v, ty, n) -> let (map0, flag0) = Transhiast.mapftype v (map, flag) (Ast.Atyp (ty, n)) in 
+                        (((map0, IntMap.add flag v map_i), flag0), StringMap.add v (Ast.Atyp (ty, n)) tmap)
+  | Ast.Snode (v, e) -> (match Nodehelper.type_of_hfexpr e tmap with
+                      | Some ty -> let (map0, flag0) = Transhiast.mapftype v (map, flag) ty in 
+                          (((map0, IntMap.add flag v map_i), flag0), StringMap.add v ty tmap)
+                      | None -> printf "%s wrong expr type\n" v; Ast.pp_expr stdout e; (((map, map_i), flag), tmap))
   | Ast.Sinst (v, mv) -> let pl = StringMap.find mv modplmap in
     let ty = Ast.Btyp (pl2btyp pl) in 
-    (Transhiast.mapftype v (map, flag) ty, StringMap.add v ty tmap)
-  | Ast.Sinferport (v, r, _) -> (match type_of_ref r tmap with
-                      | Some ty -> (Transhiast.mapftype v (map, flag) ty, StringMap.add v ty tmap)
-                      | None -> printf "%s wrong ref type\n" v; Ast.pp_ref stdout r;((map, flag), tmap))
-  | Ast.Sreadport (v, r, _) -> (match type_of_ref r tmap with
-                      | Some ty -> (Transhiast.mapftype v (map, flag) ty, StringMap.add v ty tmap)
-                      | None -> printf "%s wrong ref type\n" v; Ast.pp_ref stdout r;((map, flag), tmap))
-  | Ast.Swriteport (v, r, _) -> (match type_of_ref r tmap with
-                      | Some ty -> (Transhiast.mapftype v (map, flag) ty, StringMap.add v ty tmap)
-                      | None -> printf "%s wrong ref type\n" v; Ast.pp_ref stdout r;((map, flag), tmap))
-  | Ast.Swhen (_, s1, s2) -> mapstmts modplmap (mapstmts modplmap ((map, flag), tmap) s1) s2
-  | _ -> ((map,flag), tmap)
+    let (map0, flag0) = Transhiast.mapftype v (map, flag) ty in 
+    (((map0, IntMap.add flag v map_i), flag0), StringMap.add v ty tmap)
+  | Ast.Swhen (_, s1, s2) -> mapstmts modplmap (mapstmts modplmap (((map, map_i), flag), tmap) s1) s2
+  | _ -> (((map, map_i), flag), tmap)
 
-and mapstmts modplmap ((map, flag), tmap) stmts = 
+and mapstmts modplmap (((map, map_i), flag), tmap) stmts = 
   match stmts with
-  | Ast.Qnil -> ((map, flag), tmap)
-  | Ast.Qcons (s, ss) -> mapstmts modplmap (mapstmt modplmap ((map, flag), tmap) s) ss
+  | Ast.Qnil -> (((map, map_i), flag), tmap)
+  | Ast.Qcons (s, ss) -> mapstmts modplmap (mapstmt modplmap (((map, map_i), flag), tmap) s) ss
 
 let mapmod m modplmap =  
   match m with 
   | Ast.FInmod (mv, pl, sl) -> 
-    let ((map0, flag0), tmap0) = List.fold_left Transhiast.mapport pl ((initmap_s, 0), initmap_s) in
-    let ((map1, _), tmap1) = mapstmts modplmap ((map0, flag0), tmap0) sl in ((mv, map1), tmap1)
-  | FExmod (mv, _, _) -> ((mv, initmap_s), initmap_s)
+    let (((map0, map0_i), flag0), tmap0) = Stdlib.List.fold_left Transhiast.mapport (((initmap_s, initmap_i), 0), initmap_s) pl in
+    let (((map1, map1_i), _), tmap1) = mapstmts modplmap (((map0, map0_i), flag0), tmap0) sl in (((mv, map1), map1_i), tmap1)
+  | FExmod (mv, _, _) -> (((mv, initmap_s), initmap_i), initmap_s)
 
-let rec mapmodl ((modmap, flag), map) modplmap ml =
+let rec mapmodl (((modmap, modmap_rev), flag), map) modplmap ml =
   match ml with
-  | [] -> ((modmap, flag), map)
-  | hd :: tl -> let ((hd_v, hd_map), hd_tmap) = mapmod hd modplmap in
-    mapmodl (((StringMap.add hd_v flag modmap), flag + 1), StringMap.add hd_v (hd_map, hd_tmap) map) modplmap tl
+  | [] -> (((modmap, modmap_rev), flag), map)
+  | hd :: tl -> let (((hd_v, hd_map), hd_map_i), hd_tmap) = mapmod hd modplmap in
+    mapmodl (((StringMap.add hd_v flag modmap, IntMap.add flag hd_v modmap_rev), flag + 1), StringMap.add hd_v ((hd_map, hd_map_i), hd_tmap) map) modplmap tl
 
 let mapcir cir = 
   match cir with
-  | Ast.Fcircuit (_, ml) -> let modplmap = List.fold_left (fun acc m -> 
+  | Ast.Fcircuit (_, ml) -> let modplmap = Stdlib.List.fold_left (fun acc m -> 
       match m with
       | Ast.FInmod (mv, pl, _) -> StringMap.add mv pl acc
-      | FExmod (mv, pl, _) -> StringMap.add mv pl acc) ml initmap_s in
-    mapmodl ((initmap_s, 0), initmap_s) modplmap ml 
-  (* 第一个是 module name string -> module name num, 第二个是 当前对module的标号, 
-     第三个是 module name string -> (module内变量名 string 含subfield -> num list, string -> ftype)) *)
+      | FExmod (mv, pl, _) -> StringMap.add mv pl acc) initmap_s ml in
+    mapmodl (((initmap_s, initmap_i), 0), initmap_s) modplmap ml 
 
 (* transast *)
 
 let rec trans_stmt s map res tmap modmap = 
   match s with
   | Ast.Sskip -> HiFirrtl.Qcons (HiFirrtl.Sskip, res)
-  | Ast.Spcnct _ -> HiFirrtl.Qcons (HiFirrtl.Sskip, res)
   | Ast.Swire (v, ty) -> 
                 let ns = HiFirrtl.Swire(Obj.magic (Stdlib.List.hd (StringMap.find v map)), Transhiast.trans_ftype v ty map) in
                 HiFirrtl.Qcons (ns, res)
@@ -90,35 +82,7 @@ let rec trans_stmt s map res tmap modmap =
                 let ns = HiFirrtl.Sreg (Obj.magic (Stdlib.List.hd (StringMap.find v map)), 
                     Transhiast.mk_freg (Transhiast.trans_ftype v r.coq_type map) (Transhiast.trans_expr r.clock map) (Transhiast.trans_rst r.reset map)) in
                 HiFirrtl.Qcons (ns, res)
-  | Ast.Sinferport (v, r, e_clock) -> 
-                  (match type_of_ref r tmap with
-                  | Some ty -> let fv = Obj.magic (Stdlib.List.hd (StringMap.find v map)) in
-                               let s1 = HiFirrtl.Sreg (fv, Transhiast.mk_freg (Transhiast.trans_ftype v ty map) (Transhiast.trans_expr e_clock map) HiFirrtl.NRst) in
-                               let s2 = HiFirrtl.Sfcnct(Eid fv, Eref (Transhiast.trans_ref r map)) in
-                               let s3 = HiFirrtl.Sfcnct(Transhiast.trans_ref r map, HiFirrtl.Eref (Eid fv)) in
-                    HiFirrtl.Qcons (s3, Qcons (s2, Qcons (s1, res)))
-                  | None -> res)
-  | Ast.Sreadport (v, r, e_clock) -> (*printf "%s trans error\n" v;*)
-                  (match type_of_ref r tmap with
-                  | Some ty -> let fv = Obj.magic (Stdlib.List.hd (StringMap.find v map)) in
-                               let s1 = HiFirrtl.Sreg (fv, Transhiast.mk_freg (Transhiast.trans_ftype v ty map) (Transhiast.trans_expr e_clock map) HiFirrtl.NRst) in
-                               let s2 = HiFirrtl.Sfcnct(Eid fv, Eref (Transhiast.trans_ref r map)) in
-                               let s3 = HiFirrtl.Sfcnct(Transhiast.trans_ref r map, HiFirrtl.Eref (Eid fv)) in
-                    HiFirrtl.Qcons (s3, Qcons (s2, Qcons (s1, res)))
-                  | None -> res)
-  | Ast.Swriteport (v, r, e_clock) -> 
-                  (match type_of_ref r tmap with
-                  | Some ty -> let fv = Obj.magic (Stdlib.List.hd (StringMap.find v map)) in 
-                               let nty = Transhiast.trans_ftype v ty map in
-                               let nclk = Transhiast.trans_expr e_clock map in
-                               let s1 = HiFirrtl.Sreg (fv, Transhiast.mk_freg nty nclk HiFirrtl.NRst) in 
-                               let s2 = HiFirrtl.Sfcnct(Eid fv, Eref (Transhiast.trans_ref r map)) in 
-                               let s3 = HiFirrtl.Sfcnct(Transhiast.trans_ref r map, HiFirrtl.Eref (Eid fv)) in 
-                    HiFirrtl.Qcons (s3, Qcons (s2, Qcons (s1, res)))
-                  | None -> res)
-  | Ast.Smem (v, ty, n) -> 
-                let ns = HiFirrtl.Swire(Obj.magic (Stdlib.List.hd (StringMap.find v map)), HiEnv.Atyp (Transhiast.trans_ftype v ty map, n)) in
-                HiFirrtl.Qcons (ns, res)
+  | Ast.Smem _ -> res
   | Ast.Sinst (v, modv) -> 
                 let ns = HiFirrtl.Sinst (Obj.magic (Stdlib.List.hd (StringMap.find v map)), Obj.magic (StringMap.find modv modmap)) in
                 HiFirrtl.Qcons (ns, res)
@@ -135,8 +99,7 @@ let trans_mod m modmap map =
   match m with
   | Ast.FInmod (mv, pl, sl) -> 
     let flag = StringMap.find mv modmap in
-    let (hd_map, hd_tmap) = StringMap.find mv map in
-    (*StringMap.iter (fun v e -> output_string stdout (v^" : ["); Stdlib.List.iter (printf "%d;") e; output_string stdout "]\n") hd_map; *)
+    let ((hd_map, _), hd_tmap) = StringMap.find mv map in
     let newstmts = trans_stmts sl hd_map HiFirrtl.Qnil hd_tmap modmap in
     HiFirrtl.FInmod(Obj.magic flag, List.map (fun a -> Transhiast.trans_port a hd_map) pl, Transhiast.revstmts newstmts HiFirrtl.Qnil)
   | Ast.FExmod (mv, _, _) -> 
