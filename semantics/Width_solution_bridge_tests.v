@@ -1068,6 +1068,75 @@ Example floyd_unconstrained_nodes_require_candidate_coverage :
   end = true.
 Proof. by vm_compute. Qed.
 
+Example singleton_unconstrained_scc_minimal candidate :
+  SolverSyntax.PVM.mem (1%nvar, N0) candidate ->
+  match inferWidths.solve_scc [:: (1%nvar, N0)] [::] with
+  | Some solution => constraints.le solution candidate
+  | None => False
+  end.
+Proof.
+  move=> Hcoverage.
+  have Hsolve : inferWidths.solve_scc [:: (1%nvar, N0)] [::] =
+      Some (SolverSyntax.PVM.add (1%nvar, N0) 0 initial_valuation) by vm_compute.
+  rewrite Hsolve.
+  apply: (@inferWidths.solve_simple_scc_smallest [:: (1%nvar, N0)] [::]
+    (SolverSyntax.PVM.add (1%nvar, N0) 0 initial_valuation) candidate).
+  - discriminate.
+  - constructor; first by move=> [].
+    constructor.
+  - by vm_compute.
+  - by move=> c [].
+  - by move=> c [].
+  - by move=> c [].
+  - exact Hsolve.
+  - by vm_compute.
+  - move=> x [<-|[]]. exact Hcoverage.
+Qed.
+
+Example empty_constraint_map_entries_correct :
+  inferWidths.extract_entries_correctness (SolverSyntax.PVM.empty _).
+Proof.
+  move=> key cs Hfind. by rewrite SolverSyntax.PVM.Lemmas.F.empty_o in Hfind.
+Qed.
+
+Example old_extract_correctness_excludes_unconstrained_node :
+  ~ inferWidths.extract_correctness (SolverSyntax.PVM.empty _)
+    [:: [:: (1%nvar, N0)]].
+Proof.
+  move=> Hcorrect.
+  have Hin : List.In (1%nvar, N0)
+      (List.concat [:: [:: (1%nvar, N0)]]) by left.
+  have [cs [Hfind _]] := Hcorrect _ Hin.
+  by rewrite SolverSyntax.PVM.Lemmas.F.empty_o in Hfind.
+Qed.
+
+Example recursive_minimum_handles_unconstrained_node solution candidate :
+  inferWidths.scc_schedule_correctness initial_valuation
+    [:: [:: (1%nvar, N0)]] (SolverSyntax.PVM.empty _) ->
+  inferWidths.solve_alg [:: [:: (1%nvar, N0)]] initial_valuation
+    (SolverSyntax.PVM.empty _) = Some solution ->
+  SolverSyntax.PVM.mem (1%nvar, N0) candidate ->
+  constraints.le solution candidate.
+Proof.
+  move=> Hschedule Hsolve Hcoverage.
+  apply: (@inferWidths.solve_alg_simple_smallest [:: [:: (1%nvar, N0)]]
+    (SolverSyntax.PVM.empty _) solution candidate Hschedule
+    empty_constraint_map_entries_correct _ Hsolve).
+  - elim=> [|key keys IH] //=.
+  - by vm_compute.
+  - move=> x [<-|[]]. exact Hcoverage.
+Qed.
+
+Example substitution_preserves_simple_cycle_shape :
+  inferWidths.is_simple_cycle
+    (List.map (remove_solved_c (SolverSyntax.PVM.add (1%nvar, N0) 7 initial_valuation))
+      risk_cycle_constraints) = true.
+Proof.
+  apply: inferWidths.remove_solved_simple.
+  - vm_compute; intuition subst; reflexivity.
+  - by vm_compute.
+Qed.
+
 Example floyd_three_node_all_orders :
   all (fun nodes =>
     match inferWidths.solve_scc nodes floyd_three_constraints with
@@ -1151,6 +1220,37 @@ Example risk_cycle_semantics_propagates_both_widths :
   end = (Some 6, Some 6).
 Proof. by vm_compute. Qed.
 
+Example reference_dependency_is_not_scheduled_after_target
+    (g : graph.Graph (solver_circuit 0%nvar reference_example)) prefix block suffix :
+  build_dependency_graph (solver_circuit 0%nvar reference_example)
+    [:: risk_ref 3%nvar 2%nvar] = Some g ->
+  solver_sccs g = prefix ++ block :: suffix ->
+  List.In (3%nvar, N0) block ->
+  List.In (2%nvar, N0) (List.concat prefix ++ block).
+Proof.
+  move=> Hgraph Horder Htarget.
+  have Hsource_valid : (2%nvar, N0) \in
+      SolverSyntax.finProdVar_list (solver_circuit 0%nvar reference_example)
+    by vm_compute.
+  have Htarget_valid : (3%nvar, N0) \in
+      SolverSyntax.finProdVar_list (solver_circuit 0%nvar reference_example)
+    by vm_compute.
+  pose source : SolverSyntax.finProdVar (solver_circuit 0%nvar reference_example) :=
+    @Sub _ (fun x => x \in SolverSyntax.finProdVar_list
+      (solver_circuit 0%nvar reference_example)) _ _ Hsource_valid.
+  pose target : SolverSyntax.finProdVar (solver_circuit 0%nvar reference_example) :=
+    @Sub _ (fun x => x \in SolverSyntax.finProdVar_list
+      (solver_circuit 0%nvar reference_example)) _ _ Htarget_valid.
+  have Hedge : g source target.
+  { apply: (dependency_graph_contains_edge Hgraph
+      (constraint := risk_ref 3%nvar 2%nvar) (coeff := 1)).
+    - by left.
+    - reflexivity.
+    - by left. }
+  exact: (@solver_sccs_edge_order _ g prefix block suffix source target
+    Horder Hedge Htarget).
+Qed.
+
 Example risk_cycle_actual_solver_correct_if_scc_order solver_map cmap
     (g : graph.Graph (solver_circuit 0%nvar risk_cycle_module)) :
   SolverSyntax.circuit_tmap (solver_circuit 0%nvar risk_cycle_module) = Some solver_map ->
@@ -1199,6 +1299,101 @@ Definition reference_example_full_solver :=
       end
   | None => (None, None)
   end.
+
+Example reference_example_successful_solver_matches_semantics solver_map solution :
+  SolverSyntax.circuit_tmap (solver_circuit 0%nvar reference_example) = Some solver_map ->
+  inferWidths.solve_fun (solver_circuit 0%nvar reference_example) solver_map =
+    Some solution ->
+  solver_width solution 2%nvar = Some 6 /\
+  solver_width solution 3%nvar = Some 6.
+Proof.
+  move=> Hsolver Hsolve.
+  have [initial Hinitial] : exists initial,
+      Semantics.circuit_tmap_uninferred (sem_circuit reference_example) = Some initial
+    by vm_compute; eauto.
+  have [result Hresult] : exists result,
+      Semantics.circuit_tmap_implicits (sem_circuit reference_example) 2 = Some result
+    by vm_compute; eauto.
+  have Himplicit2 : original_implicit initial 0%nvar 2%nvar.
+  { vm_compute in Hinitial. inversion Hinitial; subst initial. by vm_compute. }
+  have Himplicit3 : original_implicit initial 0%nvar 3%nvar.
+  { vm_compute in Hinitial. inversion Hinitial; subst initial. by vm_compute. }
+  have Hwidth2 : semantic_width result 0%nvar 2%nvar = Some 6.
+  { vm_compute in Hresult. inversion Hresult; subst result. by vm_compute. }
+  have Hwidth3 : semantic_width result 0%nvar 3%nvar = Some 6.
+  { vm_compute in Hresult. inversion Hresult; subst result. by vm_compute. }
+  have [w2 [Hsolve2 Hsem2]] :=
+    solve_fun_matches_fixed_point Hsolver Hsolve Hinitial Hresult Himplicit2.
+  have [w3 [Hsolve3 Hsem3]] :=
+    solve_fun_matches_fixed_point Hsolver Hsolve Hinitial Hresult Himplicit3.
+  rewrite Hwidth2 in Hsem2. inversion Hsem2; subst w2.
+  rewrite Hwidth3 in Hsem3. inversion Hsem3; subst w3.
+  by split.
+Qed.
+
+Example unused_implicit_successful_solver_matches_semantics solver_map solution :
+  SolverSyntax.circuit_tmap (solver_circuit 0%nvar unused_implicit_example) =
+    Some solver_map ->
+  inferWidths.solve_fun (solver_circuit 0%nvar unused_implicit_example) solver_map =
+    Some solution ->
+  solver_width solution 10%nvar = Some 0 /\
+  solver_width solution 11%nvar = Some 0.
+Proof.
+  move=> Hsolver Hsolve.
+  have [initial Hinitial] : exists initial,
+      Semantics.circuit_tmap_uninferred (sem_circuit unused_implicit_example) =
+        Some initial by vm_compute; eauto.
+  have [result Hresult] : exists result,
+      Semantics.circuit_tmap_implicits (sem_circuit unused_implicit_example) 0 =
+        Some result by vm_compute; eauto.
+  have Himplicit10 : original_implicit initial 0%nvar 10%nvar.
+  { vm_compute in Hinitial. inversion Hinitial; subst initial. by vm_compute. }
+  have Himplicit11 : original_implicit initial 0%nvar 11%nvar.
+  { vm_compute in Hinitial. inversion Hinitial; subst initial. by vm_compute. }
+  have Hwidth10 : semantic_width result 0%nvar 10%nvar = Some 0.
+  { vm_compute in Hresult. inversion Hresult; subst result. by vm_compute. }
+  have Hwidth11 : semantic_width result 0%nvar 11%nvar = Some 0.
+  { vm_compute in Hresult. inversion Hresult; subst result. by vm_compute. }
+  have [w10 [Hsolve10 Hsem10]] :=
+    solve_fun_matches_fixed_point Hsolver Hsolve Hinitial Hresult Himplicit10.
+  have [w11 [Hsolve11 Hsem11]] :=
+    solve_fun_matches_fixed_point Hsolver Hsolve Hinitial Hresult Himplicit11.
+  rewrite Hwidth10 in Hsem10. inversion Hsem10; subst w10.
+  rewrite Hwidth11 in Hsem11. inversion Hsem11; subst w11.
+  by split.
+Qed.
+
+Example risk_cycle_successful_solver_matches_semantics solver_map solution :
+  SolverSyntax.circuit_tmap (solver_circuit 0%nvar risk_cycle_module) =
+    Some solver_map ->
+  inferWidths.solve_fun (solver_circuit 0%nvar risk_cycle_module) solver_map =
+    Some solution ->
+  solver_width solution 1%nvar = Some 6 /\
+  solver_width solution 2%nvar = Some 6.
+Proof.
+  move=> Hsolver Hsolve.
+  have [initial Hinitial] : exists initial,
+      Semantics.circuit_tmap_uninferred (sem_circuit risk_cycle_module) =
+        Some initial by vm_compute; eauto.
+  have [result Hresult] : exists result,
+      Semantics.circuit_tmap_implicits (sem_circuit risk_cycle_module) 2 =
+        Some result by vm_compute; eauto.
+  have Himplicit1 : original_implicit initial 0%nvar 1%nvar.
+  { vm_compute in Hinitial. inversion Hinitial; subst initial. by vm_compute. }
+  have Himplicit2 : original_implicit initial 0%nvar 2%nvar.
+  { vm_compute in Hinitial. inversion Hinitial; subst initial. by vm_compute. }
+  have Hwidth1 : semantic_width result 0%nvar 1%nvar = Some 6.
+  { vm_compute in Hresult. inversion Hresult; subst result. by vm_compute. }
+  have Hwidth2 : semantic_width result 0%nvar 2%nvar = Some 6.
+  { vm_compute in Hresult. inversion Hresult; subst result. by vm_compute. }
+  have [w1 [Hsolve1 Hsem1]] :=
+    solve_fun_matches_fixed_point Hsolver Hsolve Hinitial Hresult Himplicit1.
+  have [w2 [Hsolve2 Hsem2]] :=
+    solve_fun_matches_fixed_point Hsolver Hsolve Hinitial Hresult Himplicit2.
+  rewrite Hwidth1 in Hsem1. inversion Hsem1; subst w1.
+  rewrite Hwidth2 in Hsem2. inversion Hsem2; subst w2.
+  by split.
+Qed.
 
 Definition reference_example_full_exponential_solver :=
   match SolverSyntax.circuit_tmap (solver_circuit 0%nvar reference_example) with

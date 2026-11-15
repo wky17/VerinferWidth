@@ -1,10 +1,11 @@
 From Coq Require Import NArith ZArith.
 From mathcomp Require Import all_ssreflect.
-From mathcomp.tarjan Require Import kosaraju.
+From mathcomp.tarjan Require Import kosaraju extra.
 From Lib Require Import Var.
 From firrtl Require Import Env HiEnv HiFirrtl
   Env_with_implicit_widths HiEnv_with_implicit_widths.
 From Solver Require Import constraints extract_cs extract_cswithmin graph inferWidths.
+From Solver Require Import scc.
 From Semantics Require Import Width_solution_bridge.
 
 Set Implicit Arguments.
@@ -115,7 +116,7 @@ Qed.
 Lemma statement_tmaps_preserve_relation modules scope solver_map sem_map
     s solver_next sem_next scope_next :
   scalar_maps_related solver_map sem_map ->
-  SolverSyntax.stmt_tmap' solver_map (solver_stmt s) = Some solver_next ->
+  SolverSyntax.stmt_tmap solver_map (solver_stmt s) = Some solver_next ->
   Semantics.statement_tmap modules scope sem_map (sem_stmt s) =
     Some (scope_next, sem_next) ->
   scalar_maps_related solver_next sem_next.
@@ -143,7 +144,7 @@ Qed.
 Lemma statements_tmaps_preserve_relation modules ss scope solver_map sem_map
     solver_final sem_final scope_final :
   scalar_maps_related solver_map sem_map ->
-  SolverSyntax.stmts_tmap' solver_map (solver_stmts ss) = Some solver_final ->
+  SolverSyntax.stmts_tmap solver_map (solver_stmts ss) = Some solver_final ->
   Semantics.statements_tmap modules scope sem_map (sem_stmts ss) =
     Some (scope_final, sem_final) ->
   scalar_maps_related solver_final sem_final.
@@ -151,7 +152,7 @@ Proof.
   move: scope solver_map sem_map.
   elim: ss => [|s ss IH] scope solver_map sem_map Hmaps /=.
   - move=> H1 H2. by inversion H1; inversion H2; subst.
-  - case Hsolver: (SolverSyntax.stmt_tmap' solver_map (solver_stmt s))
+  - case Hsolver: (SolverSyntax.stmt_tmap solver_map (solver_stmt s))
       => [solver_next|] //=.
     case Hsem: (Semantics.statement_tmap modules scope sem_map (sem_stmt s))
       => [[scope_next sem_next]|] //=.
@@ -161,7 +162,7 @@ Proof.
 Qed.
 
 Lemma solver_ports_preserve_existing ports initial final id binding :
-  SolverSyntax.ports_tmap' initial (map solver_port ports) = Some final ->
+  SolverSyntax.ports_tmap initial (map solver_port ports) = Some final ->
   SolverSyntax.VM.find id initial = Some binding ->
   SolverSyntax.VM.find id final = Some binding.
 Proof.
@@ -202,7 +203,7 @@ Lemma common_port_binding_related p :
 Proof. by case: p => [id ty|id ty|id] /=; [apply: translated_scalar_types_related | apply: translated_scalar_types_related | constructor]. Qed.
 
 Lemma solver_ports_find_member ports initial final p :
-  SolverSyntax.ports_tmap' initial (map solver_port ports) = Some final ->
+  SolverSyntax.ports_tmap initial (map solver_port ports) = Some final ->
   List.In p ports ->
   SolverSyntax.VM.find (common_port_id p) final = Some (solver_port_binding p).
 Proof.
@@ -236,7 +237,7 @@ Proof.
 Qed.
 
 Lemma solver_ports_find_outside ports initial final id :
-  SolverSyntax.ports_tmap' initial (map solver_port ports) = Some final ->
+  SolverSyntax.ports_tmap initial (map solver_port ports) = Some final ->
   (forall p, List.In p ports -> common_port_id p <> id) ->
   SolverSyntax.VM.find id final = SolverSyntax.VM.find id initial.
 Proof.
@@ -272,7 +273,7 @@ Proof.
 Qed.
 
 Lemma ports_tmaps_related ports solver_map sem_map :
-  SolverSyntax.ports_tmap' (SolverSyntax.VM.empty _) (map solver_port ports) =
+  SolverSyntax.ports_tmap (SolverSyntax.VM.empty _) (map solver_port ports) =
     Some solver_map ->
   Semantics.ports_tmap (map sem_port ports) = Some sem_map ->
   scalar_maps_related solver_map sem_map.
@@ -307,9 +308,9 @@ Theorem initial_circuit_tmaps_related m circuit_name solver_map initial :
 Proof.
   rewrite /SolverSyntax.circuit_tmap /solver_circuit /SolverSyntax.modules_tmap
     /SolverSyntax.module_tmap /solver_module /=.
-  case Hports: (SolverSyntax.ports_tmap' _ (map solver_port (common_ports m)))
+  case Hports: (SolverSyntax.ports_tmap _ (map solver_port (common_ports m)))
     => [solver_ports|] //=.
-  case Hstmts: (SolverSyntax.stmts_tmap' solver_ports (solver_stmts (common_stmts m)))
+  case Hstmts: (SolverSyntax.stmts_tmap solver_ports (solver_stmts (common_stmts m)))
     => [solver_final|] //=.
   move=> Hsolver; inversion Hsolver; subst solver_final.
   rewrite /Semantics.circuit_tmap_uninferred /sem_circuit /sem_module /=.
@@ -1641,7 +1642,7 @@ Proof.
 Qed.
 
 Lemma solver_statement_preserves_lookup solver_map next s id binding :
-  SolverSyntax.stmt_tmap' solver_map (solver_stmt s) = Some next ->
+  SolverSyntax.stmt_tmap solver_map (solver_stmt s) = Some next ->
   SolverSyntax.VM.find id solver_map = Some binding ->
   SolverSyntax.VM.find id next = Some binding.
 Proof.
@@ -1664,26 +1665,26 @@ Proof.
 Qed.
 
 Lemma solver_statements_preserve_lookup solver_map next ss id binding :
-  SolverSyntax.stmts_tmap' solver_map (solver_stmts ss) = Some next ->
+  SolverSyntax.stmts_tmap solver_map (solver_stmts ss) = Some next ->
   SolverSyntax.VM.find id solver_map = Some binding ->
   SolverSyntax.VM.find id next = Some binding.
 Proof.
   move: solver_map; elim: ss => [|s ss IH] solver_map /=.
   - by move=> [<-].
-  - case Hstep: (SolverSyntax.stmt_tmap' solver_map (solver_stmt s)) => [mid|] //=.
+  - case Hstep: (SolverSyntax.stmt_tmap solver_map (solver_stmt s)) => [mid|] //=.
     move=> Hrest Hfind.
     apply: (IH mid Hrest).
     exact: (solver_statement_preserves_lookup Hstep Hfind).
 Qed.
 
 Lemma solver_statements_register_lookup solver_map final ss id ty clock rst :
-  SolverSyntax.stmts_tmap' solver_map (solver_stmts ss) = Some final ->
+  SolverSyntax.stmts_tmap solver_map (solver_stmts ss) = Some final ->
   List.In (CReg id ty clock rst) ss ->
   SolverSyntax.VM.find id final = Some (solver_type ty, SolverSyntax.Duplex).
 Proof.
   move: solver_map; elim: ss => [|s ss IH] solver_map /=.
   - by move=> _ [].
-  - case Hstep: (SolverSyntax.stmt_tmap' solver_map (solver_stmt s)) => [mid|] //=.
+  - case Hstep: (SolverSyntax.stmt_tmap solver_map (solver_stmt s)) => [mid|] //=.
     move=> Hrest [Heq|Hin].
     + subst s.
       simpl in Hstep.
@@ -1702,9 +1703,9 @@ Lemma solver_circuit_register_lookup m circuit_name solver_map id ty clock rst :
 Proof.
   rewrite /SolverSyntax.circuit_tmap /solver_circuit /SolverSyntax.modules_tmap
     /SolverSyntax.module_tmap /solver_module /=.
-  case Hports: (SolverSyntax.ports_tmap' _ (map solver_port (common_ports m)))
+  case Hports: (SolverSyntax.ports_tmap _ (map solver_port (common_ports m)))
     => [ports|] //=.
-  case Hstmts: (SolverSyntax.stmts_tmap' ports (solver_stmts (common_stmts m)))
+  case Hstmts: (SolverSyntax.stmts_tmap ports (solver_stmts (common_stmts m)))
     => [final|] //=.
   move=> Hfinal Hin. inversion Hfinal; subst final.
   exact: (solver_statements_register_lookup Hstmts Hin).
@@ -3296,6 +3297,135 @@ Proof.
     Hsolver Hinitial Hresult Hextract Hcover (Hcontract cmap Hextract)).
 Qed.
 
+Section KosarajuComponentOrder.
+Variables (T : finType) (r : rel T).
+
+Lemma pdfs_no_backedge (s : {set T}) (pivot : T) :
+  pivot \in s ->
+  let step := pdfs (rgraph [rel x y | r y x]) (s, [::]) pivot in
+  forall x y, x \in step.1 -> y \in step.2 -> ~~ r x y.
+Proof.
+  move=> Hp.
+  have Hpdf := @pdfs_connect T (rgraph [rel x y | r y x]) s pivot Hp.
+  case Hstep: (pdfs (rgraph [rel x y | r y x]) (s, [::]) pivot)
+    => [s' found] in Hpdf *.
+  simpl in Hpdf |- *.
+  move: Hpdf => [Huniq Hremain Hsubset Hreach] x y Hx Hy.
+  have Hxin : x \in s.
+  { move: Hx. by rewrite Hremain !inE => /andP []. }
+  have Hxnot : x \notin found.
+  { move: Hx. by rewrite Hremain !inE => /andP []. }
+  apply/negP=> Hedge.
+  have Hpath : connect (relto [pred u in s]
+      (grel (rgraph [rel x y | r y x]))) pivot y.
+  { by rewrite -Hreach. }
+  have Hedge' : connect (relto [pred u in s]
+      (grel (rgraph [rel x y | r y x]))) y x.
+  { apply: connect_to1; first exact Hxin.
+    by rewrite rgraphK. }
+  have Hreachx := connect_trans Hpath Hedge'.
+  rewrite -Hreach in Hreachx.
+  by rewrite Hreachx in Hxnot.
+Qed.
+
+Fixpoint reverse_component_order (blocks : seq (seq T)) : Prop :=
+  if blocks is block :: rest then
+    (forall x y, x \in block -> y \in flatten rest -> ~~ r x y) /\
+    reverse_component_order rest
+  else True.
+
+Definition kosaraju_step (p : {set T} * seq (seq T)) (x : T) :=
+  if x \notin p.1 then p else
+    let p1 := pdfs (rgraph [rel u v | r v u]) (p.1, [::]) x in
+    (p1.1, p1.2 :: p.2).
+
+Lemma kosaraju_fold_order (todo : seq T) (s : {set T}) (blocks : seq (seq T)) :
+  (forall x y, x \in s -> y \in flatten blocks -> ~~ r x y) ->
+  reverse_component_order blocks ->
+  let result := foldl kosaraju_step (s, blocks) todo in
+  (forall x y, x \in result.1 -> y \in flatten result.2 -> ~~ r x y) /\
+  reverse_component_order result.2.
+Proof.
+  move: s blocks.
+  elim: todo => [|pivot todo IH] s blocks Hinvariant Horder /=.
+  - by split.
+  - rewrite /kosaraju_step /=.
+    case Hpivot: (pivot \notin s).
+    + exact: IH Hinvariant Horder.
+    + have Hp : pivot \in s by move: Hpivot; case: (pivot \in s).
+      have Hpdf := @pdfs_connect T (rgraph [rel x y | r y x]) s pivot Hp.
+      have Hback := pdfs_no_backedge Hp.
+      case Hstep: (pdfs (rgraph [rel x y | r y x]) (s, [::]) pivot)
+        => [remaining found] in Hpdf Hback *.
+      simpl in Hpdf, Hback |- *.
+      move: Hpdf => [Huniq Hremain Hsubset Hreach].
+      apply: IH.
+      * move=> x y Hx.
+        rewrite /= mem_cat => /orP [Hy|Hy].
+        -- exact: Hback x y Hx Hy.
+        -- apply: Hinvariant _ Hy.
+           move: Hx. by rewrite Hremain !inE => /andP [].
+      * simpl. split; last exact Horder.
+        move=> x y Hx Hy. apply: Hinvariant _ Hy.
+        exact: (subsetP Hsubset _ Hx).
+Qed.
+
+Theorem kosaraju_reverse_component_order :
+  reverse_component_order (kosaraju r).
+Proof.
+  have Hinv : forall x y, x \in [set: T] -> y \in flatten [::] -> ~~ r x y.
+  { by move=> x y _; rewrite in_nil. }
+  have H := @kosaraju_fold_order (tseq (rgraph r)) [set: T] [::] Hinv I.
+  exact H.2.
+Qed.
+
+Lemma reverse_component_order_prefix prefix block suffix :
+  reverse_component_order (prefix ++ block :: suffix) ->
+  forall x y, x \in flatten prefix -> y \in block -> ~~ r x y.
+Proof.
+  elim: prefix => [|first rest IH] //= [Hfirst Hrest] x y.
+  rewrite mem_cat => /orP [Hx|Hx] Hy.
+  - apply: (Hfirst x y Hx). rewrite flatten_cat /= !mem_cat.
+    by rewrite Hy !orbT.
+  - exact: IH Hrest x y Hx Hy.
+Qed.
+
+Definition reverse_blocks (blocks : seq (seq T)) :=
+  rev (map rev blocks).
+
+Lemma reverse_blocksK blocks : reverse_blocks (reverse_blocks blocks) = blocks.
+Proof.
+  rewrite /reverse_blocks map_rev revK.
+  elim: blocks => [|block rest IH] //=.
+  by rewrite revK IH.
+Qed.
+
+Lemma reverse_blocks_split prefix block suffix :
+  reverse_blocks (prefix ++ block :: suffix) =
+    reverse_blocks suffix ++ rev block :: reverse_blocks prefix.
+Proof.
+  rewrite /reverse_blocks map_cat rev_cat /= rev_cons.
+  by rewrite -cats1 -catA.
+Qed.
+
+Theorem kosaraju_later_no_edge prefix block suffix :
+  reverse_blocks (kosaraju r) = prefix ++ block :: suffix ->
+  forall x y, x \in flatten suffix -> y \in block -> ~~ r x y.
+Proof.
+  move=> Horder x y Hx Hy.
+  have Hraw : kosaraju r =
+      reverse_blocks suffix ++ rev block :: reverse_blocks prefix.
+  { rewrite -(reverse_blocksK (kosaraju r)) Horder reverse_blocks_split. by []. }
+  have Hraw_order := kosaraju_reverse_component_order.
+  rewrite Hraw in Hraw_order.
+  apply: (@reverse_component_order_prefix (reverse_blocks suffix) (rev block)
+    (reverse_blocks prefix) Hraw_order x y).
+  - rewrite /reverse_blocks -rev_flatten mem_rev. exact Hx.
+  - by rewrite mem_rev.
+Qed.
+
+End KosarajuComponentOrder.
+
 Definition solver_sccs (c : SolverSyntax.HiF.hfcircuit) (g : graph.Graph c) :=
   map (map (@SolverSyntax.finProdVar2ProdVar c))
     (rev (map rev (kosaraju g))).
@@ -3384,6 +3514,24 @@ Proof.
   by rewrite Hnil.
 Qed.
 
+Theorem solver_sccs_schedule_from_constraint_order c (g : graph.Graph c) cmap :
+  (forall l1 l2 scc,
+    l1 ++ scc :: l2 = solver_sccs g ->
+    forall var, List.In var (constraints1_vars (extract_cs scc cmap)) ->
+      List.In var (List.concat l1 ++ scc)) ->
+  inferWidths.scc_schedule_correctness initial_valuation (solver_sccs g) cmap.
+Proof.
+  move=> Horder.
+  split; first exact: solver_sccs_nonempty.
+  split; first exact: solver_sccs_nodup.
+  split.
+  - move=> var Hmem. apply find_mem in Hmem.
+    destruct Hmem as [value Hfind].
+    by rewrite /initial_valuation SolverSyntax.PVM.Lemmas.F.empty_o in Hfind.
+  - move=> l1 l2 scc Heq var Hin.
+    left. exact: (Horder l1 l2 scc Heq var Hin).
+Qed.
+
 Lemma solver_sccs_component_characterization c (g : graph.Graph c) component :
   List.In component (solver_sccs g) ->
   exists representative : SolverSyntax.finProdVar c,
@@ -3407,6 +3555,59 @@ Proof.
   have Hinj : injective (@SolverSyntax.finProdVar2ProdVar c).
   { move=> a b Hab. exact: val_inj Hab. }
   by rewrite (mem_map Hinj) mem_rev Hx.
+Qed.
+
+Lemma solver_sccs_later_no_edge c (g : graph.Graph c) prefix block suffix
+    (source target : SolverSyntax.finProdVar c) :
+  solver_sccs g = prefix ++ block :: suffix ->
+  List.In (SolverSyntax.finProdVar2ProdVar source) (List.concat suffix) ->
+  List.In (SolverSyntax.finProdVar2ProdVar target) block ->
+  ~~ g source target.
+Proof.
+  move=> Horder Hsource Htarget.
+  have Hmapped :
+    map (map (@SolverSyntax.finProdVar2ProdVar c))
+      (reverse_blocks (kosaraju g)) = prefix ++ block :: suffix.
+  { exact Horder. }
+  apply List.map_eq_app in Hmapped.
+  destruct Hmapped as [rawprefix [rawtail [Hraw [Hprefix Htail]]]].
+  apply List.map_eq_cons in Htail.
+  destruct Htail as [rawblock [rawsuffix [Hrawtail [Hblock Hsuffix]]]].
+  subst rawtail.
+  have Hinj : injective (@SolverSyntax.finProdVar2ProdVar c).
+  { move=> x y Hxy. exact: val_inj Hxy. }
+  have Hsource' : source \in flatten rawsuffix.
+  { have H := sequence_in_membership Hsource.
+    rewrite -Hsuffix in H.
+    change (is_true (SolverSyntax.finProdVar2ProdVar source \in
+      flatten (map (map (@SolverSyntax.finProdVar2ProdVar c)) rawsuffix))) in H.
+    rewrite -map_flatten (mem_map Hinj) in H.
+    exact H. }
+  have Htarget' : target \in rawblock.
+  { have H := sequence_in_membership Htarget.
+    by rewrite -Hblock (mem_map Hinj) in H. }
+  exact: (@kosaraju_later_no_edge (SolverSyntax.finProdVar c) g
+    rawprefix rawblock rawsuffix Hraw source target Hsource' Htarget').
+Qed.
+
+Lemma solver_sccs_edge_order c (g : graph.Graph c) prefix block suffix
+    (source target : SolverSyntax.finProdVar c) :
+  solver_sccs g = prefix ++ block :: suffix ->
+  g source target ->
+  List.In (SolverSyntax.finProdVar2ProdVar target) block ->
+  List.In (SolverSyntax.finProdVar2ProdVar source) (List.concat prefix ++ block).
+Proof.
+  move=> Horder Hedge Htarget.
+  have Hsource := solver_sccs_complete g source.
+  rewrite Horder in Hsource.
+  rewrite List.concat_app /= in Hsource. apply List.in_app_or in Hsource.
+  destruct Hsource as [Hprefix|Hrest].
+  - apply List.in_or_app. by left.
+  - apply List.in_app_or in Hrest.
+    destruct Hrest as [Hblock|Hsuffix].
+    + apply List.in_or_app. by right.
+    + have Hnone := solver_sccs_later_no_edge Horder Hsuffix Htarget.
+      by rewrite Hedge in Hnone.
 Qed.
 
 Lemma dependency_fold_preserves c (g : graph.Graph c) (terms : list term)
@@ -3715,6 +3916,278 @@ Proof.
   move=> key cs Hfind. by rewrite SolverSyntax.PVM.Lemmas.F.empty_o in Hfind.
 Qed.
 
+Lemma common_rhs_simple tmap e rhs :
+  common_rhs tmap e = Some rhs ->
+  (regular_terms rhs = [::] \/
+    exists source, regular_terms rhs = [:: (1, source)]) /\
+  regular_power rhs = [::].
+Proof.
+  case: e => [id|w bits|w bits] /=.
+  - case: (SolverSyntax.VM.find id tmap) => [[ty orient]|] //=.
+    case: ty => [gt|elt n|fields] //=.
+    case: gt => [w|w|w|w| | |] //=;
+      move=> [<-]; split; try reflexivity;
+      first [left; reflexivity | right; eexists; reflexivity].
+  - by move=> [<-]; split; [left|].
+  - by move=> [<-]; split; [left|].
+Qed.
+
+Lemma common_rhs_good_terms rhs :
+  (regular_terms rhs = [::] \/
+    exists source, regular_terms rhs = [:: (1, source)]) ->
+  scc.good_terms (regular_terms rhs).
+Proof.
+  move=> [->|[source ->]]; rewrite /scc.good_terms /=; split.
+  - by move=> coe var [].
+  - constructor.
+  - move=> coe var [Heq|[]]. inversion Heq. discriminate.
+  - constructor; first by move=> [].
+    constructor.
+Qed.
+
+Lemma add_common_constraint_entries_correct cmap id rhs :
+  inferWidths.extract_entries_correctness cmap ->
+  (regular_terms rhs = [::] \/
+    exists source, regular_terms rhs = [:: (1, source)]) ->
+  regular_power rhs = [::] ->
+  inferWidths.extract_entries_correctness (add_common_constraint id rhs cmap).
+Proof.
+  move=> Hvalid Hterms Hpower key cs.
+  rewrite /add_common_constraint.
+  case Hsame: (key == (id, N0)).
+  - move/eqP: Hsame => ->.
+    rewrite SolverSyntax.PVM.Lemmas.F.add_eq_o; last by split; rewrite eqxx.
+    case Hprior: (SolverSyntax.PVM.find (id, N0) cmap) => [prior|] [<-].
+    + have [Hlhs Hgood] := Hvalid _ _ Hprior.
+      split; first by rewrite /= eqxx Hlhs.
+      move=> c [<-|Hin]; last exact: Hgood c Hin.
+      split; last exact Hpower.
+      exact: common_rhs_good_terms Hterms.
+    + split; first by rewrite /= eqxx.
+      move=> c [<-|[]]. split; last exact Hpower.
+      exact: common_rhs_good_terms Hterms.
+  - rewrite SolverSyntax.PVM.Lemmas.F.add_neq_o.
+    + exact: Hvalid.
+    + move=> Heq. apply eq_from_prodvar_eq in Heq.
+      subst key. by rewrite eqxx in Hsame.
+Qed.
+
+Lemma common_extract_step_entries_correct tmap cmap s next :
+  inferWidths.extract_entries_correctness cmap ->
+  common_extract_step tmap cmap s = Some next ->
+  inferWidths.extract_entries_correctness next.
+Proof.
+  move=> Hvalid.
+  case: s => [|id ty|id ty clock rst|id e] /=.
+  - by move=> [<-].
+  - by move=> [<-].
+  - case: ty rst => [| |w|w] [|trigger e] //=;
+      try (case Hrhs: (common_rhs tmap e) => [rhs|] //=;
+        move=> [<-]; have [Hterms Hpower] := common_rhs_simple Hrhs;
+        exact: add_common_constraint_entries_correct Hvalid Hterms Hpower);
+      by move=> [<-].
+  - case: (SolverSyntax.VM.find id tmap) => [[ty orient]|] //=.
+    case: ty => [gt|elt n|fields] //=.
+    case: gt => [w|w|w|w| | |] //=;
+      try (case Hrhs: (common_rhs tmap e) => [rhs|] //=;
+        move=> [<-]; have [Hterms Hpower] := common_rhs_simple Hrhs;
+        exact: add_common_constraint_entries_correct Hvalid Hterms Hpower);
+      by move=> [<-].
+Qed.
+
+Lemma common_extract_steps_entries_correct tmap ss cmap result :
+  inferWidths.extract_entries_correctness cmap ->
+  common_extract_steps tmap cmap ss = Some result ->
+  inferWidths.extract_entries_correctness result.
+Proof.
+  move: cmap; elim: ss => [|s ss IH] cmap Hvalid /=.
+  - by move=> [<-].
+  - case Hstep: (common_extract_step tmap cmap s) => [next|] //=.
+    move=> Hresult. apply: (IH next _ Hresult).
+    exact: common_extract_step_entries_correct Hvalid Hstep.
+Qed.
+
+Theorem extracted_common_entries_correct tmap m circuit_name cmap :
+  solver_map_is_scalar tmap ->
+  extract_constraints_c (solver_circuit circuit_name m) tmap = Some ([:: cmap], [::]) ->
+  inferWidths.extract_entries_correctness cmap.
+Proof.
+  move=> Hscalar Hextract.
+  rewrite (extract_common_circuit m circuit_name Hscalar) in Hextract.
+  case Hsteps: (common_extract_steps tmap (SolverSyntax.PVM.empty _)
+    (rev (common_stmts m))) => [result|] //= in Hextract.
+  inversion Hextract; subst result.
+  apply: (common_extract_steps_entries_correct _ Hsteps).
+  move=> key cs Hfind. by rewrite SolverSyntax.PVM.Lemmas.F.empty_o in Hfind.
+Qed.
+
+Definition common_entries_simple (cmap : SolverSyntax.PVM.t (list Constraint1)) : Prop :=
+  forall key cs, SolverSyntax.PVM.find key cmap = Some cs ->
+    inferWidths.is_simple_cycle cs = true.
+
+Lemma add_common_constraint_entries_simple cmap id rhs :
+  common_entries_simple cmap ->
+  (regular_terms rhs = [::] \/
+    exists source, regular_terms rhs = [:: (1, source)]) ->
+  common_entries_simple (add_common_constraint id rhs cmap).
+Proof.
+  move=> Hsimple Hterms key cs.
+  rewrite /add_common_constraint.
+  case Hsame: (key == (id, N0)).
+  - move/eqP: Hsame => ->.
+    rewrite SolverSyntax.PVM.Lemmas.F.add_eq_o; last by split; rewrite eqxx.
+    case Hprior: (SolverSyntax.PVM.find (id, N0) cmap) => [prior|] [<-].
+    + have Hprior_simple := Hsimple _ _ Hprior.
+      rewrite /inferWidths.is_simple_cycle /= in Hprior_simple *.
+      case: Hterms => [->|[source ->]]; by rewrite /= Hprior_simple.
+    + rewrite /inferWidths.is_simple_cycle /=.
+      case: Hterms => [->|[source ->]]; by [].
+  - rewrite SolverSyntax.PVM.Lemmas.F.add_neq_o.
+    + exact: Hsimple.
+    + move=> Heq. apply eq_from_prodvar_eq in Heq.
+      subst key. by rewrite eqxx in Hsame.
+Qed.
+
+Lemma common_extract_step_entries_simple tmap cmap s next :
+  common_entries_simple cmap ->
+  common_extract_step tmap cmap s = Some next ->
+  common_entries_simple next.
+Proof.
+  move=> Hsimple.
+  case: s => [|id ty|id ty clock rst|id e] /=.
+  - by move=> [<-].
+  - by move=> [<-].
+  - case: ty rst => [| |w|w] [|trigger e] //=;
+      try (case Hrhs: (common_rhs tmap e) => [rhs|] //=;
+        move=> [<-]; have [Hterms _] := common_rhs_simple Hrhs;
+        exact: add_common_constraint_entries_simple Hsimple Hterms);
+      by move=> [<-].
+  - case: (SolverSyntax.VM.find id tmap) => [[ty orient]|] //=.
+    case: ty => [gt|elt n|fields] //=.
+    case: gt => [w|w|w|w| | |] //=;
+      try (case Hrhs: (common_rhs tmap e) => [rhs|] //=;
+        move=> [<-]; have [Hterms _] := common_rhs_simple Hrhs;
+        exact: add_common_constraint_entries_simple Hsimple Hterms);
+      by move=> [<-].
+Qed.
+
+Lemma common_extract_steps_entries_simple tmap ss cmap result :
+  common_entries_simple cmap ->
+  common_extract_steps tmap cmap ss = Some result ->
+  common_entries_simple result.
+Proof.
+  move: cmap; elim: ss => [|s ss IH] cmap Hsimple /=.
+  - by move=> [<-].
+  - case Hstep: (common_extract_step tmap cmap s) => [next|] //=.
+    move=> Hresult. apply: (IH next _ Hresult).
+    exact: common_extract_step_entries_simple Hsimple Hstep.
+Qed.
+
+Theorem extracted_common_entries_simple tmap m circuit_name cmap :
+  solver_map_is_scalar tmap ->
+  extract_constraints_c (solver_circuit circuit_name m) tmap = Some ([:: cmap], [::]) ->
+  common_entries_simple cmap.
+Proof.
+  move=> Hscalar Hextract.
+  rewrite (extract_common_circuit m circuit_name Hscalar) in Hextract.
+  case Hsteps: (common_extract_steps tmap (SolverSyntax.PVM.empty _)
+    (rev (common_stmts m))) => [result|] //= in Hextract.
+  inversion Hextract; subst result.
+  apply: (common_extract_steps_entries_simple _ Hsteps).
+  move=> key cs Hfind. by rewrite SolverSyntax.PVM.Lemmas.F.empty_o in Hfind.
+Qed.
+
+Lemma common_extract_cs_simple cmap keys :
+  common_entries_simple cmap ->
+  inferWidths.is_simple_cycle (extract_cs keys cmap) = true.
+Proof.
+  move=> Hsimple.
+  elim: keys => [|key keys IH] //=.
+  case Hfind: (SolverSyntax.PVM.find key cmap) => [cs|] //=.
+  have Hcs := Hsimple key cs Hfind.
+  rewrite /inferWidths.is_simple_cycle List.forallb_app.
+  rewrite /inferWidths.is_simple_cycle in Hcs IH.
+  by rewrite Hcs IH.
+Qed.
+
+Lemma common_extract_cs_substituted_simple cmap keys initial :
+  common_entries_simple cmap ->
+  inferWidths.extract_entries_correctness cmap ->
+  inferWidths.is_simple_cycle
+    (List.map (remove_solved_c initial) (extract_cs keys cmap)) = true.
+Proof.
+  move=> Hsimple Hentries.
+  apply: inferWidths.remove_solved_simple.
+  - move=> c Hin.
+    apply extract_cs_exist_c in Hin.
+    destruct Hin as [key [_ [cs [Hfind Hin]]]].
+    have [_ Hgood] := Hentries key cs Hfind.
+    exact (Hgood c Hin).2.
+  - exact: common_extract_cs_simple Hsimple.
+Qed.
+
+Theorem solver_sccs_constraint_order c cmap (g : graph.Graph c) :
+  inferWidths.extract_entries_correctness cmap ->
+  graph.build_dependency_graph c
+    (List.concat (snd (List.split (SolverSyntax.PVM.elements cmap)))) = Some g ->
+  forall prefix block suffix,
+    prefix ++ block :: suffix = solver_sccs g ->
+    forall var, List.In var (constraints1_vars (extract_cs block cmap)) ->
+      List.In var (List.concat prefix ++ block).
+Proof.
+  move=> Hentries Hgraph prefix block suffix Horder var Hvar.
+  apply inferWidths.constraint1s_vars2constraint1_vars in Hvar.
+  destruct Hvar as [constraint [Hin Hvar]].
+  have [Hlhs [_ _]] :=
+    @inferWidths.extract_entries_member cmap block constraint Hentries Hin.
+  have Hflat : List.In constraint
+      (List.concat (snd (List.split (SolverSyntax.PVM.elements cmap)))).
+  { apply extract_cs_member_iff in Hin.
+    destruct Hin as [key [cs [_ [Hfind Hc]]]].
+    apply flattened_constraint_member.
+    exists key, cs; split; last exact Hc.
+    by apply find_in_elements. }
+  have Hvalid :
+      constraint_vars_in_graph c constraint.
+  { have Hgraph0 := Hgraph.
+    rewrite /graph.build_dependency_graph in Hgraph0.
+    case Hall: (all (constraint_vars_in_graph c)
+        (List.concat (snd (List.split (SolverSyntax.PVM.elements cmap)))))
+      => //= in Hgraph0.
+    apply List.forallb_forall with (x := constraint) in Hall; last exact Hflat.
+    exact Hall. }
+  move/andP: Hvalid => [Htarget_valid Hsources_valid].
+  rewrite /constraint1_vars -map_cat /= in Hvar.
+  destruct Hvar as [Heq|Hrhs].
+  - subst var. apply List.in_or_app. by right.
+  - apply List.in_map_iff in Hrhs.
+    destruct Hrhs as [[coeff source] [Hsource Hterm]].
+    simpl in Hsource; subst source.
+    have Hsource_valid : var \in SolverSyntax.finProdVar_list c.
+    { apply List.forallb_forall with (x := (coeff, var)) in Hsources_valid;
+        last exact Hterm.
+      exact Hsources_valid. }
+    pose source : SolverSyntax.finProdVar c :=
+      @Sub _ (fun x => x \in SolverSyntax.finProdVar_list c)
+        (seq_sub (SolverSyntax.finProdVar_list c)) var Hsource_valid.
+    pose target : SolverSyntax.finProdVar c :=
+      @Sub _ (fun x => x \in SolverSyntax.finProdVar_list c)
+        (seq_sub (SolverSyntax.finProdVar_list c))
+        (lhs_var1 constraint) Htarget_valid.
+    have Hedge : g source target.
+    { apply: (@dependency_graph_contains_edge c _ g constraint source target coeff).
+      - exact Hgraph.
+      - exact Hflat.
+      - reflexivity.
+      - exact Hterm. }
+    have Htarget : List.In (SolverSyntax.finProdVar2ProdVar target) block.
+    { change (List.In (lhs_var1 constraint) block). exact Hlhs. }
+    have Hordered := @solver_sccs_edge_order c g prefix block suffix source target
+      (Logic.eq_sym Horder) Hedge Htarget.
+    change (List.In var (List.concat prefix ++ block)) in Hordered.
+    exact Hordered.
+Qed.
+
 Theorem successful_common_solver_extraction_bridge
     solver_map m circuit_name initial cmap solution :
   SolverSyntax.circuit_tmap (solver_circuit circuit_name m) = Some solver_map ->
@@ -3762,6 +4235,72 @@ Proof.
   exact: (solver_sccs_complete g v).
 Qed.
 
+Theorem successful_common_solver_satisfies_if_schedule
+    solver_map m circuit_name initial cmap solution :
+  SolverSyntax.circuit_tmap (solver_circuit circuit_name m) = Some solver_map ->
+  Semantics.circuit_tmap_uninferred (sem_circuit m) = Some initial ->
+  extract_constraints_c (solver_circuit circuit_name m) solver_map =
+    Some ([:: cmap], [::]) ->
+  inferWidths.solve_fun (solver_circuit circuit_name m) solver_map = Some solution ->
+  (forall g,
+    graph.build_dependency_graph (solver_circuit circuit_name m)
+      (List.concat (snd (List.split (SolverSyntax.PVM.elements cmap)))) = Some g ->
+    inferWidths.scc_schedule_correctness initial_valuation (solver_sccs g) cmap) ->
+  List.forallb (satisfies_constraint1 solution)
+    (List.concat (snd (List.split (SolverSyntax.PVM.elements cmap)))) = true.
+Proof.
+  move=> Hsolver Hinitial Hextract Hsolve Hschedule.
+  have [sem_map [_ Hmaps]] := initial_circuit_tmaps_related Hsolver Hinitial.
+  have Hentries := extracted_common_entries_correct
+    (scalar_maps_related_is_scalar Hmaps) Hextract.
+  have [g [Hgraph [Halg Hsat_eq]]] :=
+    successful_common_solver_extraction_bridge Hsolver Hinitial Hextract Hsolve.
+  have Hcheck : inferWidths.solve_alg_check (solver_sccs g) cmap [::] = Some solution.
+  { by rewrite /inferWidths.solve_alg_check Halg. }
+  have Hcorrect := inferWidths.solve_alg_correctness (solver_sccs g) cmap [::]
+    (Hschedule g Hgraph) Hentries.
+  rewrite Hcheck in Hcorrect.
+  rewrite -(Hsat_eq solution).
+  exact Hcorrect.1.
+Qed.
+
+Theorem successful_common_solver_contract_if_schedule
+    solver_map m circuit_name initial cmap solution :
+  SolverSyntax.circuit_tmap (solver_circuit circuit_name m) = Some solver_map ->
+  Semantics.circuit_tmap_uninferred (sem_circuit m) = Some initial ->
+  extract_constraints_c (solver_circuit circuit_name m) solver_map =
+    Some ([:: cmap], [::]) ->
+  inferWidths.solve_fun (solver_circuit circuit_name m) solver_map = Some solution ->
+  (forall g,
+    graph.build_dependency_graph (solver_circuit circuit_name m)
+      (List.concat (snd (List.split (SolverSyntax.PVM.elements cmap)))) = Some g ->
+    inferWidths.scc_schedule_correctness initial_valuation (solver_sccs g) cmap) ->
+  solver_solution_contract initial (common_module_name m) cmap solution.
+Proof.
+  move=> Hsolver Hinitial Hextract Hsolve Hschedule.
+  split.
+  - exact: successful_common_solver_satisfies_if_schedule
+      Hsolver Hinitial Hextract Hsolve Hschedule.
+  - move=> candidate Hcovered Hdomain Hsat.
+    have [sem_map [_ Hmaps]] := initial_circuit_tmaps_related Hsolver Hinitial.
+    have Hscalar := scalar_maps_related_is_scalar Hmaps.
+    have Hentries := extracted_common_entries_correct Hscalar Hextract.
+    have Hsimple := extracted_common_entries_simple Hscalar Hextract.
+    have [g [Hgraph [Halg Hsat_eq]]] :=
+      successful_common_solver_extraction_bridge Hsolver Hinitial Hextract Hsolve.
+    have Hcandidate : forall x, List.In x (List.concat (solver_sccs g)) ->
+        SolverSyntax.PVM.mem x candidate.
+    { move=> x Hin.
+      have Hmem := (proj2 (solve_alg_domain Halg x)) (or_introl Hin).
+      apply find_mem in Hmem. destruct Hmem as [value Hfind].
+      have [value' Hfind'] := Hdomain x value Hfind.
+      apply find_mem. by exists value'. }
+    apply: (@inferWidths.solve_alg_simple_smallest (solver_sccs g) cmap solution candidate
+      (Hschedule g Hgraph) Hentries _ Halg _ Hcandidate).
+    + move=> keys. exact: common_extract_cs_simple Hsimple.
+    + by rewrite Hsat_eq.
+Qed.
+
 Corollary conditional_solve_fun_matches_fixed_point_without_coverage
     solver_map m circuit_name n initial result solution :
   SolverSyntax.circuit_tmap (solver_circuit circuit_name m) = Some solver_map ->
@@ -3781,4 +4320,130 @@ Proof.
   have Hcover := successful_solve_fun_covers_initial Hsolver Hinitial Hsolve.
   exact: (conditional_solve_fun_matches_fixed_point
     Hsolver Hsolve Hinitial Hresult Hcover Hcontract).
+Qed.
+
+Corollary solve_fun_matches_fixed_point_if_schedule
+    solver_map m circuit_name n initial result solution :
+  SolverSyntax.circuit_tmap (solver_circuit circuit_name m) = Some solver_map ->
+  inferWidths.solve_fun (solver_circuit circuit_name m) solver_map = Some solution ->
+  Semantics.circuit_tmap_uninferred (sem_circuit m) = Some initial ->
+  Semantics.circuit_tmap_implicits (sem_circuit m) n = Some result ->
+  (forall cmap g,
+    extract_constraints_c (solver_circuit circuit_name m) solver_map =
+      Some ([:: cmap], [::]) ->
+    graph.build_dependency_graph (solver_circuit circuit_name m)
+      (List.concat (snd (List.split (SolverSyntax.PVM.elements cmap)))) = Some g ->
+    inferWidths.scc_schedule_correctness initial_valuation (solver_sccs g) cmap) ->
+  forall id, original_implicit initial (common_module_name m) id ->
+    exists w,
+      solver_width solution id = Some w /\
+      semantic_width result (common_module_name m) id = Some w.
+Proof.
+  move=> Hsolver Hsolve Hinitial Hresult Hschedule.
+  apply: (conditional_solve_fun_matches_fixed_point_without_coverage
+    Hsolver Hsolve Hinitial Hresult).
+  move=> cmap Hextract.
+  apply: (successful_common_solver_contract_if_schedule Hsolver Hinitial Hextract Hsolve).
+  by move=> g Hgraph; apply: (Hschedule cmap g Hextract Hgraph).
+Qed.
+
+Corollary solve_fun_matches_fixed_point_if_constraint_order
+    solver_map m circuit_name n initial result solution :
+  SolverSyntax.circuit_tmap (solver_circuit circuit_name m) = Some solver_map ->
+  inferWidths.solve_fun (solver_circuit circuit_name m) solver_map = Some solution ->
+  Semantics.circuit_tmap_uninferred (sem_circuit m) = Some initial ->
+  Semantics.circuit_tmap_implicits (sem_circuit m) n = Some result ->
+  (forall cmap g l1 l2 scc,
+    extract_constraints_c (solver_circuit circuit_name m) solver_map =
+      Some ([:: cmap], [::]) ->
+    graph.build_dependency_graph (solver_circuit circuit_name m)
+      (List.concat (snd (List.split (SolverSyntax.PVM.elements cmap)))) = Some g ->
+    l1 ++ scc :: l2 = solver_sccs g ->
+    forall var, List.In var (constraints1_vars (extract_cs scc cmap)) ->
+      List.In var (List.concat l1 ++ scc)) ->
+  forall id, original_implicit initial (common_module_name m) id ->
+    exists w,
+      solver_width solution id = Some w /\
+      semantic_width result (common_module_name m) id = Some w.
+Proof.
+  move=> Hsolver Hsolve Hinitial Hresult Horder.
+  apply: (solve_fun_matches_fixed_point_if_schedule
+    Hsolver Hsolve Hinitial Hresult).
+  move=> cmap g Hextract Hgraph.
+  apply: solver_sccs_schedule_from_constraint_order.
+  by move=> l1 l2 scc Heq var Hin;
+    apply: (Horder cmap g l1 l2 scc Hextract Hgraph Heq var Hin).
+Qed.
+
+Theorem successful_common_solver_schedule
+    solver_map m circuit_name initial cmap (g : graph.Graph (solver_circuit circuit_name m)) :
+  SolverSyntax.circuit_tmap (solver_circuit circuit_name m) = Some solver_map ->
+  Semantics.circuit_tmap_uninferred (sem_circuit m) = Some initial ->
+  extract_constraints_c (solver_circuit circuit_name m) solver_map =
+    Some ([:: cmap], [::]) ->
+  graph.build_dependency_graph (solver_circuit circuit_name m)
+    (List.concat (snd (List.split (SolverSyntax.PVM.elements cmap)))) = Some g ->
+  inferWidths.scc_schedule_correctness initial_valuation (solver_sccs g) cmap.
+Proof.
+  move=> Hsolver Hinitial Hextract Hgraph.
+  have [sem_map [_ Hmaps]] := initial_circuit_tmaps_related Hsolver Hinitial.
+  have Hentries := extracted_common_entries_correct
+    (scalar_maps_related_is_scalar Hmaps) Hextract.
+  apply: solver_sccs_schedule_from_constraint_order.
+  move=> prefix suffix block Horder var Hin.
+  exact: (@solver_sccs_constraint_order _ _ _ Hentries Hgraph
+    prefix block suffix Horder var Hin).
+Qed.
+
+Theorem successful_common_solver_contract
+    solver_map m circuit_name initial cmap solution :
+  SolverSyntax.circuit_tmap (solver_circuit circuit_name m) = Some solver_map ->
+  Semantics.circuit_tmap_uninferred (sem_circuit m) = Some initial ->
+  extract_constraints_c (solver_circuit circuit_name m) solver_map =
+    Some ([:: cmap], [::]) ->
+  inferWidths.solve_fun (solver_circuit circuit_name m) solver_map = Some solution ->
+  solver_solution_contract initial (common_module_name m) cmap solution.
+Proof.
+  move=> Hsolver Hinitial Hextract Hsolve.
+  apply: (successful_common_solver_contract_if_schedule Hsolver Hinitial Hextract Hsolve).
+  by move=> g Hgraph;
+    apply: (successful_common_solver_schedule Hsolver Hinitial Hextract Hgraph).
+Qed.
+
+Corollary solve_fun_matches_fixed_point
+    solver_map m circuit_name n initial result solution :
+  SolverSyntax.circuit_tmap (solver_circuit circuit_name m) = Some solver_map ->
+  inferWidths.solve_fun (solver_circuit circuit_name m) solver_map = Some solution ->
+  Semantics.circuit_tmap_uninferred (sem_circuit m) = Some initial ->
+  Semantics.circuit_tmap_implicits (sem_circuit m) n = Some result ->
+  forall id, original_implicit initial (common_module_name m) id ->
+    exists w,
+      solver_width solution id = Some w /\
+      semantic_width result (common_module_name m) id = Some w.
+Proof.
+  move=> Hsolver Hsolve Hinitial Hresult.
+  apply: (conditional_solve_fun_matches_fixed_point_without_coverage
+    Hsolver Hsolve Hinitial Hresult).
+  by move=> cmap Hextract;
+    apply: (successful_common_solver_contract Hsolver Hinitial Hextract Hsolve).
+Qed.
+
+Theorem single_module_min_solution_matches_fixed_point :
+  forall (m : common_module) (circuit_name : var)
+         (solver_tmap : solver_type_map) (solution : constraints.Valuation)
+         (initial result : sem_circuit_map) (n : nat),
+    SolverSyntax.circuit_tmap (solver_circuit circuit_name m) = Some solver_tmap ->
+    valid_controls m solver_tmap ->
+    inferWidths.solve_fun (solver_circuit circuit_name m) solver_tmap = Some solution ->
+    Semantics.circuit_tmap_uninferred (sem_circuit m) = Some initial ->
+    Semantics.circuit_tmap_implicits (sem_circuit m) n = Some result ->
+    covered solution initial (common_module_name m) ->
+    forall id, original_implicit initial (common_module_name m) id ->
+      exists w,
+        solver_width solution id = Some w /\
+        semantic_width result (common_module_name m) id = Some w.
+Proof.
+  move=> m circuit_name solver_tmap solution initial result n
+    Hsolver _ Hsolve Hinitial Hresult _.
+  exact: (solve_fun_matches_fixed_point Hsolver Hsolve Hinitial Hresult).
 Qed.

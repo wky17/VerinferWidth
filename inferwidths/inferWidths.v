@@ -203,6 +203,38 @@ Proof.
     rewrite /constraint1_vars Hterms /=. by right; left.
 Qed.
 
+Lemma remove_solved_c_simple initial c :
+  rhs_power c = nil ->
+  is_simple_cycle [:: c] = true ->
+  is_simple_cycle [:: remove_solved_c initial c] = true.
+Proof.
+  move=> Hpower Hsimple.
+  rewrite /is_simple_cycle /= in Hsimple *.
+  rewrite /remove_solved_c Hpower.
+  case Hterms: (rhs_terms1 c) => [|[coef source] rest] in Hsimple *.
+  - by [].
+  - destruct coef as [|[|coef]]; try discriminate.
+    destruct rest as [|t rest]; try discriminate.
+    simpl. by case: (PVM.find source initial).
+Qed.
+
+Lemma remove_solved_simple initial cs :
+  (forall c, List.In c cs -> rhs_power c = nil) ->
+  is_simple_cycle cs = true ->
+  is_simple_cycle (List.map (remove_solved_c initial) cs) = true.
+Proof.
+  move=> Hpower Hsimple.
+  rewrite /is_simple_cycle in Hsimple *.
+  apply forallb_forall. intros c Hin.
+  apply in_map_iff in Hin. destruct Hin as [original [<- Hin]].
+  have Hterm := proj1 (forallb_forall _ _) Hsimple original Hin.
+  have Hsingle : is_simple_cycle [:: original] = true.
+  { by rewrite /is_simple_cycle /= Hterm. }
+  have Hresult := remove_solved_c_simple initial original (Hpower original Hin) Hsingle.
+  rewrite /is_simple_cycle /= andbT in Hresult.
+  exact Hresult.
+Qed.
+
 Theorem simple_cycle_solver_correct nodes cs solution :
   is_simple_cycle cs = true ->
   (forall c, List.In c cs -> rhs_power c = nil) ->
@@ -2653,6 +2685,58 @@ Proof.
       split. apply forallb2satisfies_all_constraint1. done. simpl; done.
 Qed.
 
+Lemma solve_simple_scc_smallest nodes cs solution candidate :
+  nodes <> nil ->
+  NoDup nodes ->
+  is_simple_cycle cs = true ->
+  (forall c, List.In c cs -> good_terms (rhs_terms1 c)) ->
+  (forall c, List.In c cs -> rhs_power c = nil) ->
+  (forall c, List.In c cs ->
+    forall x, List.In x (constraint1_vars c) -> List.In x nodes) ->
+  solve_scc nodes cs = Some solution ->
+  forallb (satisfies_constraint1 candidate) cs ->
+  (forall x, List.In x nodes -> PVM.mem x candidate) ->
+  le solution candidate.
+Proof.
+  move=> Hnonempty Hnodup Hsimple Hterms Hpower Hvars Hsolve Hsat Hcoverage.
+  destruct nodes as [|node rest]; first contradiction.
+  destruct rest as [|node' rest].
+  - destruct cs as [|c cs].
+    + rewrite /solve_scc /= in Hsolve. inversion Hsolve; subst solution.
+      rewrite /le. intros key value Hfind.
+      destruct (key == node) eqn:Heq.
+      * move/eqP: Heq => Heq. subst key. rewrite find_add_eq in Hfind.
+        inversion Hfind; subst value.
+        have Hin : List.In node [:: node] by left.
+        have Hmem := Hcoverage node Hin.
+        apply find_mem in Hmem. destruct Hmem as [n Hcandidate].
+        exists n. split; first exact Hcandidate. exact: leq0n.
+      * rewrite find_add_neq in Hfind; last by move/eqP: Heq.
+        by rewrite /initial_valuation find_empty_None in Hfind.
+    + apply: (@solve_scc_smallest [:: node] (c :: cs) solution).
+      * discriminate.
+      * exact Hnodup.
+      * exact Hsolve.
+      * discriminate.
+      * move=> x [<-|[]].
+        have Hin : List.In (lhs_var1 c) [:: node].
+        { apply: (Hvars c); first by left.
+          by rewrite /constraint1_vars /=; left. }
+        destruct Hin as [Heq|[]]. rewrite Heq.
+        apply: (@constraint1_vars2constraints1_vars (c :: cs) c (lhs_var1 c)); first by left.
+        by rewrite /constraint1_vars /=; left.
+      * exact Hvars.
+      * exact Hterms.
+      * exact Hpower.
+      * exact Hsat.
+  - rewrite /solve_scc Hsimple in Hsolve.
+    have [_ [_ Hminimum]] := @simple_cycle_solver_correct
+      (node :: node' :: rest) cs solution Hsimple Hpower Hvars Hsolve.
+    apply: Hminimum.
+    + exact: (proj1 (forallb2satisfies_all_constraint1 candidate cs) Hsat).
+    + exact Hcoverage.
+Qed.
+
 Lemma max_list_lt : forall zl init val,
     val < max_nl zl init ->
     (val < init) \/ (exists z, List.In z zl /\ (Z.of_nat val < z)%Z).
@@ -3682,7 +3766,6 @@ Proof.
 Qed.
 
 Definition tarjan_correctness (initial : Valuation) (scc_list : list (list ProdVar.t)) (c1map : PVM.t (list Constraint1)) : Prop :=
-  (forall nv hd cs1 (c : Constraint1), List.In c cs1 -> dominates_at c nv (floyd_loop_map' hd cs1)) /\
   (forall val scc g adj, List.In scc scc_list -> scc.build_graph (List.filter (fun c : Constraint1 => Datatypes.length (rhs_terms1 c) != 0) (List.map (remove_solved_c val) (extract_cs scc c1map))) = (g, adj) -> is_scc scc g) /\
   (forall (scc : list ProdVar.t), List.In scc scc_list -> scc <> []) /\
   (NoDup (concat scc_list)) /\ (forall (var : ProdVar.t), PVM.mem var initial -> ~List.In var (concat scc_list)) /\
@@ -3692,6 +3775,36 @@ Definition tarjan_correctness (initial : Valuation) (scc_list : list (list ProdV
 Definition extract_correctness (c1map : PVM.t (list Constraint1)) (scc_list : list (list ProdVar.t)) : Prop :=
   (forall (var : ProdVar.t), List.In var (concat scc_list) -> exists (cs : list Constraint1), PVM.find var c1map = Some cs /\ forallb (fun c => lhs_var1 c == var) cs /\ cs <> []
     /\ (forall c, List.In c cs -> good_terms (rhs_terms1 c) /\ (rhs_power c) = nil)).
+
+Definition scc_schedule_correctness (initial : Valuation)
+    (scc_list : list (list ProdVar.t)) (c1map : PVM.t (list Constraint1)) : Prop :=
+  (forall scc, List.In scc scc_list -> scc <> []) /\
+  NoDup (concat scc_list) /\
+  (forall var, PVM.mem var initial -> ~ List.In var (concat scc_list)) /\
+  (forall l1 l2 scc, l1 ++ scc :: l2 = scc_list ->
+    forall var, List.In var (constraints1_vars (extract_cs scc c1map)) ->
+      List.In var (concat l1 ++ scc) \/ PVM.mem var initial).
+
+Definition extract_entries_correctness (c1map : PVM.t (list Constraint1)) : Prop :=
+  forall var cs, PVM.find var c1map = Some cs ->
+    forallb (fun c => lhs_var1 c == var) cs /\
+    (forall c, List.In c cs -> good_terms (rhs_terms1 c) /\ rhs_power c = nil).
+
+Lemma extract_entries_member c1map keys c :
+  extract_entries_correctness c1map ->
+  List.In c (extract_cs keys c1map) ->
+  List.In (lhs_var1 c) keys /\
+  good_terms (rhs_terms1 c) /\ rhs_power c = nil.
+Proof.
+  move=> Hentries Hin.
+  apply extract_cs_exist_c in Hin.
+  destruct Hin as [key [Hkey [cs [Hfind Hc]]]].
+  have [Hlhs Hgood] := Hentries key cs Hfind.
+  apply forallb_forall with (x := c) in Hlhs; last exact Hc.
+  move/eqP: Hlhs => Hlhs.
+  split; first by rewrite Hlhs.
+  exact: Hgood c Hc.
+Qed.
 
 Lemma remove_solved_vars initial : forall t new_terms new_cst, remove_solved initial t = (new_terms, new_cst) -> forall var, List.In var (List.map snd new_terms) ->
   List.In var (List.map snd t) /\ ~ PVM.mem var initial.
@@ -3710,9 +3823,58 @@ Proof.
     apply (remove_solved_vars _ _ _ _ Hremove) in H0. move : H0 => [H0 H2]. split; try right; try done.
 Qed.
 
+Lemma scc_schedule_tail initial a rest c1map local next :
+  scc_schedule_correctness initial (a :: rest) c1map ->
+  merge_solution a initial local = Some next ->
+  scc_schedule_correctness next rest c1map.
+Proof.
+  move=> [Hnonempty [Hnodup [Hinitial Horder]]] Hmerge.
+  split.
+  - move=> scc Hin. apply Hnonempty. by right.
+  - split.
+    + simpl in Hnodup. exact: NoDup_app_remove_l Hnodup.
+    + split.
+      * move=> var Hmem Hin.
+        apply (merge_solution_mem_or local a initial next Hmerge) in Hmem.
+        simpl in Hnodup.
+        destruct Hmem as [Hin_a|Hmem].
+        -- apply (NoDup_app_notin_r _ _ Hnodup) in Hin_a. contradiction.
+        -- apply: (Hinitial var Hmem). simpl. apply in_or_app. by right.
+      * move=> l1 l2 scc Hrest var Hvar.
+        have Hwhole : (a :: l1) ++ scc :: l2 = a :: rest by simpl; rewrite Hrest.
+        have [Hin|Hmem] := Horder (a :: l1) l2 scc Hwhole var Hvar.
+        -- simpl in Hin. apply in_app_or in Hin.
+           destruct Hin as [Hin|Hscc].
+           ++ apply in_app_or in Hin. destruct Hin as [Ha|Hl1].
+              ** right. apply (merge_solution_mem_or local a initial next Hmerge). by left.
+              ** left. apply in_or_app. by left.
+           ++ left. apply in_or_app. by right.
+        -- right. apply (merge_solution_mem_or local a initial next Hmerge). by right.
+Qed.
+
+Lemma scc_schedule_head_vars initial a rest c1map c var :
+  scc_schedule_correctness initial (a :: rest) c1map ->
+  extract_entries_correctness c1map ->
+  List.In c (extract_cs a c1map) ->
+  List.In var (constraint1_vars (remove_solved_c initial c)) ->
+  List.In var a.
+Proof.
+  move=> [_ [_ [Hinitial Horder]]] Hentries Hin Hvar.
+  have [Hlhs [_ Hpower]] := @extract_entries_member c1map a c Hentries Hin.
+  have Hnot : ~ PVM.mem (lhs_var1 c) initial.
+  { move=> Hmem. apply: (Hinitial (lhs_var1 c) Hmem).
+    simpl. apply in_or_app. by left. }
+  have [Horiginal Hnotmem] := @remove_solved_c_vars c var initial Hnot Hpower Hvar.
+  have Hinvars := @constraint1_vars2constraints1_vars (extract_cs a c1map) c var Hin Horiginal.
+  have Hlist : [::] ++ a :: rest = a :: rest by [].
+  have [Hlocal|Hmem] := Horder [::] rest a Hlist var Hinvars.
+  - exact Hlocal.
+  - contradiction.
+Qed.
+
 Lemma solve_alg_correctness : forall scclist c1map cs2, 
-    tarjan_correctness initial_valuation scclist c1map 
-  -> extract_correctness c1map scclist 
+    scc_schedule_correctness initial_valuation scclist c1map
+  -> extract_entries_correctness c1map
   -> match solve_alg_check scclist c1map cs2 with
     | Some solution => forallb (satisfies_constraint1 solution) 
                                   (extract_cs (concat scclist) c1map) 
@@ -3732,8 +3894,8 @@ Proof.
   split; try done; clear Hcs2 cs2.
   move : scclist H H0 value Hsolve.
   assert (Hhelper : forall scclist initial,
-    tarjan_correctness initial scclist c1map ->
-    extract_correctness c1map scclist ->
+    scc_schedule_correctness initial scclist c1map ->
+    extract_entries_correctness c1map ->
     forall value : Valuation,
     solve_alg scclist initial c1map = Some value ->
     forallb (satisfies_constraint1 value) (extract_cs (concat scclist) c1map)).
@@ -3753,11 +3915,11 @@ Proof.
     { intros; generalize H0. apply (solve_alg_nodup_solved_eq _ _ _ _ _ _ Hsolve). 
       assert (exists val, PVM.find (elt:=nat) var new_values = Some val) by (exists value0; done). apply find_mem in H1.
       apply (merge_solution_mem_or _ _ _ _ Hmerge) in H1. move : Htarjan H1; clear; intros.
-      unfold tarjan_correctness in Htarjan. move : Htarjan => [_ [_ [_ [H [H0 _]]]]]. destruct H1.
+      unfold scc_schedule_correctness in Htarjan. move : Htarjan => [_ [H [H0 _]]]. destruct H1.
       - simpl in H. apply (NoDup_app_notin_r _ _ H) in H1. done.
       - apply H0 in H1. move : H1; apply contra_not. simpl; intro. apply in_or_app; right; done. }
     assert (forall var, List.In var (rhs_vars x) -> PVM.mem var new_values).
-    { move : Hx Hmerge Htarjan; clear; intros. apply (merge_solution_mem_or _ _ _ _ Hmerge). unfold tarjan_correctness in Htarjan. move : Htarjan => [_ [_ [_ [_ [_ H0]]]]].
+    { move : Hx Hmerge Htarjan; clear; intros. apply (merge_solution_mem_or _ _ _ _ Hmerge). unfold scc_schedule_correctness in Htarjan. move : Htarjan => [_ [_ [_ H0]]].
       specialize (H0 nil l a); simpl in H0. apply H0. done. apply (constraint1_vars2constraints1_vars _ Hx). unfold constraint1_vars. simpl; right. unfold rhs_vars in H; done. }
     move : H0 H H1; clear.
     { unfold satisfies_constraint1; intros.
@@ -3766,35 +3928,33 @@ Proof.
       rewrite -(rhs_value1_eq _ new_values value); try done.
       intros. apply H1 in H2; clear H1. apply find_mem in H2. destruct H2 as [val0 H2]. rewrite H2.
       apply H0 in H2. rewrite H2 //. }
-    unfold extract_correctness in Hextract. apply extract_cs_exist_c in Hx. destruct Hx as [v [Hina [cs [Hfind Hincs]]]].
-    destruct (Hextract v) as [cs' [Hfind' [_ [_ Hgood]]]]. simpl; apply in_or_app; left; done. rewrite Hfind in Hfind'; inversion Hfind'; clear Hfind'; subst cs'.
+    unfold extract_entries_correctness in Hextract. apply extract_cs_exist_c in Hx. destruct Hx as [v [Hina [cs [Hfind Hincs]]]].
+    destruct (Hextract v cs Hfind) as [_ Hgood].
     apply Hgood in Hincs; exact Hincs.2.
     intros; apply (merge_solution_find_notin _ _ var) in Hmerge. rewrite -Hmerge //. assert (exists val, PVM.find (elt:=nat) var initial = Some val) by (exists value0; done). apply find_mem in H1.
-      unfold tarjan_correctness in Htarjan. move : Htarjan => [_ [_ [_ [_ [Htarjan _]]]]]. apply Htarjan in H1. move: H1; apply contra_not. intros; apply in_or_app; left; done.
+      unfold scc_schedule_correctness in Htarjan. move : Htarjan => [_ [_ [Htarjan _]]]. apply Htarjan in H1. move: H1; apply contra_not. intros; apply in_or_app; left; done.
     intros; apply merge_solution_find_in with (var := var) in Hmerge. destruct Hmerge as [value0' [H1 H2]]. rewrite H1 in H0; rewrite H2 //.
-    unfold tarjan_correctness in Htarjan. move : Htarjan => [_ [_ [_ [Hnodup _]]]]. simpl in Hnodup. apply NoDup_app_remove_r in Hnodup; done.
+    unfold scc_schedule_correctness in Htarjan. move : Htarjan => [_ [Hnodup _]]. simpl in Hnodup. apply NoDup_app_remove_r in Hnodup; done.
     apply (solve_scc_mem_in _ _ _ Hnv). apply find_mem. exists value0; done.
     intro; apply (merge_solution_find_none _ _ _ _ Hmerge).
-    unfold tarjan_correctness in Htarjan; move : Htarjan => [_ [_ [Htarjan _]]]. apply Htarjan. simpl; left; done.
-    unfold extract_correctness in Hextract. intros. apply in_map_iff in H0; destruct H0 as [c0 [Hremove Hin]]; subst c. 
-      apply extract_cs_exist_c in Hin. destruct Hin as [v [Hina [cs [Hfind Hincs]]]]. destruct (Hextract v) as [cs' [Hfind' [_ [_ Hgood]]]]. simpl; apply in_or_app; left; done. rewrite Hfind in Hfind'; inversion Hfind'; clear Hfind'; subst cs'.
+    unfold scc_schedule_correctness in Htarjan; move : Htarjan => [Htarjan _]. apply Htarjan. simpl; left; done.
+    unfold extract_entries_correctness in Hextract. intros. apply in_map_iff in H0; destruct H0 as [c0 [Hremove Hin]]; subst c.
+      apply extract_cs_exist_c in Hin. destruct Hin as [v [Hina [cs [Hfind Hincs]]]]. destruct (Hextract v cs Hfind) as [_ Hgood].
       apply Hgood in Hincs; move : Hincs => [_ Hincs]. move : Hincs; clear; unfold remove_solved_c. intro; rewrite Hincs. destruct (remove_solved initial (rhs_terms1 c0)); simpl; done.
     move : Htarjan Hextract; clear; intros. apply in_map_iff in H. destruct H as [c' [Hremove Hin]]. 
-      unfold tarjan_correctness in Htarjan. move : Htarjan => [_ [_ [_ [_ [Hinit Htarjan]]]]]. assert ([] ++ a :: l = a :: l) by (simpl; done).
+      unfold scc_schedule_correctness in Htarjan. move : Htarjan => [_ [_ [Hinit Htarjan]]]. assert ([] ++ a :: l = a :: l) by (simpl; done).
       specialize (Htarjan _ _ _ H); clear H. subst c. apply remove_solved_c_vars in H0. move : H0 => [H0 H]. apply (constraint1_vars2constraints1_vars _ Hin) in H0.
       apply Htarjan in H0; clear Htarjan. destruct H0; try done.
-    1,2 : unfold extract_correctness in Hextract; apply extract_cs_exist_c in Hin; destruct Hin as [var [Hina [cs [Hfind Hincs]]]];
-    destruct (Hextract var) as [cs' [Hfind' [Hlhs [_ Hgood]]]]. 1,3: simpl; apply in_or_app; left; done. 1,2: rewrite Hfind in Hfind'; inversion Hfind'; clear Hfind'; subst cs'.
+    1,2 : unfold extract_entries_correctness in Hextract; apply extract_cs_exist_c in Hin; destruct Hin as [var [Hina [cs [Hfind Hincs]]]];
+    destruct (Hextract var cs Hfind) as [Hlhs Hgood].
     * assert (forall c, List.In c cs -> lhs_var1 c == var) by (apply forallb_forall; done). apply H in Hincs. clear H Hlhs. move /eqP : Hincs => Hincs; subst var.
       intro. apply Hinit in H; clear Hinit. simpl in H. apply H. apply in_or_app; left; done. 
     * apply Hgood in Hincs; exact Hincs.2.
     - (* induction *)
     move : x H. apply forallb_forall. move : Hsolve; apply IH.
     (* tarjan start *) move : Hmerge Htarjan; clear; intros.
-    unfold tarjan_correctness in *.
-    move : Htarjan => [Hdominate [Hiscc0 [Hnotempty [Hnodup [Hinitial Hsolved]]]]].
-    split. intros. apply Hdominate; done.
-    split. intros val scc g adj Hin Hbg; apply (Hiscc0 val scc g adj); [right; exact Hin | exact Hbg].
+    unfold scc_schedule_correctness in *.
+    move : Htarjan => [Hnotempty [Hnodup [Hinitial Hsolved]]].
     split. intros; apply Hnotempty; intuition.
     split. simpl in Hnodup. apply NoDup_app_remove_l in Hnodup; done.
     split. intros. apply (merge_solution_mem_or _ _ _ _ Hmerge) in H. destruct H. simpl in Hnodup; apply NoDup_app_notin_r with (var := var) in Hnodup; try done.
@@ -3804,9 +3964,7 @@ Proof.
       left; apply in_or_app; left; done. left; apply in_or_app; right; done.
     + right. apply (merge_solution_mem_or _ _ _ _ Hmerge). right; done.
     (* tarjan end *)
-    (* extract start *)
-    move : Hextract; unfold extract_correctness; clear; intros. apply Hextract. simpl; apply in_or_app; right ;done.
-    (* extract end *)
+    exact Hextract.
   intro scclist; apply Hhelper.
 Qed.
 
@@ -3936,8 +4094,7 @@ Proof.
     apply IH with (initial := new_values); try done. 
     (* tarjan start *) move : Hmerge Htarjan; clear; intros.
     unfold tarjan_correctness in *.
-    move : Htarjan => [Hdominate [Hiscc0 [Hnotempty [Hnodup [Hinitial Hsolved]]]]].
-    split. intros; apply Hdominate; done.
+    move : Htarjan => [Hiscc0 [Hnotempty [Hnodup [Hinitial Hsolved]]]].
     split. intros val scc g adj Hin Hbg; apply (Hiscc0 val scc g adj); [right; exact Hin | exact Hbg].
     split. intros; apply Hnotempty; intuition.
     split. simpl in Hnodup. apply NoDup_app_remove_l in Hnodup; done.
@@ -3957,9 +4114,9 @@ Proof.
     clear IH Hsolve Hcs2 value. 
     apply solve_scc_smallest with (temp_s := temp_s) in Hscc.
     move : Hsmaller Hscc Hmerge; apply merge_smaller. 
-    unfold tarjan_correctness in Htarjan; move : Htarjan => [_ [_ [Htarjan _]]]. apply Htarjan. simpl; left; done.
-    unfold tarjan_correctness in Htarjan; move : Htarjan => [_ [_ [_ [Hnodup _]]]]; simpl in Hnodup; apply NoDup_app_remove_r in Hnodup; done.
-    { assert (a <> []) by (unfold tarjan_correctness in Htarjan; move : Htarjan => [_ [_ [Htarjan _]]]; apply Htarjan; simpl; left; done).
+    unfold tarjan_correctness in Htarjan; move : Htarjan => [_ [Htarjan _]]. apply Htarjan. simpl; left; done.
+    unfold tarjan_correctness in Htarjan; move : Htarjan => [_ [_ [Hnodup _]]]; simpl in Hnodup; apply NoDup_app_remove_r in Hnodup; done.
+    { assert (a <> []) by (unfold tarjan_correctness in Htarjan; move : Htarjan => [_ [Htarjan _]]; apply Htarjan; simpl; left; done).
       apply (extract_cs_not_nil c1map) in H.
       remember (extract_cs a c1map) as cs. move : H; clear. destruct cs; try done.
       intros. unfold extract_correctness in Hextract. destruct (Hextract var) as [cs [Hfind [_ [Hnotnil _]]]]. simpl; apply in_or_app; left; done. exists cs; split; done. }
@@ -3967,7 +4124,7 @@ Proof.
     specialize (Hextract _ Hin). destruct Hextract as [cs [Hfind [Hlhs [Hnot_empty _]]]].
     apply (extract_cs_in_remove_solved _ _ _ _ _ H Hfind Hnot_empty Hlhs).
     move : Htarjan Hextract; clear; intros. apply in_map_iff in H. destruct H as [c' [Hremove Hin]]. 
-      unfold tarjan_correctness in Htarjan. move : Htarjan => [_ [_ [_ [_ [Hinit Htarjan]]]]]. assert ([] ++ a :: l = a :: l) by (simpl; done).
+      unfold tarjan_correctness in Htarjan. move : Htarjan => [_ [_ [_ [Hinit Htarjan]]]]. assert ([] ++ a :: l = a :: l) by (simpl; done).
       specialize (Htarjan _ _ _ H); clear H. subst c. apply remove_solved_c_vars in H0. move : H0 => [H0 H]. apply (constraint1_vars2constraints1_vars _ Hin) in H0.
       apply Htarjan in H0; clear Htarjan. destruct H0; try done.
     1,2 : unfold extract_correctness in Hextract; apply extract_cs_exist_c in Hin; destruct Hin as [var [Hina [cs [Hfind Hincs]]]];
@@ -3993,6 +4150,91 @@ Proof.
     move : Hsmaller H Hin'; apply remove_solved_c_sat'.
 
   intros. apply (Hhelper scclist initial_valuation); try done.
+Qed.
+
+Theorem solve_alg_simple_smallest scclist c1map solution candidate0 :
+  scc_schedule_correctness initial_valuation scclist c1map ->
+  extract_entries_correctness c1map ->
+  (forall keys, is_simple_cycle (extract_cs keys c1map) = true) ->
+  solve_alg scclist initial_valuation c1map = Some solution ->
+  forallb (satisfies_constraint1 candidate0) (extract_cs (concat scclist) c1map) ->
+  (forall x, List.In x (concat scclist) -> PVM.mem x candidate0) ->
+  le solution candidate0.
+Proof.
+  move=> Hschedule0 Hentries Hsimple Hsolve0 Hsat0 Hcoverage0.
+  have Hhelper : forall scclist initial result,
+    scc_schedule_correctness initial scclist c1map ->
+    solve_alg scclist initial c1map = Some result ->
+    forall candidate,
+      forallb (satisfies_constraint1 candidate) (extract_cs (concat scclist) c1map) ->
+      (forall x, List.In x (concat scclist) -> PVM.mem x candidate) ->
+      le initial candidate -> le result candidate.
+  {
+    elim=> [|a rest IH] initial result Hschedule /= Hsolve candidate Hsat Hcoverage Hinitial.
+    - by inversion Hsolve; subst result.
+    - case Hlocal: (solve_scc a
+        (List.map (remove_solved_c initial) (extract_cs a c1map))) => [local|] // in Hsolve.
+      case Hmerge: (merge_solution a initial local) => [next|] // in Hsolve.
+      have Hpower : forall c, List.In c (extract_cs a c1map) -> rhs_power c = nil.
+      { move=> c Hin. exact (@extract_entries_member c1map a c Hentries Hin).2.2. }
+      have Hlocal_simple := remove_solved_simple initial (extract_cs a c1map)
+        Hpower (Hsimple a).
+      have Hlocal_good : forall c,
+        List.In c (List.map (remove_solved_c initial) (extract_cs a c1map)) ->
+        good_terms (rhs_terms1 c).
+      { move=> c Hin. apply in_map_iff in Hin.
+        destruct Hin as [original [<- Hin]].
+        apply remove_solved_c_good_terms.
+        exact (@extract_entries_member c1map a original Hentries Hin).2.1. }
+      have Hlocal_power : forall c,
+        List.In c (List.map (remove_solved_c initial) (extract_cs a c1map)) ->
+        rhs_power c = nil.
+      { move=> c Hin. apply in_map_iff in Hin.
+        destruct Hin as [original [<- Hin]].
+        rewrite /remove_solved_c (Hpower original Hin).
+        by case: (remove_solved initial (rhs_terms1 original)). }
+      have Hlocal_vars : forall c,
+        List.In c (List.map (remove_solved_c initial) (extract_cs a c1map)) ->
+        forall var, List.In var (constraint1_vars c) -> List.In var a.
+      { move=> c Hin var Hvar. apply in_map_iff in Hin.
+        destruct Hin as [original [<- Hin]].
+        exact: (@scc_schedule_head_vars initial a rest c1map original var
+          Hschedule Hentries Hin Hvar). }
+      have Hlocal_sat :
+        forallb (satisfies_constraint1 candidate)
+          (List.map (remove_solved_c initial) (extract_cs a c1map)).
+      { apply forallb_forall. move=> c Hin.
+        apply in_map_iff in Hin. destruct Hin as [original [<- Hin]].
+        apply: (@remove_solved_c_sat' candidate initial original
+          Hinitial (Hpower original Hin)).
+        apply forallb_forall with (x := original) in Hsat.
+        - exact Hsat.
+        - simpl. rewrite extract_cs_app. apply in_or_app. by left. }
+      have Hlocal_coverage : forall x, List.In x a -> PVM.mem x candidate.
+      { move=> x Hin. apply Hcoverage. simpl. apply in_or_app. by left. }
+      have Hnonempty : a <> nil.
+      { destruct Hschedule as [Hnonempty _]. apply Hnonempty. by left. }
+      have Hnodup : NoDup a.
+      { destruct Hschedule as [_ [Hnodup _]]. simpl in Hnodup.
+        exact: NoDup_app_remove_r Hnodup. }
+      have Hlocal_le := @solve_simple_scc_smallest a
+        (List.map (remove_solved_c initial) (extract_cs a c1map)) local candidate
+        Hnonempty Hnodup Hlocal_simple Hlocal_good Hlocal_power Hlocal_vars
+        Hlocal Hlocal_sat Hlocal_coverage.
+      apply: (IH next result (@scc_schedule_tail initial a rest c1map local next
+        Hschedule Hmerge) Hsolve candidate).
+      + apply forallb_forall. move=> c Hin.
+        apply forallb_forall with (x := c) in Hsat.
+        * exact Hsat.
+        * simpl. rewrite extract_cs_app. apply in_or_app. by right.
+      + move=> x Hin. apply Hcoverage. simpl. apply in_or_app. by right.
+      + exact: (@merge_smaller candidate local a initial next
+          Hinitial Hlocal_le Hmerge).
+  }
+  apply: (Hhelper scclist initial_valuation solution Hschedule0 Hsolve0
+    candidate0 Hsat0 Hcoverage0).
+  rewrite /le /initial_valuation.
+  move=> x n Hfind. by rewrite find_empty_None in Hfind.
 Qed.
 
 Definition initial_smallest (initial : Valuation) (c1map : PVM.t (list Constraint1)) :=
@@ -4101,8 +4343,7 @@ Proof.
         - apply in_or_app; right. apply in_or_app; right; done. }
       (* tarjan start *) move : Hmerge Htarjan; clear; intros.
       unfold tarjan_correctness in *.
-      move : Htarjan => [Hdominate [Hiscc0 [Hnotempty [Hnodup [Hinitial Hsolved]]]]].
-      split. intros; apply Hdominate; done.
+      move : Htarjan => [Hiscc0 [Hnotempty [Hnodup [Hinitial Hsolved]]]].
       split. intros val scc g adj Hin Hbg; apply (Hiscc0 val scc g adj); [right; exact Hin | exact Hbg].
       split. intros; apply Hnotempty; intuition.
       split. simpl in Hnodup. apply NoDup_app_remove_l in Hnodup; done.
@@ -4117,14 +4358,14 @@ Proof.
       move : Hextract; unfold extract_correctness; clear; intros. apply Hextract. simpl; apply in_or_app; right ;done.
       (* extract end *)
       { move : Hinitial Hscc Hmerge Htarjan Hextract; clear.
-        unfold initial_smallest; intros. assert (H0 : a <> []) by (unfold tarjan_correctness in Htarjan; move : Htarjan => [_ [_ [Htarjan _]]]; apply Htarjan; simpl; left; done).
+        unfold initial_smallest; intros. assert (H0 : a <> []) by (unfold tarjan_correctness in Htarjan; move : Htarjan => [_ [Htarjan _]]; apply Htarjan; simpl; left; done).
         assert (H1 : List.map (remove_solved_c initial) (extract_cs a c1map) <> []).
         { apply (extract_cs_not_nil c1map) in H0.
           remember (extract_cs a c1map) as cs. move : H0; clear. destruct cs; try done.
           intros. unfold extract_correctness in Hextract. destruct (Hextract var) as [cs [Hfind [_ [Hnotnil _]]]]. simpl; apply in_or_app; left; done. exists cs; split; done. }
         assert (H2 : forall c, List.In c (List.map (remove_solved_c initial) (extract_cs a c1map)) -> (forall var, List.In var (constraint1_vars c) -> List.In var a)).
         { move : Htarjan Hextract; clear; intros. apply in_map_iff in H. destruct H as [c' [Hremove Hin]]. 
-          unfold tarjan_correctness in Htarjan. move : Htarjan => [_ [_ [_ [_ [Hinit Htarjan]]]]]. assert ([] ++ a :: l = a :: l) by (simpl; done).
+          unfold tarjan_correctness in Htarjan. move : Htarjan => [_ [_ [_ [Hinit Htarjan]]]]. assert ([] ++ a :: l = a :: l) by (simpl; done).
           specialize (Htarjan _ _ _ H); clear H. subst c. apply remove_solved_c_vars in H0. move : H0 => [H0 H]. apply (constraint1_vars2constraints1_vars _ Hin) in H0.
           apply Htarjan in H0; clear Htarjan. destruct H0; try done.
           1,2 : unfold extract_correctness in Hextract; apply extract_cs_exist_c in Hin; destruct Hin as [var' [Hina [cs [Hfind Hincs]]]];
@@ -4141,7 +4382,7 @@ Proof.
         { move : Hextract;clear. intros. apply in_map_iff in H. destruct H as [x [Hremove Hin]]. subst c. unfold extract_correctness in Hextract. apply extract_cs_exist_c in Hin. destruct Hin as [var [Hina [cs [Hfind Hincs]]]].
           destruct (Hextract var) as [cs' [Hfind' [_ [_ Hgood]]]]. simpl; apply in_or_app; left; done. rewrite Hfind in Hfind'; inversion Hfind'; clear Hfind'; subst cs'.
           apply Hgood in Hincs; move : Hincs => [_ H]. unfold remove_solved_c. rewrite H. destruct (remove_solved initial (rhs_terms1 x)); done. }
-        assert (H5 : NoDup a) by (unfold tarjan_correctness in Htarjan; move : Htarjan => [_ [_ [_ [Hnodup _]]]]; simpl in Hnodup; apply NoDup_app_remove_r in Hnodup; done).
+        assert (H5 : NoDup a) by (unfold tarjan_correctness in Htarjan; move : Htarjan => [_ [_ [Hnodup _]]]; simpl in Hnodup; apply NoDup_app_remove_r in Hnodup; done).
         assert (H6 : forall x, List.In x a -> List.In x (constraints1_vars (List.map
             (remove_solved_c initial)
             (extract_cs a c1map)))). 
@@ -4188,9 +4429,9 @@ Proof.
         { move : Hin Hextract; clear; intros. unfold extract_correctness in Hextract; apply extract_cs_exist_c in Hin; destruct Hin as [var' [Hina [cs [Hfind Hincs]]]];
           destruct (Hextract var') as [cs' [Hfind' [Hlhs [_ Hgood]]]]. simpl; apply in_or_app; left; done. rewrite Hfind in Hfind'; inversion Hfind'; clear Hfind'; subst cs'.
           apply Hgood in Hincs; exact Hincs.2. }
-        unfold tarjan_correctness in Htarjan; move : Htarjan => [_ [_ [Htarjan _]]]; apply Htarjan; simpl; left; done.
-        unfold tarjan_correctness in Htarjan; move : Htarjan => [_ [_ [_ [Hnodup _]]]]. simpl in Hnodup. apply NoDup_app_remove_r in Hnodup; done.
-        { assert (a <> []) by (unfold tarjan_correctness in Htarjan; move : Htarjan => [_ [_ [Htarjan _]]]; apply Htarjan; simpl; left; done).
+        unfold tarjan_correctness in Htarjan; move : Htarjan => [_ [Htarjan _]]; apply Htarjan; simpl; left; done.
+        unfold tarjan_correctness in Htarjan; move : Htarjan => [_ [_ [Hnodup _]]]. simpl in Hnodup. apply NoDup_app_remove_r in Hnodup; done.
+        { assert (a <> []) by (unfold tarjan_correctness in Htarjan; move : Htarjan => [_ [Htarjan _]]; apply Htarjan; simpl; left; done).
           apply (extract_cs_not_nil c1map) in H.
           remember (extract_cs a c1map) as cs. move : H; clear. destruct cs; try done.
           intros. unfold extract_correctness in Hextract. destruct (Hextract var) as [cs [Hfind [_ [Hnotnil _]]]]. simpl; apply in_or_app; left; done. exists cs; split; done. }
@@ -4205,7 +4446,7 @@ Proof.
           apply extract_cs_exist_c in Hin. destruct Hin as [v' [Hina [cs [Hfind Hincs]]]]. destruct (Hextract v') as [cs' [Hfind' [_ [_ Hgood]]]]. simpl; apply in_or_app; left; done. rewrite Hfind in Hfind'; inversion Hfind'; clear Hfind'; subst cs'.
           apply Hgood in Hincs; move : Hincs => [_ Hincs]. move : Hincs; clear; unfold remove_solved_c. intro; rewrite Hincs. destruct (remove_solved initial (rhs_terms1 c0)); simpl; done.
         { move : Htarjan Hextract; clear; intros. apply in_map_iff in H. destruct H as [c' [Hremove Hin]]. 
-          unfold tarjan_correctness in Htarjan. move : Htarjan => [_ [_ [_ [_ [Hinit Htarjan]]]]]. assert ([] ++ a :: l = a :: l) by (simpl; done).
+          unfold tarjan_correctness in Htarjan. move : Htarjan => [_ [_ [_ [Hinit Htarjan]]]]. assert ([] ++ a :: l = a :: l) by (simpl; done).
           specialize (Htarjan _ _ _ H); clear H. subst c. apply remove_solved_c_vars in H0. move : H0 => [H0 H]. apply (constraint1_vars2constraints1_vars _ Hin) in H0.
           apply Htarjan in H0; clear Htarjan. destruct H0; try done.
           1,2 : unfold extract_correctness in Hextract; apply extract_cs_exist_c in Hin; destruct Hin as [var' [Hina [cs [Hfind Hincs]]]];
@@ -4213,7 +4454,7 @@ Proof.
           * assert (forall c, List.In c cs -> lhs_var1 c == var') by (apply forallb_forall; done). apply H in Hincs. clear H Hlhs. move /eqP : Hincs => Hincs; subst var'.
             intro. apply Hinit in H; clear Hinit. simpl in H. apply H. apply in_or_app; left; done. 
           * apply Hgood in Hincs; exact Hincs.2. }
-        intros g adj Hbg. unfold tarjan_correctness in Htarjan. move : Htarjan => [_ [Hiscc0 _]]. apply (Hiscc0 initial a g adj); [simpl; left; done | exact Hbg].
+        intros g adj Hbg. unfold tarjan_correctness in Htarjan. move : Htarjan => [Hiscc0 _]. apply (Hiscc0 initial a g adj); [simpl; left; done | exact Hbg].
       * rewrite /initial_smallest in Hinitial.
         assert (Hnle : ~ (le initial v)). { intros Hle2. apply le_le_bool in Hle2. rewrite Hle2 in Hle. discriminate. } clear Hle.
         apply Hinitial in Hnle; clear Hinitial.

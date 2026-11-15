@@ -34,11 +34,11 @@ cd ocaml
 opam exec --switch=mathcomp2.0 -- make semantics/Reset_width_tests.vo
 ```
 
-这些测试不代表最小不动点及其与约束求解最小解的等价性已获证明；相关证明仍有 `Admitted`。
+这些 reset 测试本身不证明一般 FIRRTL 电路的最小不动点与约束求解最小解等价；下述一致性证明仅覆盖共同标量子集。
 
-`semantics/Width_solution_bridge.v` 定义了两种语法共用的单内部模块子集、两边的转换及逐位宽比较接口，并给出一致性定理的完整陈述。该子集仅含标量 `UInt` / `SInt`、时钟输入、wire、reg、skip 和标量连接；表达式仅含引用和显式位宽常量，原始隐式位宽为 0。定理还要求控制信号类型正确、两边成功返回且求解结果覆盖所有原始隐式位宽。它的证明目前是 `Admitted`；测试只验证具体电路的语义迭代、约束提取和部分求解步骤，并不验证整个等价定理或完整 `solve_fun`。
+`semantics/Width_solution_bridge.v` 定义了两种语法共用的单内部模块子集、两边的转换及逐位宽比较接口。该子集仅含标量 `UInt` / `SInt`、时钟输入、wire、reg、skip 和标量连接；表达式仅含引用和显式位宽常量，原始隐式位宽为 0。一致性定理及其证明位于 `semantics/Width_bridge_proofs.v`；使用原定理名的代码需要导入该证明文件。
 
-`semantics/Width_bridge_proofs.v` 给出标量类型映射关系，并证明两端成功构造的单模块初始电路映射满足该关系；证明中考虑了两端端口构造顺序不同。该文件还刻画了共同子集的约束提取，并证明在映射相关、赋值匹配语义映射且每个相关语句的语义操作数有效的条件下，整个提取约束列表的满足性等价于所有对应语义位宽不等式成立。提取按 `expandwhens` 的实际行为处理反转后的语句顺序。此外，已证明成功返回的语义结果是按逐键映射内容比较的不动点。这些桥接结果没有新增 `Admitted`；主定理仍未闭合。
+`semantics/Width_bridge_proofs.v` 给出标量类型映射关系，并证明两端成功构造的单模块初始电路映射满足该关系；证明中考虑了两端端口构造顺序不同。该文件还刻画了共同子集的约束提取，并证明在映射相关、赋值匹配语义映射且每个相关语句的语义操作数有效的条件下，整个提取约束列表的满足性等价于所有对应语义位宽不等式成立。提取按 `expandwhens` 的实际行为处理反转后的语句顺序。此外，已证明成功返回的语义结果是按逐键映射内容比较的不动点。
 
 在共同标量子集内，已进一步证明每个成功的语义迭代步骤保持组件域、kind 和类型类别，显式位宽不变而隐式位宽单调增长；该性质已提升至语句序列、任意次单模块电路迭代以及成功返回的实际语义结果。求解端初始映射与实际语义结果仍满足标量映射关系；引用的源与目标相同时也包含在证明内。表达式类型和数值宽度、以及已经成立的语义操作数有效性均在迭代中保持。
 
@@ -58,9 +58,13 @@ opam exec --switch=mathcomp2.0 -- make semantics/Reset_width_tests.vo
 
 `successful_single_module_solver_domain` 证明单模块求解成功时，输出赋值的定义域恰为电路的有限类型叶子集合；其中包括无约束的隐式变量和显式类型位置。`successful_solve_fun_covers_initial` 因而从两端初始映射和实际 `solve_fun` 成功推出原始隐式位置的覆盖性。`conditional_solve_fun_matches_fixed_point_without_coverage` 去除了条件版推论中单独的覆盖前提，仍要求求解器契约。
 
-SCC 桥接证明了实际 Kosaraju 列表覆盖有限变量、无重复且每个 SCC 非空；每个分量恰是依赖图中某个代表点的双向可达分量。依赖图的边与约束右侧变量到左侧变量的关系双向对应，包括指数项。`successful_common_solver_extraction_bridge` 证明成功求解时，按 SCC 列表提取的约束与全部扁平约束对于任意赋值具有相同的满足性；并非声称两个列表的顺序相同。这些结果尚未证明 SCC 的依赖顺序或求解后子图的强连通性。
+SCC 桥接证明了实际 Kosaraju 列表覆盖有限变量、无重复且每个 SCC 非空；每个分量恰是依赖图中某个代表点的双向可达分量。依赖图的边与约束右侧变量到左侧变量的关系双向对应，包括指数项。`successful_common_solver_extraction_bridge` 证明成功求解时，按 SCC 列表提取的约束与全部扁平约束对于任意赋值具有相同的满足性；并非声称两个列表的顺序相同。
 
-原主定理仍未闭合：尚需证明实际 `solve_fun` 的结果满足约束正确性和最小性契约。不能把条件版定理视为无条件的求解器正确性证明。
+`kosaraju_later_no_edge` 利用 MathComp 反向 DFS 的可达性证明处理顺序中后续分量不会指向当前分量；`solver_sccs_constraint_order` 将此性质通过实际依赖图接到约束变量，无需假设图无环。`successful_common_solver_schedule` 由此证明实际 SCC 调度满足递归求解器所需前提。
+
+普通求解器的递归 SCC 前提已移除不成立的全局 `dominates_at` 条件。成功结果的 `solve_alg_correctness` 进一步改为只要求 `scc_schedule_correctness`（分量非空、无重复、已求解变量不与剩余分量重叠，以及依赖位于当前或已求解分量）和 `extract_entries_correctness`（已存在的约束条目格式正确）；它不再要求每个节点都有非空约束，也不要求替换后的子图强连通。对于共同标量子集，`extracted_common_entries_correct` 证明实际提取满足条目格式，`successful_common_solver_satisfies_if_schedule` 将实际 `solve_fun` 的满足性归约为 SCC 调度条件。
+
+共同标量子集提取的约束均为简单线性形式，且 `remove_solved_simple` 证明代入已求解变量后仍保持该形式；`solve_simple_scc_smallest` 在候选赋值覆盖节点时处理无约束节点，包括单节点空约束。新的 `solve_alg_simple_smallest` 将局部最小性推广到递归结果，无需旧 `solve_alg_smallest` 中的非空提取和强连通前提。`successful_common_solver_contract` 证明实际 `solve_fun` 成功返回的结果满足该子集约束及最小性契约，不再假设 SCC 调度顺序。`solve_fun_matches_fixed_point` 闭合实际求解结果与语义不动点的逐隐式位宽一致性；保留两端类型映射构造、求解及语义迭代成功的前提，不需要另行假设覆盖性或控制信号有效。原陈述 `single_module_min_solution_matches_fixed_point` 也已在证明文件中闭合，保留其原有前提。参考链、环及无约束节点的定理实例以实际求解成功为前提，不声称已计算出完整求解器返回值。
 
 简单环距离矩阵初始化已改为逐条更新递归结果，避免同一左值的约束覆盖彼此。`init_dist_map_weight_spec` 给出任意输入的逐键精确规格：已有行从初始值开始，对空线性项（指向 `Zero`）和单个系数为 1 的线性项逐条取最大值；其他线性项跳过，缺失行不创建。`map0_find_exact` 刻画初始行恰对应节点列表，且仅含零权自环；`init_dist_map_permutation` 证明约束排列不影响任何矩阵项。这一实现与规格均不检查 `rhs_power`，因此不能将其视为支持指数项的 FIRRTL 约束语义。回归测试还检查重复边、负常数、自环、空输入、缺失行和不支持的线性项。
 
@@ -70,7 +74,7 @@ SCC 桥接证明了实际 Kosaraju 列表覆盖有限变量、无重复且每个
 
 已从成功返回证明节点范围内的路径拼接闭包，并闭合 `simple_cycle_solver_correct` 和 `simple_cycle_solver_none_iff_unsatisfiable`：当约束无指数项、每条线性项为空或仅有一个系数为 1 的变量，且所有约束变量都在节点列表中时，成功结果满足全部约束、定义域恰为节点列表，并且不大于任何覆盖这些节点的满足赋值；返回 `None` 当且仅当不存在满足赋值。候选赋值的覆盖条件对于部分映射是必要的，尤其是节点列表含无约束节点时。节点范围也不可省略：范围外的目标不会被 Floyd 遍历，`floyd_external_destination_requires_scope_premise` 给出了全局闭包不成立的反例。
 
-普通 `inferWidths.v` 面向无指数约束，其简单环判定只检查线性项；指数扩展由 `inferWidths_exp.v` 负责，其判定同时排除指数项。两者在符合各自输入范围时共用修复后的 Floyd 实现和完整简单环契约，且各自的 `solve_scc_correctness` 不再要求 `dominates_at`。这不意味着整个 `solve_fun` 的正确性、最小性及其与隐式位宽语义的一致性主定理已经闭合；仍需完成 SCC 依赖顺序、其他求解分支及整体组装等工作。
+普通 `inferWidths.v` 面向无指数约束，其简单环判定只检查线性项；指数扩展由 `inferWidths_exp.v` 负责，其判定同时排除指数项。两者在符合各自输入范围时共用修复后的 Floyd 实现和完整简单环契约，且各自的 `solve_scc_correctness` 不再要求 `dominates_at`。上面的全局契约与语义一致性证明适用于普通求解器的共同标量子集，不代表指数扩展或一般 FIRRTL 电路的全局正确性已获证明。
 
 单模块求解器的有限变量集合从电路类型映射中的类型叶子构造，不再要求组件编号小于组件数量。数组元素共享同一组类型叶子；显式类型叶子也包含在有限集合中。依赖约束引用不在集合中的变量时，求解返回 `None`；指数项也参与依赖图的边计算。
 

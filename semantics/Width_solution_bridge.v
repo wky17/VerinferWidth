@@ -222,19 +222,3 @@ Definition covered (solution : constraints.Valuation) (initial : sem_circuit_map
   forall id, original_implicit initial module_name id ->
     exists w, solver_width solution id = Some w.
 
-(* This statement is a proof obligation, not a proved equivalence. *)
-Theorem single_module_min_solution_matches_fixed_point :
-  forall (m : common_module) (circuit_name : var)
-         (solver_tmap : solver_type_map) (solution : constraints.Valuation)
-         (initial result : sem_circuit_map) (n : nat),
-    SolverSyntax.circuit_tmap (solver_circuit circuit_name m) = Some solver_tmap ->
-    valid_controls m solver_tmap ->
-    inferWidths.solve_fun (solver_circuit circuit_name m) solver_tmap = Some solution ->
-    Semantics.circuit_tmap_uninferred (sem_circuit m) = Some initial ->
-    Semantics.circuit_tmap_implicits (sem_circuit m) n = Some result ->
-    covered solution initial (common_module_name m) ->
-    forall id, original_implicit initial (common_module_name m) id ->
-      exists w,
-        solver_width solution id = Some w /\
-        semantic_width result (common_module_name m) id = Some w.
-Admitted.
