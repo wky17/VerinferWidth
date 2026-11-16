@@ -5,6 +5,7 @@ From firrtl Require Import HiEnv_with_implicit_widths Env_with_implicit_widths.
 From Solver Require Import constraints floyd_sc extract_cs extract_cswithmin graph inferWidths inferWidths_exp.
 From Semantics Require Import Width_solution_bridge.
 From Semantics Require Import Width_bridge_proofs.
+From Semantics Require Import Width_convergence.
 
 Delimit Scope N_scope with nvar.
 
@@ -118,6 +119,94 @@ Example duplicate_ports_are_rejected_by_both_maps :
   SolverSyntax.circuit_tmap (solver_circuit 0%nvar m) = None /\
   Semantics.circuit_tmap_uninferred (sem_circuit m) = None.
 Proof. vm_compute. split; reflexivity. Qed.
+
+Definition missing_reset_value_example : common_module :=
+  {| common_module_name := 0%nvar;
+     common_ports := [:: CClock 0%nvar; CInput 1%nvar (UIntExplicit 1)];
+     common_stmts :=
+       [:: CReg 2%nvar UIntImplicit 0%nvar
+             (CReset 1%nvar (CRef 99%nvar))] |}.
+
+Example missing_reset_value_initial_map_succeeds :
+  exists initial,
+    Semantics.circuit_tmap_uninferred (sem_circuit missing_reset_value_example) =
+      Some initial.
+Proof. vm_compute. eauto. Qed.
+
+Example missing_reset_value_solver_map_and_controls_succeed :
+  exists solver_map,
+    SolverSyntax.circuit_tmap (solver_circuit 0%nvar missing_reset_value_example) =
+      Some solver_map /\
+    valid_controls missing_reset_value_example solver_map.
+Proof. vm_compute. eexists; split; [reflexivity | repeat constructor; eauto]. Qed.
+
+Example missing_reset_value_never_converges :
+  forall n,
+    Semantics.circuit_tmap_implicits (sem_circuit missing_reset_value_example) n = None.
+Proof. case=> [|n]; vm_compute; reflexivity. Qed.
+
+Example solver_map_does_not_validate_connect :
+  let m := {| common_module_name := 0%nvar;
+              common_ports := [::];
+              common_stmts := [:: CConnect 9%nvar (CUInt 1 [::])] |} in
+  (exists solver_map,
+      SolverSyntax.circuit_tmap (solver_circuit 0%nvar m) = Some solver_map) /\
+  Semantics.circuit_tmap_uninferred (sem_circuit m) = None.
+Proof. vm_compute. eauto. Qed.
+
+Definition literal_fan_in_example : common_module :=
+  {| common_module_name := 0%nvar;
+     common_ports := [::];
+     common_stmts := [:: CWire 2%nvar UIntImplicit;
+                         CWire 3%nvar UIntImplicit;
+                         CConnect 2%nvar (CUInt 3 [::]);
+                         CConnect 2%nvar (CUInt 8 [::])] |}.
+
+Example literal_check_accepts_reset :
+  uint_literal_module_check reset_example 2%nvar = true.
+Proof. vm_compute. reflexivity. Qed.
+
+Example literal_fan_in_converges :
+  uint_literal_module_check literal_fan_in_example 2%nvar = true /\
+  Semantics.circuit_tmap_implicits (sem_circuit literal_fan_in_example) 0 = None /\
+  exists result,
+    Semantics.circuit_tmap_implicits (sem_circuit literal_fan_in_example) 1 =
+      Some result /\
+    semantic_width result 0%nvar 2%nvar = Some 8 /\
+    semantic_width result 0%nvar 3%nvar = Some 0.
+Proof. vm_compute. split; first reflexivity. split; first reflexivity.
+  eexists; repeat split; reflexivity.
+Qed.
+
+Example literal_check_rejects_missing_reset_value :
+  uint_literal_module_check missing_reset_value_example 2%nvar = false.
+Proof. vm_compute. reflexivity. Qed.
+
+Example literal_check_rejects_reference :
+  uint_literal_module_check
+    {| common_module_name := 0%nvar;
+       common_ports := [::];
+       common_stmts := [:: CWire 2%nvar UIntImplicit;
+                           CConnect 2%nvar (CRef 2%nvar)] |} 2%nvar = false.
+Proof. vm_compute. reflexivity. Qed.
+
+Example literal_fan_in_solver_matches_without_iteration_assumption solver_map solution :
+  SolverSyntax.circuit_tmap (solver_circuit 0%nvar literal_fan_in_example) =
+    Some solver_map ->
+  inferWidths.solve_fun (solver_circuit 0%nvar literal_fan_in_example) solver_map =
+    Some solution ->
+  exists initial result,
+    Semantics.circuit_tmap_uninferred (sem_circuit literal_fan_in_example) = Some initial /\
+    Semantics.circuit_tmap_implicits (sem_circuit literal_fan_in_example) 1 = Some result /\
+    forall id, original_implicit initial 0%nvar id ->
+      exists w, solver_width solution id = Some w /\
+                semantic_width result 0%nvar id = Some w.
+Proof.
+  move=> Hsolver Hsolve.
+  have Hcheck : uint_literal_module_check literal_fan_in_example 2%nvar
+    by vm_compute.
+  exact: (uint_literal_checked_solver_matches_fixed_point Hsolver Hsolve Hcheck).
+Qed.
 
 Example self_reference_preserves_width_and_kind :
   let tmap := SemSyntax.VM.add 9%nvar

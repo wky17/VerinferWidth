@@ -66,6 +66,10 @@ SCC 桥接证明了实际 Kosaraju 列表覆盖有限变量、无重复且每个
 
 共同标量子集提取的约束均为简单线性形式，且 `remove_solved_simple` 证明代入已求解变量后仍保持该形式；`solve_simple_scc_smallest` 在候选赋值覆盖节点时处理无约束节点，包括单节点空约束。新的 `solve_alg_simple_smallest` 将局部最小性推广到递归结果，无需旧 `solve_alg_smallest` 中的非空提取和强连通前提。`successful_common_solver_contract` 证明实际 `solve_fun` 成功返回的结果满足该子集约束及最小性契约，不再假设 SCC 调度顺序。`solve_fun_matches_fixed_point` 闭合实际求解结果与语义不动点的逐隐式位宽一致性；保留两端类型映射构造、求解及语义迭代成功的前提，不需要另行假设覆盖性或控制信号有效。原陈述 `single_module_min_solution_matches_fixed_point` 也已在证明文件中闭合，保留其原有前提。参考链、环及无约束节点的定理实例以实际求解成功为前提，不声称已计算出完整求解器返回值。
 
+`solve_fun_matches_fixed_point_without_initial` 进一步从成功的语义迭代中推出初始语义映射存在，无需将其成功单列为前提。`semantics/Width_convergence.v` 对更小的共同子集证明有限收敛：`uint_literal_module_check` 检查初始语义映射存在、指定目标为隐式 `UInt`，并检查所有连接及有 reset 的寄存器均以该目标接收合法的 `UInt` 常量；允许其他无 reset 声明。该检查不要求事先提供迭代轨迹或不动点。`uint_literal_checked_module_converges` 证明一次迭代后通过不动点检查，`uint_literal_module_converges_with_width` 还给出目标位宽为初始位宽与所有常量位宽的最大值。
+
+`uint_literal_checked_solver_matches_fixed_point` 在上述检查、求解端类型映射和实际 `solve_fun` 成功的条件下，推出语义迭代成功，且所有原始隐式位宽与求解结果一致；无需另行假设语义初始映射、迭代、覆盖性或控制信号检查成功。该结果**尚不证明一般良构共同模块的收敛**：引用连接、多个被更新的目标及 `SInt` 更新均不在此检查范围内；也不证明 `solve_fun` 必定成功。
+
 简单环距离矩阵初始化已改为逐条更新递归结果，避免同一左值的约束覆盖彼此。`init_dist_map_weight_spec` 给出任意输入的逐键精确规格：已有行从初始值开始，对空线性项（指向 `Zero`）和单个系数为 1 的线性项逐条取最大值；其他线性项跳过，缺失行不创建。`map0_find_exact` 刻画初始行恰对应节点列表，且仅含零权自环；`init_dist_map_permutation` 证明约束排列不影响任何矩阵项。这一实现与规格均不检查 `rhs_power`，因此不能将其视为支持指数项的 FIRRTL 约束语义。回归测试还检查重复边、负常数、自环、空输入、缺失行和不支持的线性项。
 
 原 Floyd 遍历存在独立缺陷：旧 `inner_loop2` 和 `inner_loop1` 会逐步缩小行和目标节点范围。实际求解器现改用 `floyd_pivots` 和 `floyd_rows`，每个中间节点均遍历完整行集合和完整目标集合；`floyd_loop_map_full_traversal` 精确证明这一遍历结构。旧函数仅为保留原有证明而存在，不再由实际 Floyd 路径调用。原两节点反例在两种节点顺序下均返回满足约束的 `(6, 6)`；回归还检查两节点的有界约束组和三节点正、零、负权环的全部节点排列。

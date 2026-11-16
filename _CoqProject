@@ -30,6 +30,7 @@ semantics/Semantics_with_implicit_widths.v
 semantics/Reset_width_tests.v
 semantics/Width_solution_bridge.v
 semantics/Width_bridge_proofs.v
+semantics/Width_convergence.v
 semantics/Width_solution_bridge_tests.v
 -Q ./lowertypes LowerTypes
 lowertypes/ExpandConnects_inst.v

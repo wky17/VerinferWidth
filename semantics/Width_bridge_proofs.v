@@ -4428,6 +4428,30 @@ Proof.
     apply: (successful_common_solver_contract Hsolver Hinitial Hextract Hsolve).
 Qed.
 
+Corollary solve_fun_matches_fixed_point_without_initial
+    solver_map m circuit_name n result solution :
+  SolverSyntax.circuit_tmap (solver_circuit circuit_name m) = Some solver_map ->
+  inferWidths.solve_fun (solver_circuit circuit_name m) solver_map = Some solution ->
+  Semantics.circuit_tmap_implicits (sem_circuit m) n = Some result ->
+  exists initial,
+    Semantics.circuit_tmap_uninferred (sem_circuit m) = Some initial /\
+    forall id, original_implicit initial (common_module_name m) id ->
+      exists w,
+        solver_width solution id = Some w /\
+        semantic_width result (common_module_name m) id = Some w.
+Proof.
+  move=> Hsolver Hsolve Hresult.
+  have Hinitial : exists initial,
+      Semantics.circuit_tmap_uninferred (sem_circuit m) = Some initial.
+  { move: Hresult; rewrite /Semantics.circuit_tmap_implicits.
+    case Hinitial: (Semantics.circuit_tmap_uninferred (sem_circuit m))
+      => [initial|] //= _.
+    by exists initial. }
+  destruct Hinitial as [initial Hinitial].
+  exists initial; split; first exact Hinitial.
+  exact: (solve_fun_matches_fixed_point Hsolver Hsolve Hinitial Hresult).
+Qed.
+
 Theorem single_module_min_solution_matches_fixed_point :
   forall (m : common_module) (circuit_name : var)
          (solver_tmap : solver_type_map) (solution : constraints.Valuation)
