@@ -59,3 +59,7 @@ ocaml_try/extraction
 .DS_Store
 .vscode/settings.json
 ocaml/.DS_Store
+Makefile_tmp
+Makefile_tmp.conf
+*_scratch.v
+EOF
